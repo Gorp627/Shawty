@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web Multiplayer Shooter</title>
+    <!-- Make sure style.css is in the same 'docs' folder -->
     <link rel="stylesheet" href="style.ccs">
 </head>
 <body>
@@ -16,6 +17,13 @@
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <!-- Get Three.js library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- === ADD DRACO LOADER SCRIPTS HERE (before GLTFLoader) === -->
+    <!-- DracoLoader depends on these decoder files -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+    <!-- ========================================================= -->
+
     <!-- Get GLTFLoader for loading Blender models -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <!-- Controls (Optional, but useful for FPS) -->
