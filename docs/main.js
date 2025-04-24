@@ -3,7 +3,7 @@
 // --- Configuration ---
 const SERVER_URL = 'https://gametest-psxl.onrender.com'; // Your specific Render server URL
 const MAP_PATH = 'assets/maps/map.glb'; // Your specific map path
-const SOUND_PATH_GUNSHOT = 'docs/assets/maps/gunshot.wav'; // Your specific sound path relative to index.html
+const SOUND_PATH_GUNSHOT = 'assets/maps/gunshot.wav'; // Your specific sound path relative to index.html
 
 const PLAYER_HEIGHT = 1.8;
 const PLAYER_RADIUS = 0.4;
