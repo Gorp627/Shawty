@@ -2,7 +2,7 @@
 
 // --- Configuration ---
 // IMPORTANT: Replace with your DEPLOYED server URL from Render
-const SERVER_URL = 'https://your-render-app-name.onrender.com'; // <<< PASTE YOUR RENDER URL HERE
+const SERVER_URL = 'https://gametest-psxl.onrender.com'; // <<< PASTE YOUR RENDER URL HERE
 const MOVEMENT_SPEED = 5.0;
 const MOUSE_SENSITIVITY = 0.002;
 const BULLET_SPEED = 50;
