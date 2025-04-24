@@ -1,4 +1,4 @@
-/* client/style.css */
+/* docs/style.css */
 body {
     margin: 0;
     overflow: hidden; /* Hide scrollbars */
@@ -28,4 +28,45 @@ body {
     background-color: rgba(0, 0, 0, 0.5);
     padding: 5px;
     border-radius: 3px;
+    z-index: 10; /* Ensure info is above health bar if overlapping */
+}
+
+/* Health Bar */
+#healthBarContainer {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 200px;
+    height: 25px;
+    background-color: rgba(50, 50, 50, 0.7); /* Dark grey background */
+    border: 2px solid #ccc;
+    border-radius: 5px;
+    overflow: hidden; /* Hide overflow from fill */
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    z-index: 5; /* Lower z-index than info text */
+}
+
+#healthBarFill {
+    width: 100%; /* Start full */
+    height: 100%;
+    background: linear-gradient(to right, red, orange, yellow, limegreen); /* Gradient */
+    background-size: 200% 100%; /* Make gradient effect possible */
+    background-position: 0% 0%; /* Start at green side */
+    transition: width 0.3s ease-in-out, background-position 0.3s ease-in-out; /* Smooth transition */
+}
+
+#healthText {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    text-shadow: 1px 1px 2px black; /* Make text readable */
+    pointer-events: none; /* Don't interfere with clicks */
 }
