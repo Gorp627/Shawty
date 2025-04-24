@@ -75,7 +75,7 @@ function init() {
     controls.addEventListener('unlock', () => console.log('Pointer Unlocked'));
 
     // Load your map - *** MAKE SURE THE PATH AND FILENAME ARE CORRECT ***
-    loadMap('assets/maps/your_map.glb'); // <<< CHANGE 'your_map.glb' TO YOUR ACTUAL MAP FILENAME
+    loadMap('assets/maps/map.glb'); // <<< CHANGE 'your_map.glb' TO YOUR ACTUAL MAP FILENAME
 
     // Event Listeners for Keyboard Input
     document.addEventListener('keydown', (event) => { keys[event.code] = true; });
