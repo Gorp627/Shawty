@@ -8,143 +8,145 @@ const app = express();
 const server = http.createServer(app);
 
 // --- Configuration ---
-// Configure Socket.IO to allow connections from any origin.
-// **SECURITY WARNING:** For a real production game, you MUST restrict the 'origin'
-// to your specific GitHub Pages URL (e.g., "https://your-username.github.io")
-// instead of "*" to prevent unauthorized connections.
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allows connections from anywhere (like GitHub Pages) - BE CAREFUL!
+        // Allow connections only from your GitHub Pages domain and potentially localhost for testing
+        // Replace 'gorp627.github.io' with your actual GitHub username if different
+        origin: ["https://gorp627.github.io", "http://localhost:8080"], // Example: Allow deployed site and common local test port
+        // origin: "*", // Use this for initial testing if origin issues persist, but less secure
         methods: ["GET", "POST"]
     }
 });
 
-// Use the port suggested by the hosting environment (like Render)
-// or default to 3000 if running locally (though you mentioned no terminal).
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000; // Use port from environment (Render) or 3000
 
 // --- Game State ---
-// This object will hold the data for all connected players.
-// The key is the unique socket ID of the player.
-let players = {};
-// Example structure for a player:
-// players[socket.id] = {
-//   id: socket.id,
-//   x: 0, y: 1, z: 0, // Position
-//   rotationY: 0,    // Facing direction (Y-axis rotation)
-//   health: 100
-//   // Add other properties like score, current animation, etc. later
-// };
+let players = {}; // { socket.id: { id, x, y, z, rotationY, health } }
+const RESPAWN_DELAY = 3000; // milliseconds (3 seconds)
 
 // --- Socket.IO Connection Handling ---
-// This function runs every time a new user connects to the server via WebSocket.
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
-    // 1. Create a new player object when someone connects
+    // 1. Create Player Object on Connect
     players[socket.id] = {
         id: socket.id,
-        // Assign random starting position (adjust range as needed for your map)
-        x: Math.random() * 10 - 5,
-        y: 1, // Start slightly above ground (assuming ground is at y=0)
-        z: Math.random() * 10 - 5,
-        rotationY: 0, // Initial rotation
+        x: Math.random() * 10 - 5, // Random position X
+        y: 0, // Start at logical Y=0 (feet on ground)
+        z: Math.random() * 10 - 5, // Random position Z
+        rotationY: 0,
         health: 100
     };
 
-    // 2. Send Initialization Data to the Newly Connected Player
-    // - Send them their own unique ID.
-    // - Send them the current state of all other players already in the game.
+    // 2. Initialize New Player
+    // Send the new player their ID and the current state of all players
     socket.emit('initialize', { id: socket.id, players: players });
 
-    // 3. Notify All Other Existing Players about the New Player
-    //    Use socket.broadcast.emit to send to everyone *except* the new player.
+    // 3. Notify Others of New Player
+    // Send the new player's data to all other connected clients
     socket.broadcast.emit('playerJoined', players[socket.id]);
 
-    // 4. Listen for Player Updates (Movement, Rotation)
+    // 4. Handle Player Updates (Movement/Rotation)
     socket.on('playerUpdate', (playerData) => {
-        // Update the player's data on the server
         const player = players[socket.id];
         if (player) {
+            // Update server state with data received from client
             player.x = playerData.x;
-            player.y = playerData.y; // You might only need X and Z if player stays on ground
+            player.y = playerData.y; // Store logical Y (feet level)
             player.z = playerData.z;
             player.rotationY = playerData.rotationY;
-
-            // Broadcast the updated data to all *other* players
+            // Broadcast the updated data (containing logical Y) to other players
             socket.broadcast.emit('playerMoved', player);
         }
     });
 
-    // 5. Listen for 'shoot' events
+    // 5. Handle Shooting
     socket.on('shoot', (bulletData) => {
-        // In this simple version, we just relay the shot info to all clients.
-        // A more secure approach involves server-side validation and hit detection.
+        // Basic validation could happen here (e.g., rate limiting)
         console.log(`Player ${socket.id} fired a shot.`);
-        io.emit('shotFired', { // Send to ALL clients, including the shooter
+        // Relay shot info to all clients (including shooter for consistency if needed)
+        io.emit('shotFired', {
             shooterId: socket.id,
             position: bulletData.position,
             direction: bulletData.direction,
-            bulletId: socket.id + "_" + Date.now() // Simple unique-ish ID
+            bulletId: socket.id + "_" + Date.now() // Simple unique-ish bullet ID
         });
     });
 
-    // 6. Listen for 'hit' events (INSECURE - Relies on client reporting)
-    //    A client tells the server "I hit player X". This is easily faked!
+    // 6. Handle Hit Reports (Client-Authoritative - Insecure!)
     socket.on('hit', (data) => {
         const { targetId, damage } = data;
-        const shooterId = socket.id; // The player reporting the hit is the shooter
+        const shooterId = socket.id;
 
         const targetPlayer = players[targetId];
-        if (targetPlayer) {
+        // Check if target exists and hasn't already been processed as dead in this tick
+        if (targetPlayer && targetPlayer.health > 0) {
             targetPlayer.health -= damage;
             console.log(`Player ${targetId} hit by ${shooterId}. Health: ${targetPlayer.health}`);
 
-            // Check if the player is defeated
             if (targetPlayer.health <= 0) {
                 console.log(`Player ${targetId} defeated by ${shooterId}`);
-                // Notify everyone about the death
+                targetPlayer.health = 0; // Ensure health doesn't go negative
                 io.emit('playerDied', { targetId: targetId, killerId: shooterId });
-
-                // Simple Respawn Logic: Reset health and position
-                targetPlayer.health = 100;
-                targetPlayer.x = Math.random() * 10 - 5;
-                targetPlayer.y = 1;
-                targetPlayer.z = Math.random() * 10 - 5;
-
-                // Notify everyone about the respawn (including the new position/health)
-                // Send the full player data so clients can reset them
-                io.emit('playerRespawned', targetPlayer);
-
+                // Schedule respawn
+                scheduleRespawn(targetId);
             } else {
-                // Just broadcast the health update if not dead
+                // Broadcast just the health update
                 io.emit('healthUpdate', { id: targetId, health: targetPlayer.health });
             }
         }
     });
 
-    // 7. Handle Disconnections
+    // 7. Handle Falling Into Void
+    socket.on('fellIntoVoid', () => {
+        const player = players[socket.id];
+        if (player && player.health > 0) { // Check if player exists and isn't already dead
+            console.log(`Player ${socket.id} fell into the void.`);
+            player.health = 0; // Mark as dead
+            io.emit('playerDied', { targetId: socket.id, killerId: null }); // No killer
+            // Schedule respawn
+            scheduleRespawn(socket.id);
+        }
+    });
+
+    // 8. Handle Disconnections
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
-        // Remove the player from our players object
         if (players[socket.id]) {
             delete players[socket.id];
-            // Notify all remaining players that this player has left
+            // Broadcast that the player left
             io.emit('playerLeft', socket.id);
         }
     });
 });
 
-// --- Basic HTTP Server (Optional, but good practice) ---
-// This serves a simple message if someone visits the server URL directly.
-// It uses the 'path' module require()d at the top.
+// --- Helper Function for Respawns ---
+function scheduleRespawn(playerId) {
+    // Use setTimeout to delay the respawn action
+    setTimeout(() => {
+        const player = players[playerId];
+        // Check if the player still exists (they might disconnect before respawning)
+        if (player) {
+            player.health = 100;
+            player.x = Math.random() * 10 - 5;
+            player.y = 0; // Respawn at logical Y=0
+            player.z = Math.random() * 10 - 5;
+            player.rotationY = 0;
+            console.log(`Player ${playerId} respawned.`);
+            // Notify everyone about the respawn (sends the updated player data)
+            io.emit('playerRespawned', player);
+        } else {
+            console.log(`Player ${playerId} disconnected before respawn could occur.`);
+        }
+    }, RESPAWN_DELAY); // Use the defined delay
+}
+
+
+// --- Basic HTTP Server for Status Check ---
 app.get('/', (req, res) => {
-    // Try to send the index.html file located in the same directory (server/)
     res.sendFile(path.join(__dirname, 'index.html'), (err) => {
         if (err) {
-            // If index.html doesn't exist or fails, send a plain text message
             res.send('Server is running. Connect via WebSocket.');
-            console.log("Couldn't send index.html:", err.message);
         }
     });
 });
@@ -152,5 +154,5 @@ app.get('/', (req, res) => {
 // --- Start Server ---
 server.listen(PORT, () => {
     console.log(`Server listening on *:${PORT}`);
-    console.log(`Ensure your client connects to the correct URL (likely https://<your-render-app-name>.onrender.com)`);
+    console.log(`Allowing connections from specified origins.`);
 });
