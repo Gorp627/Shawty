@@ -276,8 +276,8 @@ function addPlayer(playerData) {
     if (players[playerData.id] || playerData.id === localPlayerId) return;
 
     console.log("Adding player model to scene:", playerData.id);
-    // Use a simple capsule or cylinder to represent other players for now
-    const geometry = new THREE.CapsuleGeometry(0.4, 1.0, 4, 8); // Radius, Height
+    // Use CylinderGeometry (radiusTop, radiusBottom, height, radialSegments)
+    const geometry = new THREE.CylinderGeometry(0.4, 0.4, 1.8, 8); // Example: 1.8m tall cylinder
     // Use MeshStandardMaterial so they react to scene lighting
     const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 }); // Green
     const mesh = new THREE.Mesh(geometry, material);
