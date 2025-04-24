@@ -2,7 +2,7 @@
 
 // --- Configuration ---
 // IMPORTANT: Replace with your DEPLOYED server URL AFTER deploying the server on Render
-const SERVER_URL = 'http://localhost:3000'; // <<< YOU WILL CHANGE THIS LATER
+const SERVER_URL = 'https://gametest-psxl.onrender.com'; // <<< YOU WILL CHANGE THIS LATER
 const MOVEMENT_SPEED = 5.0;
 const MOUSE_SENSITIVITY = 0.002; // Added for PointerLockControls adjustment if needed, though controls handle it
 const BULLET_SPEED = 50;
