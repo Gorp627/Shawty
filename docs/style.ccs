@@ -1,30 +1,120 @@
-/* docs/style.css - Simplified Functional Version */
-/* Reset and Base Styles */
-* { box-sizing: border-box; }
-body { margin: 0; overflow: hidden; background-color: #000; color: white; font-family: sans-serif; height: 100vh; width: 100vw; position: relative; }
-/* Screen Overlays */
-#loadingScreen, #homeScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; text-align: center; z-index: 100; }
-#loadingScreen { background-color: #222; color: #eee; font-size: 1.5em; flex-direction: column; opacity: 1; }
-#loadingScreen.error p { color: red !important; }
-#homeScreen { background-color: #334; flex-direction: column; padding: 20px; display: none; color: #eee; opacity: 0; transition: opacity 0.5s ease-in-out; }
-#homeScreen.visible { display: flex; opacity: 1; }
-#homeScreen h1 { font-size: 3em; margin-bottom: 20px; color: #fff; }
-#homeScreen p { font-size: 1.1em; margin-bottom: 15px; }
-#homeScreen input[type="text"] { padding: 8px 10px; margin-bottom: 10px; width: 70%; max-width: 300px; border: 1px solid #ccc; border-radius: 3px; background-color: #fff; color: #333; font-size: 1em; }
-.phrase-container { margin-bottom: 15px; }
-#homeScreen button#joinButton { padding: 10px 20px; font-size: 1.1em; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
-#homeScreen button#joinButton:hover { background-color: #45a049; }
-#homeScreen button#joinButton:disabled { background-color: #777; cursor: not-allowed; opacity: 0.8; }
-.error-message { color: red; margin-top: 10px; font-weight: bold; min-height: 1em; }
-/* Game Canvas */
-#gameCanvas { display: block; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; /* Starts hidden */ }
-/* In-Game UI */
-#gameUI { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: none; opacity: 1; /* Keep it simple */ }
-#gameUI.visible { display: block; }
-#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; color: lime; }
-#info { position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.5); padding: 5px; border-radius: 3px; color: white; font-size: 0.9em; }
-#healthBarContainer { position: absolute; bottom: 20px; left: 20px; width: 200px; height: 25px; background-color: rgba(50, 50, 50, 0.7); border: 2px solid #ccc; border-radius: 5px; overflow: hidden; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
-#healthBarFill { width: 100%; height: 100%; background: linear-gradient(to right, red, orange, yellow, limegreen); background-size: 200% 100%; background-position: 0% 0%; transition: width 0.3s ease-in-out, background-position 0.3s ease-in-out; }
-#healthText { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold; font-size: 14px; text-shadow: 1px 1px 2px black; }
-#killMessage { position: absolute; bottom: 55px; left: 50%; transform: translateX(-50%); background-color: rgba(192, 57, 43, 0.8); color: white; padding: 8px 12px; border-radius: 4px; font-size: 1.1em; text-align: center; opacity: 0; transition: opacity 0.5s ease-in-out; max-width: 80%; pointer-events: none; }
-#killMessage.visible { opacity: 1; }
+// server/server.js
+const express = require('express');
+const http = require('http');
+const { Server } = require("socket.io");
+const path = require('path');
+
+const app = express();
+const server = http.createServer(app);
+
+// --- Configuration ---
+const io = new Server(server, {
+    cors: {
+        origin: ["https://gorp627.github.io", "http://localhost:8080"], // USER'S GitHub Pages URL + localhost
+        // origin: "*", // Less secure, use for debugging origin issues
+        methods: ["GET", "POST"]
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+const RESPAWN_DELAY = 4000; // milliseconds
+
+// --- Game State ---
+let players = {}; // { socket.id: { id, x, y, z, rotationY, health, name, phrase } }
+
+// Function to broadcast player count
+function broadcastPlayerCount() {
+    const count = Object.keys(players).length;
+    io.emit('playerCountUpdate', count); // Send to all connections
+    console.log("Player count updated:", count);
+}
+
+// --- Socket.IO Connection Handling ---
+io.on('connection', (socket) => {
+    console.log(`User tentative connection: ${socket.id}`);
+
+    // Send initial player count
+    socket.emit('playerCountUpdate', Object.keys(players).length);
+
+    // Listen for player setting their details
+    socket.on('setPlayerDetails', (details) => {
+        // Validate and sanitize input
+        const name = details.name ? String(details.name).substring(0, 16).trim() : 'Anonymous';
+        const phrase = details.phrase ? String(details.phrase).substring(0, 20).trim() : '...';
+        const finalName = name === '' ? 'Anonymous' : name;
+        const finalPhrase = phrase === '' ? '...' : phrase;
+
+        if (players[socket.id]) {
+            console.log(`Player ${socket.id} (${players[socket.id].name}) tried to set details again.`);
+            players[socket.id].name = finalName;
+            players[socket.id].phrase = finalPhrase;
+            return; // Don't re-initialize
+        }
+
+        console.log(`Player ${socket.id} fully joined as "${finalName}" with phrase "${finalPhrase}"`);
+
+        // Create player object in state
+        players[socket.id] = {
+            id: socket.id,
+            x: Math.random() * 15 - 7.5, y: 0, z: Math.random() * 15 - 7.5, rotationY: 0,
+            health: 100, name: finalName, phrase: finalPhrase
+        };
+
+        // Initialize the new player
+        socket.emit('initialize', { id: socket.id, players: players });
+        // Notify other players
+        socket.broadcast.emit('playerJoined', players[socket.id]);
+        // Broadcast updated player count
+        broadcastPlayerCount();
+    });
+
+    // --- Standard Event Handlers ---
+    socket.on('playerUpdate', (playerData) => {
+        const player = players[socket.id];
+        if (player) {
+            player.x = playerData.x; player.y = playerData.y; player.z = playerData.z;
+            player.rotationY = playerData.rotationY;
+            socket.broadcast.emit('playerMoved', player);
+        }
+    });
+    socket.on('shoot', (bulletData) => {
+        if (!players[socket.id]) return;
+        io.emit('shotFired', {
+            shooterId: socket.id, position: bulletData.position,
+            direction: bulletData.direction, bulletId: socket.id + "_" + Date.now()
+        });
+    });
+    socket.on('hit', (data) => {
+        const { targetId, damage } = data; const shooterId = socket.id;
+        const targetPlayer = players[targetId]; const shooterPlayer = players[shooterId];
+        if (targetPlayer && targetPlayer.health > 0 && shooterPlayer) {
+            targetPlayer.health -= damage;
+            console.log(`${targetPlayer.name} hit by ${shooterPlayer.name}. HP: ${targetPlayer.health}`);
+            if (targetPlayer.health <= 0) {
+                targetPlayer.health = 0; console.log(`${targetPlayer.name} defeated by ${shooterPlayer.name}`);
+                io.emit('playerDied', { targetId: targetId, killerId: shooterId, killerName: shooterPlayer.name, killerPhrase: shooterPlayer.phrase });
+                scheduleRespawn(targetId);
+            } else { io.emit('healthUpdate', { id: targetId, health: targetPlayer.health }); }
+        }
+    });
+    socket.on('fellIntoVoid', () => {
+        const player = players[socket.id];
+        if (player && player.health > 0) {
+            console.log(`${player.name} fell into void.`); player.health = 0;
+            io.emit('playerDied', { targetId: socket.id, killerId: null, killerName: null, killerPhrase: null });
+            scheduleRespawn(socket.id);
+        }
+    });
+    socket.on('disconnect', () => {
+        const player = players[socket.id];
+        if (player) { console.log(`User ${player.name} (${socket.id}) disconnected.`); delete players[socket.id]; io.emit('playerLeft', socket.id); broadcastPlayerCount(); }
+        else { console.log(`User ${socket.id} (unjoined) disconnected.`); }
+    });
+});
+
+// --- Helper Function for Respawns ---
+function scheduleRespawn(playerId) { setTimeout(() => { const player = players[playerId]; if (player) { player.health = 100; player.x = Math.random() * 15 - 7.5; player.y = 0; player.z = Math.random() * 15 - 7.5; player.rotationY = 0; console.log(`${player.name} respawned.`); io.emit('playerRespawned', player); } }, RESPAWN_DELAY); }
+// --- Basic HTTP Server ---
+app.get('/', (req, res) => { const p = path.join(__dirname, 'index.html'); res.sendFile(p, (err) => { if (err) res.status(200).send('Shawty Server Running.'); }); });
+// --- Start Server ---
+server.listen(PORT, () => { console.log(`Shawty Server listening on *:${PORT}`); if (Array.isArray(io.opts.cors.origin)) console.log(`Allowed origins: ${io.opts.cors.origin.join(', ')}`); else console.log(`Allowed origins: ${io.opts.cors.origin}`); });
