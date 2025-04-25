@@ -1,4 +1,4 @@
-/* docs/style.ccs */
+/* docs/style.css */
 /* Reset and Base Styles */
 * {
     box-sizing: border-box;
@@ -40,6 +40,10 @@ body {
 /* Style for when loading screen shows "Loading Assets..." */
 #loadingScreen.assets {
      font-size: 1.8em; /* Slightly smaller for longer text */
+}
+/* Style for permanent error message */
+#loadingScreen.error p {
+    color: #e74c3c !important; /* Force red color */
 }
 
 
