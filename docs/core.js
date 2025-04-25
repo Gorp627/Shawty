@@ -1,48 +1,14 @@
 // docs/core.js
 
-// Needs access to MOST globals and functions defined in other files.
-
 // ========================================================
 // INITIALIZATION FUNCTION DEFINITION
 // ========================================================
 function init() {
-    // ADDED A VERY EARLY LOG TO BE SURE
-    console.log("--- Entering init() function ---");
-
+    console.log("Init Shawty - Split Files + Gun Logic");
     // Get UI Elements FIRST
-    // Ensure getUIElements exists and is called
-    if (typeof getUIElements === 'function') {
-        getUIElements();
-    } else {
-        console.error("getUIElements function not found! Attempting manual gets.");
-        // Fallback gets just in case ui.js didn't load right
-        loadingScreen = document.getElementById('loadingScreen');
-        homeScreen = document.getElementById('homeScreen');
-        gameUI = document.getElementById('gameUI');
-        playerCountSpan = document.getElementById('playerCount');
-        playerNameInput = document.getElementById('playerNameInput');
-        playerPhraseInput = document.getElementById('playerPhraseInput');
-        joinButton = document.getElementById('joinButton');
-        homeScreenError = document.getElementById('homeScreenError');
-        infoDiv = document.getElementById('info');
-        healthBarFill = document.getElementById('healthBarFill');
-        healthText = document.getElementById('healthText');
-        killMessageDiv = document.getElementById('killMessage');
-    }
-
+    if (typeof getUIElements === 'function') { getUIElements(); } else { console.error("getUIElements func missing!"); return; }
     const canvas = document.getElementById('gameCanvas');
-
-    // Null check critical elements
-    if (!loadingScreen || !homeScreen || !gameUI || !canvas || !joinButton || !playerNameInput /* etc... check others if needed */) {
-         console.error("! Critical UI element missing! Aborting init.");
-         // Attempt to display error on loading screen if possible
-         if (loadingScreen && loadingScreen.style) {
-              loadingScreen.style.display = 'flex';
-              const p = loadingScreen.querySelector('p');
-              if (p) p.innerHTML = "FATAL: UI Init Error!"; p.style.color = 'red';
-         }
-         return;
-    }
+    if (!loadingScreen || !homeScreen || !gameUI || !canvas || !joinButton /* etc */ ) { console.error("! Critical UI missing!"); return; }
     console.log("UI elements refs obtained.");
 
     setGameState('loading');
@@ -54,8 +20,9 @@ function init() {
         renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true});
         renderer.setSize(window.innerWidth,window.innerHeight); renderer.shadowMap.enabled=true;
         clock=new THREE.Clock();
-        if (!loader || !dracoLoader) { throw new Error("Loaders not initialized globally!"); }
-        console.log("Three.js core initialized.");
+        // Loaders should be initialized globally in config.js
+        if (!loader || !dracoLoader) { throw new Error("Loaders not initialized!"); }
+        console.log("Three.js core initialized. Draco ENABLED.");
     } catch (e) { console.error("3js Init Error:", e); setGameState('loading',{message:"Graphics Error!",error:true}); return; }
 
     // Lighting
@@ -64,8 +31,9 @@ function init() {
     // Controls
     try {
         controls=new THREE.PointerLockControls(camera,document.body);
-        controls.addEventListener('lock',function(){console.log('Locked');});
-        controls.addEventListener('unlock',function(){ console.log('Unlocked'); /* No state change */ });
+        controls.addEventListener('lock',function(){console.log('Pointer Locked');});
+        // CORRECTED UNLOCK LISTENER - DOES NOTHING AUTOMATICALLY
+        controls.addEventListener('unlock',function(){ console.log('Pointer Unlocked'); });
         console.log("Controls initialized.");
     } catch (e) { console.error("Controls Init Error:", e); setGameState('loading',{message:"Controls Error!",error:true}); return; }
 
@@ -77,8 +45,10 @@ function init() {
     if(typeof loadMap === 'function')loadMap(MAP_PATH); else console.error("loadMap missing!");
     if(typeof setupSocketIO === 'function')setupSocketIO(); else console.error("setupSocketIO missing!");
 
+
     // Add Event Listeners
     console.log("Add listeners...");
+    joinButton = joinButton || document.getElementById('joinButton');
     if (joinButton && typeof attemptJoinGame === 'function') { joinButton.addEventListener('click',attemptJoinGame); } else { console.error("Join button/func missing!"); }
     window.addEventListener('resize',onWindowResize);
     document.addEventListener('keydown',onKeyDown);
@@ -92,15 +62,31 @@ function init() {
 }
 
 // --- Animation Loop ---
-function animate() { /* ... Same ... */ }
+function animate() {
+    requestAnimationFrame(animate);
+    const dT = clock ? clock.getDelta() : 0.016;
+
+    // *** ADDED THROTTLED CAMERA POSITION LOG ***
+    if (frameCount++ % 120 === 0) { // Log approx every 2 seconds
+        console.log(`Animate State: ${gameState}, Cam Pos: ${camera?.position?.toArray()?.map(n=>n.toFixed(2))?.join(',')}`);
+    }
+    // ***************************************
+
+    if (gameState === 'playing') {
+        if (typeof updatePlayer === 'function' && players[localPlayerId]) { updatePlayer(dT); }
+        if (typeof updateBullets === 'function') { updateBullets(dT); }
+        if (typeof updateOtherPlayers === 'function') { updateOtherPlayers(dT); }
+    }
+    if (renderer && scene && camera) { try { renderer.render(scene, camera); } catch (e) { console.error("Render error:", e); } }
+}
 
 // --- Utility Functions ---
-function onWindowResize() { /* ... Same ... */ }
+function onWindowResize() { if(camera){camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();} if(renderer)renderer.setSize(window.innerWidth,window.innerHeight); }
 
 // --- Input Handlers ---
-function onKeyDown(event) { /* ... Same ... */ }
-function onKeyUp(event) { /* ... Same ... */ }
-function onMouseDown(event) { /* ... Same ... */ }
+function onKeyDown(event) { keys[event.code] = true; if (event.code === 'Space') { event.preventDefault(); if (isOnGround && gameState === 'playing') { velocityY = JUMP_FORCE; isOnGround = false; } } }
+function onKeyUp(event) { keys[event.code] = false; }
+function onMouseDown(event) { if (gameState === 'playing' && !controls?.isLocked) { console.log("Click detect while unlocked, locking..."); controls?.lock(); } else if (gameState === 'playing' && controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); } }
 
 // --- View Model Functions ---
 function attachGunViewModel() { /* ... Same ... */ }
@@ -110,19 +96,6 @@ function removeGunViewModel() { /* ... Same ... */ }
 // ========================================================
 // --- START THE APPLICATION ---
 // ========================================================
-// REMOVED DOMContentLoaded listener - call init directly
-console.log("core.js: Attempting to call init() directly...");
-try {
-    init(); // <<< CALL INIT DIRECTLY
-    console.log("core.js: init() finished.");
-} catch(e) {
-    console.error("!!! CRITICAL ERROR CALLING INIT !!!", e);
-    // Display error fallback if possible
-    const loadingScreenFallback = document.getElementById('loadingScreen');
-    if (loadingScreenFallback) {
-         loadingScreenFallback.style.display = 'flex';
-         loadingScreenFallback.innerHTML = `<p style="color:red; font-size: 1.2em;">FATAL SCRIPT ERROR DURING INIT!<br>Check Console (F12)</p>`;
-    }
-}
-
-console.log("core.js loaded and executed.");
+if (document.readyState === 'loading') { console.log("DOM Loading..."); document.addEventListener('DOMContentLoaded', init); }
+else { console.log("DOM Ready."); init(); }
+console.log("core.js loaded");
