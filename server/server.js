@@ -46,10 +46,9 @@ io.on('connection', (socket) => {
 
         if (players[socket.id]) {
             console.log(`Player ${socket.id} (${players[socket.id].name}) tried to set details again.`);
-            // Update existing player details if needed
             players[socket.id].name = finalName;
             players[socket.id].phrase = finalPhrase;
-            return; // Don't re-initialize
+            return;
         }
 
         console.log(`Player ${socket.id} fully joined as "${finalName}" with phrase "${finalPhrase}"`);
@@ -81,23 +80,17 @@ io.on('connection', (socket) => {
     socket.on('playerUpdate', (playerData) => {
         const player = players[socket.id];
         if (player) {
-            player.x = playerData.x;
-            player.y = playerData.y; // Store logical Y from client
-            player.z = playerData.z;
+            player.x = playerData.x; player.y = playerData.y; player.z = playerData.z;
             player.rotationY = playerData.rotationY;
-            // Broadcast including name/phrase
             socket.broadcast.emit('playerMoved', player);
         }
     });
 
     socket.on('shoot', (bulletData) => {
         if (!players[socket.id]) return;
-        // console.log(`Player ${players[socket.id].name} (${socket.id}) fired.`); // Reduce log noise
         io.emit('shotFired', {
-            shooterId: socket.id,
-            position: bulletData.position,
-            direction: bulletData.direction,
-            bulletId: socket.id + "_" + Date.now()
+            shooterId: socket.id, position: bulletData.position,
+            direction: bulletData.direction, bulletId: socket.id + "_" + Date.now()
         });
     });
 
@@ -110,15 +103,12 @@ io.on('connection', (socket) => {
         if (targetPlayer && targetPlayer.health > 0 && shooterPlayer) {
             targetPlayer.health -= damage;
             console.log(`Player ${targetPlayer.name} hit by ${shooterPlayer.name}. Health: ${targetPlayer.health}`);
-
             if (targetPlayer.health <= 0) {
                 targetPlayer.health = 0;
                 console.log(`Player ${targetPlayer.name} defeated by ${shooterPlayer.name}`);
                 io.emit('playerDied', {
-                    targetId: targetId,
-                    killerId: shooterId,
-                    killerName: shooterPlayer.name,
-                    killerPhrase: shooterPlayer.phrase
+                    targetId: targetId, killerId: shooterId,
+                    killerName: shooterPlayer.name, killerPhrase: shooterPlayer.phrase
                  });
                 scheduleRespawn(targetId);
             } else {
@@ -132,12 +122,7 @@ io.on('connection', (socket) => {
         if (player && player.health > 0) {
             console.log(`Player ${player.name} (${socket.id}) fell into the void.`);
             player.health = 0;
-            io.emit('playerDied', {
-                targetId: socket.id,
-                killerId: null,
-                killerName: null,
-                killerPhrase: null
-            });
+            io.emit('playerDied', { targetId: socket.id, killerId: null, killerName: null, killerPhrase: null });
             scheduleRespawn(socket.id);
         }
     });
@@ -161,12 +146,9 @@ function scheduleRespawn(playerId) {
         const player = players[playerId];
         if (player) {
             player.health = 100;
-            player.x = Math.random() * 15 - 7.5;
-            player.y = 0;
-            player.z = Math.random() * 15 - 7.5;
+            player.x = Math.random() * 15 - 7.5; player.y = 0; player.z = Math.random() * 15 - 7.5;
             player.rotationY = 0;
             console.log(`Player ${player.name} (${playerId}) respawned.`);
-            // Send full player data on respawn
             io.emit('playerRespawned', player);
         }
     }, RESPAWN_DELAY);
@@ -176,9 +158,7 @@ function scheduleRespawn(playerId) {
 app.get('/', (req, res) => {
     const indexPath = path.join(__dirname, 'index.html');
     res.sendFile(indexPath, (err) => {
-        if (err) {
-            res.status(200).send('Shawty Server is Running. Connect via WebSocket.');
-        }
+        if (err) { res.status(200).send('Shawty Server is Running. Connect via WebSocket.'); }
     });
 });
 
@@ -187,7 +167,5 @@ server.listen(PORT, () => {
     console.log(`Shawty Server listening on *:${PORT}`);
     if (Array.isArray(io.opts.cors.origin)) {
         console.log(`Allowed origins: ${io.opts.cors.origin.join(', ')}`);
-    } else {
-        console.log(`Allowed origins: ${io.opts.cors.origin}`);
-    }
+    } else { console.log(`Allowed origins: ${io.opts.cors.origin}`); }
 });
