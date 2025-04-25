@@ -1,184 +1,30 @@
 /* docs/style.css - Simplified Functional Version */
 /* Reset and Base Styles */
-* {
-    box-sizing: border-box;
-}
-
-body {
-    margin: 0;
-    overflow: hidden; /* Prevent scrollbars */
-    background-color: #000; /* Fallback background */
-    color: white;
-    font-family: sans-serif; /* Back to basic font */
-    height: 100vh;
-    width: 100vw;
-    position: relative;
-}
-
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; background-color: #000; color: white; font-family: sans-serif; height: 100vh; width: 100vw; position: relative; }
 /* Screen Overlays */
-#loadingScreen, #homeScreen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    z-index: 100;
-    /* Remove transitions for simplicity now */
-}
-
-#loadingScreen {
-    background-color: #222; /* Simple dark background */
-    color: #eee;
-    font-size: 1.5em;
-    flex-direction: column;
-    opacity: 1; /* Start visible */
-}
-#loadingScreen.error p {
-    color: red !important;
-}
-
-
-#homeScreen {
-    background-color: #334; /* Simple dark blueish background */
-    flex-direction: column;
-    padding: 20px;
-    display: none; /* Start hidden */
-    color: #eee;
-}
-/* Keep visible class simple */
-#homeScreen.visible {
-    display: flex;
-    opacity: 1; /* Make sure it's visible */
-}
-
-
-#homeScreen h1 {
-    font-size: 3em; /* Basic size */
-    margin-bottom: 20px;
-    color: #fff;
-}
-
-#homeScreen p { /* General paragraph styling for homescreen */
-    font-size: 1.1em;
-    margin-bottom: 15px;
-}
-
-#homeScreen input[type="text"] {
-    padding: 8px 10px;
-    margin-bottom: 10px;
-    width: 70%;
-    max-width: 300px;
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    background-color: #fff;
-    color: #333;
-    font-size: 1em;
-}
-
-.phrase-container {
-    margin-bottom: 15px;
-}
-/* Simple styles, let inputs stack if needed */
-
-
-#homeScreen button#joinButton {
-    padding: 10px 20px;
-    font-size: 1.1em;
-    background-color: #4CAF50; /* Simple green */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    margin-top: 10px;
-}
-
-#homeScreen button#joinButton:hover {
-    background-color: #45a049;
-}
-#homeScreen button#joinButton:disabled {
-    background-color: #777;
-    cursor: not-allowed;
-    opacity: 0.8;
-}
-
-.error-message {
-    color: red;
-    margin-top: 10px;
-    font-weight: bold;
-    min-height: 1em;
-}
-
-
+#loadingScreen, #homeScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; text-align: center; z-index: 100; }
+#loadingScreen { background-color: #222; color: #eee; font-size: 1.5em; flex-direction: column; opacity: 1; }
+#loadingScreen.error p { color: red !important; }
+#homeScreen { background-color: #334; flex-direction: column; padding: 20px; display: none; color: #eee; opacity: 0; transition: opacity 0.5s ease-in-out; }
+#homeScreen.visible { display: flex; opacity: 1; }
+#homeScreen h1 { font-size: 3em; margin-bottom: 20px; color: #fff; }
+#homeScreen p { font-size: 1.1em; margin-bottom: 15px; }
+#homeScreen input[type="text"] { padding: 8px 10px; margin-bottom: 10px; width: 70%; max-width: 300px; border: 1px solid #ccc; border-radius: 3px; background-color: #fff; color: #333; font-size: 1em; }
+.phrase-container { margin-bottom: 15px; }
+#homeScreen button#joinButton { padding: 10px 20px; font-size: 1.1em; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+#homeScreen button#joinButton:hover { background-color: #45a049; }
+#homeScreen button#joinButton:disabled { background-color: #777; cursor: not-allowed; opacity: 0.8; }
+.error-message { color: red; margin-top: 10px; font-weight: bold; min-height: 1em; }
 /* Game Canvas */
-#gameCanvas {
-    display: block;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1; /* Behind UI */
-    /* Starts hidden via JS */
-}
-
-/* In-Game UI Container - Positioned OVER the canvas */
-#gameUI {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none; /* CRITICAL */
-    z-index: 10; /* Above canvas */
-    display: none; /* Start hidden */
-    opacity: 1; /* Ensure visible when display is set */
-}
-/* No visible transition needed now */
+#gameCanvas { display: block; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; /* Starts hidden */ }
+/* In-Game UI */
+#gameUI { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: none; opacity: 1; /* Keep it simple */ }
 #gameUI.visible { display: block; }
-
-
-/* Individual In-Game UI Elements */
-#crosshair {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    font-size: 24px; color: lime;
-}
-
-#info {
-    position: absolute; top: 10px; left: 10px;
-    background-color: rgba(0, 0, 0, 0.5); padding: 5px; border-radius: 3px;
-    color: white; font-size: 0.9em;
-}
-
-#healthBarContainer {
-    position: absolute; bottom: 20px; left: 20px; /* Position relative to viewport */
-    width: 200px; height: 25px; background-color: rgba(50, 50, 50, 0.7);
-    border: 2px solid #ccc; border-radius: 5px; overflow: hidden;
-    box-shadow: 0 0 5px rgba(0,0,0,0.5);
-}
-
-#healthBarFill {
-    width: 100%; height: 100%;
-    background: linear-gradient(to right, red, orange, yellow, limegreen);
-    background-size: 200% 100%; background-position: 0% 0%;
-    transition: width 0.3s ease-in-out, background-position 0.3s ease-in-out;
-}
-
-#healthText {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    display: flex; justify-content: center; align-items: center;
-    color: white; font-weight: bold; font-size: 14px;
-    text-shadow: 1px 1px 2px black;
-}
-
-#killMessage {
-    position: absolute; bottom: 55px; left: 50%; transform: translateX(-50%);
-    background-color: rgba(192, 57, 43, 0.8); color: white; padding: 8px 12px;
-    border-radius: 4px; font-size: 1.1em; text-align: center;
-    opacity: 0; transition: opacity 0.5s ease-in-out; max-width: 80%;
-    pointer-events: none;
-}
+#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; color: lime; }
+#info { position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.5); padding: 5px; border-radius: 3px; color: white; font-size: 0.9em; }
+#healthBarContainer { position: absolute; bottom: 20px; left: 20px; width: 200px; height: 25px; background-color: rgba(50, 50, 50, 0.7); border: 2px solid #ccc; border-radius: 5px; overflow: hidden; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+#healthBarFill { width: 100%; height: 100%; background: linear-gradient(to right, red, orange, yellow, limegreen); background-size: 200% 100%; background-position: 0% 0%; transition: width 0.3s ease-in-out, background-position 0.3s ease-in-out; }
+#healthText { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold; font-size: 14px; text-shadow: 1px 1px 2px black; }
+#killMessage { position: absolute; bottom: 55px; left: 50%; transform: translateX(-50%); background-color: rgba(192, 57, 43, 0.8); color: white; padding: 8px 12px; border-radius: 4px; font-size: 1.1em; text-align: center; opacity: 0; transition: opacity 0.5s ease-in-out; max-width: 80%; pointer-events: none; }
 #killMessage.visible { opacity: 1; }
