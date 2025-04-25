@@ -3,20 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. Minimal Test</title>
-    <link rel="stylesheet" href="style.css"> <!-- Link minimal CSS -->
+    <title>Shawty.</title>
+    <link rel="stylesheet" href="style.css"> <!-- Links the simplified functional style.css -->
 </head>
 <body>
-    <div id="info">Attempting Connection...</div>
+    <!-- Loading Screen -->
+    <div id="loadingScreen">
+        <p>Loading...</p>
+    </div>
+
+    <!-- Home Screen -->
+    <div id="homeScreen">
+        <h1>Shawty.</h1>
+        <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
+        <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
+        <div class="phrase-container">
+             <span>You just got </span>
+             <input type="text" id="playerPhraseInput" placeholder="..............." maxlength="20">
+        </div>
+        <button id="joinButton">Join Game</button>
+        <p id="homeScreenError" class="error-message"></p>
+    </div>
+
+    <!-- In-Game UI -->
+    <div id="gameUI">
+        <div id="crosshair">+</div>
+        <div id="info">Connecting...</div> <!-- Status/player name -->
+        <div id="healthBarContainer">
+            <div id="healthBarFill"></div>
+            <div id="healthText">100%</div>
+        </div>
+        <div id="killMessage"></div> <!-- For displaying kill phrases -->
+    </div>
+
+    <!-- Game Canvas -->
     <canvas id="gameCanvas"></canvas>
 
     <!-- Libraries -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- No loaders needed yet -->
-    <!-- No controls needed yet -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- Your Minimal Game Code -->
-    <script src="main.js"></script> <!-- Link external minimal JS -->
+    <!-- === Your Split Game Code - Order Matters! === -->
+    <script src="config.js"></script>     <!-- Globals and Constants First -->
+    <script src="ui.js"></script>         <!-- UI Functions -->
+    <script src="assets.js"></script>     <!-- Asset Loading Functions -->
+    <script src="player.js"></script>     <!-- Player Creation/Update Logic -->
+    <script src="gameLogic.js"></script>  <!-- Core Gameplay Loop Logic (Local Player, Bullets, Shooting) -->
+    <script src="network.js"></script>    <!-- Socket.IO Setup & Event Handlers -->
+    <script src="core.js"></script>       <!-- Main Init, Animate Loop, Global Listeners -->
+    <!-- ========================================== -->
+
 </body>
 </html>
