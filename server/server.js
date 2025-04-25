@@ -34,9 +34,9 @@ io.on('connection', function(socket) { // Using function() syntax
         const phrase = details.phrase ? String(details.phrase).substring(0, 20).trim() : '...';
         const finalName = name === '' ? 'Anonymous' : name;
         const finalPhrase = phrase === '' ? '...' : phrase;
-        if (players[socket.id]) { players[socket.id].name=finalName; players[socket.id].phrase=finalPhrase; return; } // Update if already exists?
+        if (players[socket.id]) { console.log(`Player ${socket.id} resent details.`); players[socket.id].name=finalName; players[socket.id].phrase=finalPhrase; return; } // Update if already exists?
 
-        console.log(`Player ${socket.id} joined as "${finalName}"`);
+        console.log(`Player ${socket.id} fully joined as "${finalName}"`);
         players[socket.id] = { // Create player state HERE
             id: socket.id, x: Math.random()*10-5, y: 0, z: Math.random()*10-5, rotationY: 0,
             health: 100, name: finalName, phrase: finalPhrase // Store name/phrase
