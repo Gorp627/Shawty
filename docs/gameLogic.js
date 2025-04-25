@@ -13,17 +13,7 @@ function updatePlayer(deltaTime) {
     if(keys['KeyW']){controls.moveForward(dS);} if(keys['KeyS']){controls.moveForward(-dS);}
     if(keys['KeyA']){controls.moveRight(-dS);} if(keys['KeyD']){controls.moveRight(dS);}
     const cPos=o.position; // Check position *after* movement
-    for(const id in players){
-        if(id!==localPlayerId&&players[id].mesh&&players[id].mesh.visible){
-            const oM=players[id].mesh;
-            const dXZ=new THREE.Vector2(cPos.x-oM.position.x,cPos.z-oM.position.z).length();
-            if(dXZ<PLAYER_COLLISION_RADIUS*2){
-                // Revert horizontal movement but keep vertical
-                o.position.x=pPos.x; o.position.z=pPos.z; o.position.y=cPos.y;
-                break; // Collision detected, stop checking
-            }
-        }
-    }
+    for(const id in players){if(id!==localPlayerId&&players[id].mesh&&players[id].mesh.visible){const oM=players[id].mesh; const dXZ=new THREE.Vector2(cPos.x-oM.position.x,cPos.z-oM.position.z).length(); if(dXZ<PLAYER_COLLISION_RADIUS*2){o.position.x=pPos.x; o.position.z=pPos.z; o.position.y=cPos.y; break;}}}
     let gY=0; // TODO: Replace with map raycasting
     if(o.position.y<gY+PLAYER_HEIGHT){o.position.y=gY+PLAYER_HEIGHT;if(velocityY<0)velocityY=0;isOnGround=true;}else{isOnGround=false;}
     if(o.position.y<VOID_Y_LEVEL&&s.health>0){socket.emit('fellIntoVoid');s.health=0;updateHealthBar(0);showKillMessage("You fell into the void.");}
@@ -39,9 +29,11 @@ function updatePlayer(deltaTime) {
 // --- View Model Update (Recoil & CORRECTED Rotation) ---
 function updateViewModel(deltaTime) {
     if(!gunViewModel || !camera) return;
-    currentRecoilOffset.lerp(new THREE.Vector3(0,0,0), deltaTime * RECOIL_RECOVER_SPEED);
-    const finalGunPos = GUN_POS_OFFSET.clone().add(currentRecoilOffset);
-    gunViewModel.position.copy(finalGunPos);
+    // if (frameCount % 60 === 0) { console.log(`UpdateVM - Recoil: ${currentRecoilOffset.toArray().map(n=>n.toFixed(3)).join(',')}`); } // Throttled log
+    currentRecoilOffset.lerp(new THREE.Vector3(0,0,0), deltaTime * RECOIL_RECOVER_SPEED); // Recover recoil
+    const finalGunPos = GUN_POS_OFFSET.clone().add(currentRecoilOffset); // Add recoil to base offset
+    gunViewModel.position.copy(finalGunPos); // Apply position relative to camera
+    // Corrected Rotation Logic
     const cameraWorldQuaternion = new THREE.Quaternion(); camera.getWorldQuaternion(cameraWorldQuaternion);
     const cameraEuler = new THREE.Euler().setFromQuaternion(cameraWorldQuaternion, 'YXZ');
     gunViewModel.rotation.x = 0; // Keep level X relative to camera
@@ -59,49 +51,51 @@ function shoot() {
     camera.getWorldDirection(bulletDirection); // Aim from camera center
     if(gunViewModel && gunViewModel.parent === camera){ const muzzleOffset = new THREE.Vector3(0,-0.05,-0.5); muzzleOffset.applyQuaternion(gunViewModel.quaternion); bulletPosition.copy(gunViewModel.position).add(muzzleOffset); bulletPosition.applyQuaternion(camera.quaternion); bulletPosition.add(camera.position); }
     else { camera.getWorldPosition(bulletPosition); } // Fallback
-    console.log(`Shooting from: ${bulletPosition.x.toFixed(2)}, ${bulletPosition.y.toFixed(2)}, ${bulletPosition.z.toFixed(2)}`);
+    // console.log(`Shooting from: ${bulletPosition.x.toFixed(2)}, ${bulletPosition.y.toFixed(2)}, ${bulletPosition.z.toFixed(2)}`); // Reduce noise
     socket.emit('shoot',{position:{x:bulletPosition.x,y:bulletPosition.y,z:bulletPosition.z},direction:{x:bulletDirection.x,y:bulletDirection.y,z:bulletDirection.z}});
-    // console.log("Shoot emitted."); // Reduce noise
 }
 
 function spawnBullet(d) {
     // console.log(`Spawning bullet ${d.id}`); // Reduce noise
-    const geo=new THREE.SphereGeometry(0.5, 8, 8); // TEMP Larger radius
-    const mat=new THREE.MeshBasicMaterial({color: 0xff00ff, wireframe: true }); // TEMP Magenta Wireframe
+    const geo=new THREE.SphereGeometry(0.05, 4, 4); // Smaller bullet
+    const mat=new THREE.MeshBasicMaterial({color:0xffff00}); // Back to solid yellow
     const mesh=new THREE.Mesh(geo,mat);
     if (isNaN(d.position.x) || isNaN(d.position.y) || isNaN(d.position.z)) { console.error("!!! Invalid bullet pos:", d.position); mesh.position.set(0, 2, 0); }
     else { mesh.position.set(d.position.x, d.position.y, d.position.z); }
-    // console.log(` Spawn pos: ${mesh.position.x.toFixed(2)}, ${mesh.position.y.toFixed(2)}, ${mesh.position.z.toFixed(2)}`); // Reduce noise
     const vel=new THREE.Vector3(d.direction.x,d.direction.y,d.direction.z).normalize().multiplyScalar(BULLET_SPEED);
     bullets.push({id:d.bulletId,mesh:mesh,velocity:vel,ownerId:d.shooterId,spawnTime:Date.now()});
-    scene.add(mesh); // Add to scene
-    // console.log(` Bullet ${d.id} added to scene.`); // Reduce noise
+    scene.add(mesh);
 }
 
-function updateBullets(dT) { // TEMP: Simplified for debugging visibility
+function updateBullets(dT) { // Damage Logs Included
     const removeIdx=[];
-    for(let i=bullets.length-1; i>=0; i--){
-        const b = bullets[i];
-        if(!b?.mesh){ if(!removeIdx.includes(i))removeIdx.push(i); continue; }
+    for(let i=bullets.length-1;i>=0;i--){
+        const b=bullets[i]; if(!b?.mesh){ if(!removeIdx.includes(i))removeIdx.push(i); continue; }
+        b.mesh.position.addScaledVector(b.velocity,dT); let hit=false;
+        for(const pId in players){
+            if(pId!==b.ownerId && players[pId].mesh && players[pId].mesh.visible){
+                const pM=players[pId].mesh; const pP=new THREE.Vector3(); pM.getWorldPosition(pP);
+                const dist=b.mesh.position.distanceTo(pP);
+                const pScaleR=(pM.scale?.x || 1) * PLAYER_RADIUS; // Use PLAYER_RADIUS for player collision sphere approx
+                const thresh=pScaleR + 0.05; // Player radius + BULLET radius
 
-        // Just move it
-        b.mesh.position.addScaledVector(b.velocity, dT);
-
-        // Extremely basic bounds check to prevent infinite bullets
-        if (b.mesh.position.y < -50 || b.mesh.position.y > 100 || Math.abs(b.mesh.position.x) > 200 || Math.abs(b.mesh.position.z) > 200) {
-            // console.log(`Bullet ${b.id} out of bounds, removing.`); // Reduce noise
-             if(!removeIdx.includes(i))removeIdx.push(i);
-             scene.remove(b.mesh); // REMOVE when out of bounds
+                if(dist<thresh){
+                    console.log(`Client hit: Bul ${b.id} -> P ${pId}`); // Log hit detection
+                    hit=true;
+                    if(b.ownerId===localPlayerId){
+                        console.log(`>>> Emitting 'hit' event: target=${pId}`); // Log Emit
+                        socket.emit('hit',{targetId:pId,damage:10});
+                    }
+                    if(!removeIdx.includes(i))removeIdx.push(i);
+                    scene.remove(b.mesh); break;
+                }
+            }
         }
-
-        // --- COLLISION & LIFETIME COMMENTED OUT FOR TEST ---
-        // let hit=false; for(const pId in players){ ... if(dist<thresh){ hit=true; ... } } if(hit)continue;
-        // if(Date.now()-b.spawnTime>BULLET_LIFETIME){ if(!removeIdx.includes(i))removeIdx.push(i); scene.remove(b.mesh); }
-        // --- ----------------------------------------- ---
+        if(hit)continue;
+        // Restore bullet lifetime check
+        if(Date.now()-b.spawnTime>BULLET_LIFETIME){ if(!removeIdx.includes(i))removeIdx.push(i); scene.remove(b.mesh); }
     }
-    // Remove bullets marked for deletion (only out of bounds ones for now)
     if(removeIdx.length>0){ removeIdx.sort((a,b)=>b-a); for(const idx of removeIdx){ bullets.splice(idx,1); } }
 }
-
 
 console.log("gameLogic.js loaded");
