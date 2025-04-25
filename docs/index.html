@@ -3,33 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Multiplayer Shooter</title>
-    <link rel="stylesheet" href="style.ccs"> <!-- Loads style.css from the same 'docs' folder -->
+    <title>Shawty.</title> <!-- Changed title -->
+    <link rel="stylesheet" href="style.ccs">
 </head>
 <body>
-    <!-- UI Elements -->
-    <div id="crosshair">+</div>
-    <div id="info">Connecting...</div>
-    <div id="healthBarContainer">
-        <div id="healthBarFill"></div>
-        <div id="healthText">100%</div> <!-- Optional: Text overlay -->
+    <!-- Loading Screen -->
+    <div id="loadingScreen">
+        <p>Loading...</p>
     </div>
-    <!-- End UI Elements -->
 
+    <!-- Home Screen -->
+    <div id="homeScreen">
+        <h1>Shawty.</h1>
+        <p>Online: <span id="playerCount">?</span></p>
+        <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
+        <div class="phrase-container">
+             <span>You just got </span>
+             <input type="text" id="playerPhraseInput" placeholder="..............." maxlength="20">
+        </div>
+        <button id="joinButton">Join Game</button>
+        <p id="homeScreenError" class="error-message"></p>
+    </div>
+
+    <!-- In-Game UI -->
+    <div id="gameUI">
+        <div id="crosshair">+</div>
+        <div id="info">Connecting...</div>
+        <div id="healthBarContainer">
+            <div id="healthBarFill"></div>
+            <div id="healthText">100%</div>
+        </div>
+        <div id="killMessage"></div> <!-- For displaying kill phrases -->
+    </div>
+
+    <!-- Game Canvas -->
     <canvas id="gameCanvas"></canvas>
 
     <!-- Libraries -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Draco Loader for compressed maps -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
-    <!-- GLTF Loader for maps -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <!-- Pointer Lock Controls for FPS movement -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
     <!-- Your Game Code -->
-    <script src="main.js"></script> <!-- Loads main.js from the same 'docs' folder -->
+    <script src="main.js"></script>
 </body>
 </html>
