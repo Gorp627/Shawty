@@ -15,7 +15,6 @@ function init() {
     // Null check elements needed by THIS function
     if (!loadingScreen || !homeScreen || !gameUI || !canvas ) {
          console.error("Critical UI element missing!");
-         // Attempt to display error on loading screen if possible
          if (loadingScreen) {
               loadingScreen.style.display = 'flex';
               const p = loadingScreen.querySelector('p');
@@ -34,10 +33,15 @@ function init() {
         // Use the canvas variable obtained above
         renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true}); // <<< USE CANVAS VARIABLE
         renderer.setSize(window.innerWidth,window.innerHeight); renderer.shadowMap.enabled=true;
-        clock=new THREE.Clock(); loader=new THREE.GLTFLoader(); dracoLoader=new THREE.DRACOLoader();
-        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); dracoLoader.setDecoderConfig({type:'js'});
-        // loader.setDRACOLoader(dracoLoader); // Keep Draco disabled for now
-        console.log("Three.js core initialized.");
+        clock=new THREE.Clock();
+        loader=new THREE.GLTFLoader();
+        dracoLoader=new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+        dracoLoader.setDecoderConfig({type:'js'});
+        // *** ENABLE DRACO LOADER ***
+        loader.setDRACOLoader(dracoLoader); // <<< UNCOMMENT this line
+        // ***************************
+        console.log("Three.js core initialized. Draco setup ENABLED."); // Update log
     } catch (e) { console.error("3js Init Error:", e); setGameState('loading',{message:"Graphics Error!",error:true}); return; }
 
     // Lighting
@@ -63,7 +67,7 @@ function init() {
     // Add Event Listeners
     console.log("Add listeners...");
     // Ensure joinButton exists before adding listener
-    joinButton = joinButton || document.getElementById('joinButton');
+    joinButton = joinButton || document.getElementById('joinButton'); // Grab ref if missed
     if (joinButton && typeof attemptJoinGame === 'function') {
         joinButton.addEventListener('click',attemptJoinGame); // Function from network.js
     } else {
