@@ -30,18 +30,15 @@ function init() {
     try {
         scene=new THREE.Scene(); scene.background=new THREE.Color(0x87ceeb); scene.fog=new THREE.Fog(0x87ceeb,0,150);
         camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
-        // Use the canvas variable obtained above
-        renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true}); // <<< USE CANVAS VARIABLE
+        renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true}); // Use canvas variable
         renderer.setSize(window.innerWidth,window.innerHeight); renderer.shadowMap.enabled=true;
         clock=new THREE.Clock();
         loader=new THREE.GLTFLoader();
         dracoLoader=new THREE.DRACOLoader();
         dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
         dracoLoader.setDecoderConfig({type:'js'});
-        // *** ENABLE DRACO LOADER ***
-        loader.setDRACOLoader(dracoLoader); // <<< UNCOMMENT this line
-        // ***************************
-        console.log("Three.js core initialized. Draco setup ENABLED."); // Update log
+        loader.setDRACOLoader(dracoLoader); // Draco is enabled
+        console.log("Three.js core initialized. Draco setup ENABLED.");
     } catch (e) { console.error("3js Init Error:", e); setGameState('loading',{message:"Graphics Error!",error:true}); return; }
 
     // Lighting
@@ -50,29 +47,33 @@ function init() {
     // Controls
     try {
         controls=new THREE.PointerLockControls(camera,document.body);
-        controls.addEventListener('lock',function(){console.log('Locked');});
-        controls.addEventListener('unlock',function(){console.log('Unlocked'); if(gameState==='playing')setGameState('homescreen',{playerCount:playerCountSpan?.textContent??'?'}); }); // Go home only if playing
+        controls.addEventListener('lock',function(){console.log('Pointer Locked');});
+        // --- REVISED UNLOCK LISTENER (Does Nothing) ---
+        controls.addEventListener('unlock',function(){
+            console.log('Pointer Unlocked (Escape pressed or focus lost)');
+            // Intentionally do NOT change game state here.
+            // Player must click canvas to re-lock (handled by onMouseDown).
+        });
+        // -------------------------------------------
         console.log("Controls initialized.");
     } catch (e) { console.error("Controls Init Error:", e); setGameState('loading',{message:"Controls Error!",error:true}); return; }
 
     // Start Loading Assets & Connecting
     console.log("Start loads & socket...");
-    // These should be defined in assets.js / network.js now
+    // Ensure functions are defined before calling
     if (typeof loadSound === 'function') loadSound(); else console.error("loadSound not defined!");
     if (typeof loadPlayerModel === 'function') loadPlayerModel(); else console.error("loadPlayerModel not defined!");
+    // if (typeof loadGunModel === 'function') loadGunModel(); // Gun still removed for now
     if (typeof loadMap === 'function') loadMap(MAP_PATH); else console.error("loadMap not defined!");
     if (typeof setupSocketIO === 'function') setupSocketIO(); else console.error("setupSocketIO not defined!");
 
 
     // Add Event Listeners
     console.log("Add listeners...");
-    // Ensure joinButton exists before adding listener
-    joinButton = joinButton || document.getElementById('joinButton'); // Grab ref if missed
+    joinButton = joinButton || document.getElementById('joinButton');
     if (joinButton && typeof attemptJoinGame === 'function') {
-        joinButton.addEventListener('click',attemptJoinGame); // Function from network.js
-    } else {
-        console.error("Join button or attemptJoinGame function not found/ready!");
-    }
+        joinButton.addEventListener('click',attemptJoinGame);
+    } else { console.error("Join button or attemptJoinGame missing!"); }
     window.addEventListener('resize',onWindowResize); // Utility function defined below
     document.addEventListener('keydown',onKeyDown); // Handler defined below
     document.addEventListener('keyup',onKeyUp); // Handler defined below
@@ -104,10 +105,26 @@ function animate() {
 // --- Utility Functions ---
 function onWindowResize() { if(camera){camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();} if(renderer)renderer.setSize(window.innerWidth,window.innerHeight); }
 
-// Input Handlers (Defined here as they access global 'keys')
+// Input Handlers (Defined here as they access global 'keys' and call 'shoot')
 function onKeyDown(event) { keys[event.code] = true; if (event.code === 'Space') { event.preventDefault(); if (isOnGround && gameState === 'playing') { velocityY = JUMP_FORCE; isOnGround = false; } } }
 function onKeyUp(event) { keys[event.code] = false; }
-function onMouseDown(event) { if (gameState === 'playing' && !controls?.isLocked) { controls?.lock(); } else if (gameState === 'playing' && controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); } }
+// --- REVISED onMouseDown ---
+function onMouseDown(event) {
+    // If playing and NOT locked, try to lock (this handles clicking after Escape)
+    if (gameState === 'playing' && !controls?.isLocked) {
+        console.log("Click detected while unlocked in 'playing' state. Attempting lock...");
+        controls?.lock();
+    }
+    // If playing AND locked, then shoot on left click
+    else if (gameState === 'playing' && controls?.isLocked && event.button === 0) {
+        if(typeof shoot === 'function') {
+             shoot(); // Call shoot from gameLogic.js
+        } else {
+             console.error("shoot function not defined!");
+        }
+    }
+}
+// ------------------------
 
 
 // ========================================================
