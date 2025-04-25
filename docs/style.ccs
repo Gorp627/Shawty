@@ -1,70 +1,58 @@
 /* docs/style.css */
-/* Reset and Base Styles */
-* {
-    box-sizing: border-box; /* Makes padding/border included in width/height */
-}
 
-body {
-    margin: 0;
-    overflow: hidden; /* Prevent scrollbars caused by UI or canvas */
-    background-color: #000; /* Black background, canvas will cover */
-    color: white;
-    font-family: sans-serif;
-    height: 100vh; /* Full viewport height */
-    width: 100vw; /* Full viewport width */
-    position: relative; /* Needed for absolute positioning of children */
-}
+/* --- Add these styles or replace existing ones --- */
 
-/* Screen Overlays */
-#loadingScreen, #homeScreen {
-    position: fixed; /* Cover entire page */
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex; /* Use flexbox for centering */
+#homeScreen {
+    /* Existing styles: position, top, left, width, height, z-index... */
+    /* Enhancement: Add background, better centering, etc. */
+    background: linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%); /* Gradient background */
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
-    z-index: 100; /* Ensure they are on top */
-}
-
-#loadingScreen {
-    background-color: #1a4d2e; /* Dark Green */
-    color: #e8f6ef; /* Light text */
-    font-size: 2em;
-    flex-direction: column; /* Stack items vertically */
-}
-
-#homeScreen {
-    background-color: #2c3e50; /* Dark blue/grey */
-    flex-direction: column; /* Stack items vertically */
-    padding: 20px;
+    padding: 30px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Nicer font? */
     display: none; /* Start hidden */
+    color: #ecf0f1; /* Default light text color */
 }
 
 #homeScreen h1 {
-    font-size: 4em;
-    margin-bottom: 10px;
-    color: #ecf0f1; /* Light grey */
+    font-size: 5em; /* Larger */
+    margin-bottom: 15px;
+    color: #ffffff; /* White title */
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5); /* More prominent shadow */
+    /* Optional: Add animation */
+    /* animation: pulse 2s infinite ease-in-out; */
 }
 
-#homeScreen p {
-    font-size: 1.2em;
-    margin-bottom: 20px;
-    color: #bdc3c7; /* Lighter grey */
+/* Optional Pulse Animation for Title */
+/* @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+    100% { transform: scale(1); }
+} */
+
+#homeScreen p#playerCountLabel { /* Style the "Online: ?" text */
+    font-size: 1.4em;
+    margin-bottom: 25px;
+    color: #bdc3c7;
+    background-color: rgba(0, 0, 0, 0.2); /* Subtle background */
+    padding: 5px 10px;
+    border-radius: 5px;
 }
 
 #homeScreen input[type="text"] {
-    padding: 10px;
+    padding: 12px 15px; /* More padding */
     margin-bottom: 15px;
     width: 80%;
-    max-width: 300px;
-    border: 2px solid #7f8c8d;
-    border-radius: 4px;
-    background-color: #ecf0f1;
+    max-width: 350px; /* Wider input */
+    border: none; /* Remove default border */
+    border-radius: 25px; /* Rounded corners */
+    background-color: rgba(255, 255, 255, 0.9); /* Slightly transparent white */
     color: #34495e;
-    font-size: 1em;
+    font-size: 1.1em;
+    text-align: center; /* Center placeholder/text */
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); /* Inner shadow */
 }
 #homeScreen input::placeholder {
     color: #95a5a6;
@@ -74,144 +62,111 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 80%;
-    max-width: 400px; /* Adjust width as needed */
-    margin-bottom: 20px;
+    width: 90%; /* Wider container */
+    max-width: 450px;
+    margin-bottom: 25px;
+    background-color: rgba(0, 0, 0, 0.1); /* Subtle background for phrase */
+    padding: 5px 15px;
+    border-radius: 25px;
 }
 .phrase-container span {
-     margin-right: 5px; /* Space between text and input */
-     font-size: 1em;
-     color: #bdc3c7;
+     margin-right: 8px;
+     font-size: 1.1em;
+     color: #ecf0f1;
+     white-space: nowrap; /* Prevent wrapping */
 }
 .phrase-container input[type="text"] {
-    flex-grow: 1; /* Input takes remaining space */
-    margin-bottom: 0; /* Remove default margin */
-    width: auto; /* Override specific width */
+    flex-grow: 1;
+    margin-bottom: 0;
+    width: auto;
+    background-color: transparent; /* Make input background transparent */
+    border: none; /* Remove inner input border */
+    box-shadow: none; /* Remove inner shadow */
+    color: #ffffff; /* White text input */
+    text-align: left; /* Align input text left */
+     padding: 10px 5px; /* Adjust padding */
+}
+.phrase-container input::placeholder {
+    color: rgba(236, 240, 241, 0.6); /* Lighter placeholder */
 }
 
 
-#homeScreen button {
-    padding: 12px 25px;
-    font-size: 1.2em;
-    background-color: #27ae60; /* Green */
+#homeScreen button#joinButton {
+    padding: 15px 35px; /* Bigger button */
+    font-size: 1.4em;
+    font-weight: bold;
+    background-image: linear-gradient(to right, #27ae60, #2ecc71); /* Gradient background */
     color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: 30px; /* Rounded */
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Add shadow */
+    margin-top: 10px; /* Space above button */
 }
 
-#homeScreen button:hover {
-    background-color: #2ecc71; /* Lighter green */
+#homeScreen button#joinButton:hover {
+    transform: scale(1.05); /* Slightly larger on hover */
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+#homeScreen button#joinButton:active {
+    transform: scale(1.02); /* Slightly smaller when clicked */
 }
 
+/* Ensure error message styles remain */
 .error-message {
-    color: #e74c3c; /* Red */
-    margin-top: 15px;
+    color: #e74c3c;
+    margin-top: 20px;
     font-weight: bold;
-    min-height: 1.2em; /* Reserve space even when empty */
+    min-height: 1.2em;
+    background-color: rgba(0,0,0,0.3);
+    padding: 5px;
+    border-radius: 5px;
 }
 
+/* --- Make sure existing body/canvas styles prevent scrolling/whitespace --- */
+body {
+    margin: 0;
+    overflow: hidden; /* Critical */
+    background-color: #000;
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    height: 100vh;
+    width: 100vw;
+    position: relative;
+}
 
-/* Game Canvas */
 #gameCanvas {
-    display: block; /* Remove extra space */
-    position: fixed; /* Cover whole screen underneath UI */
+    display: block; /* Critical */
+    position: fixed; /* Critical */
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 1; /* Behind UI elements */
+    z-index: 1;
 }
 
-/* In-Game UI Container */
+/* --- Ensure #gameUI covers screen and doesn't interfere --- */
 #gameUI {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none; /* Allow clicks to pass through to canvas */
-    z-index: 10; /* Above canvas */
+    pointer-events: none; /* Allow clicks to pass through */
+    z-index: 10;
     display: none; /* Start hidden */
 }
 
-/* Individual In-Game UI Elements */
-#crosshair {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 24px;
-    color: lime;
-    /* pointer-events: none; already handled by parent #gameUI */
-}
-
-#info {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    background-color: rgba(0, 0, 0, 0.5);
-    padding: 5px;
-    border-radius: 3px;
-    color: white;
-    font-size: 0.9em;
-}
-
+/* Adjust positioning of in-game elements if needed */
 #healthBarContainer {
-    position: absolute; /* Position relative to #gameUI (which covers viewport) */
-    bottom: 20px;
-    left: 20px;
-    width: 200px;
-    height: 25px;
-    background-color: rgba(50, 50, 50, 0.7);
-    border: 2px solid #ccc;
-    border-radius: 5px;
-    overflow: hidden;
-    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+     bottom: 30px; /* Slightly higher */
+     left: 30px;
 }
-
-#healthBarFill {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(to right, red, orange, yellow, limegreen);
-    background-size: 200% 100%;
-    background-position: 0% 0%;
-    transition: width 0.3s ease-in-out, background-position 0.3s ease-in-out;
-}
-
-#healthText {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: white;
-    font-weight: bold;
-    font-size: 14px;
-    text-shadow: 1px 1px 2px black;
-}
-
 #killMessage {
-    position: absolute;
-    bottom: 60px; /* Position above health bar */
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: rgba(231, 76, 60, 0.8); /* Semi-transparent red */
-    color: white;
-    padding: 10px 15px;
-    border-radius: 5px;
-    font-size: 1.1em;
-    text-align: center;
-    opacity: 0; /* Start hidden */
-    transition: opacity 0.5s ease-in-out;
-    max-width: 80%;
-    pointer-events: none; /* Allow clicks through */
+     bottom: 70px; /* Slightly higher */
 }
-
-#killMessage.visible {
-    opacity: 1;
+#info {
+    top: 15px;
+    left: 15px;
 }
