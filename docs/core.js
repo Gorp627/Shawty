@@ -8,7 +8,7 @@ function init() {
     // Get UI Elements FIRST
     if (typeof getUIElements === 'function') { getUIElements(); } else { console.error("getUIElements func missing!"); return; }
     const canvas = document.getElementById('gameCanvas');
-    if (!loadingScreen || !homeScreen || !gameUI || !canvas || !joinButton /* etc */ ) { console.error("! Critical UI missing!"); return; }
+    if (!loadingScreen || !homeScreen || !gameUI || !canvas || !joinButton || !playerNameInput /* etc */ ) { console.error("! Critical UI missing!"); return; }
     console.log("UI elements refs obtained.");
 
     setGameState('loading');
@@ -45,11 +45,10 @@ function init() {
     if(typeof loadMap === 'function')loadMap(MAP_PATH); else console.error("loadMap missing!");
     if(typeof setupSocketIO === 'function')setupSocketIO(); else console.error("setupSocketIO missing!");
 
-
     // Add Event Listeners
     console.log("Add listeners...");
-    joinButton = joinButton || document.getElementById('joinButton');
-    if (joinButton && typeof attemptJoinGame === 'function') { joinButton.addEventListener('click',attemptJoinGame); } else { console.error("Join button/func missing!"); }
+    joinButton = joinButton || document.getElementById('joinButton'); // Ensure ref exists
+    if (joinButton && typeof attemptJoinGame === 'function') { joinButton.addEventListener('click',attemptJoinGame); console.log(">>> 'click' listener ADDED to joinButton:", joinButton); } else { console.error("Join button/func missing!"); }
     window.addEventListener('resize',onWindowResize);
     document.addEventListener('keydown',onKeyDown);
     document.addEventListener('keyup',onKeyUp);
@@ -65,33 +64,32 @@ function init() {
 function animate() {
     requestAnimationFrame(animate);
     const dT = clock ? clock.getDelta() : 0.016;
-
-    // *** ADDED THROTTLED CAMERA POSITION LOG ***
-    if (frameCount++ % 120 === 0) { // Log approx every 2 seconds
-        console.log(`Animate State: ${gameState}, Cam Pos: ${camera?.position?.toArray()?.map(n=>n.toFixed(2))?.join(',')}`);
-    }
-    // ***************************************
+    // Throttled log to check if loop is running
+    if (frameCount++ % 300 === 0) { console.log(`Animate running. State: ${gameState}, Cam Pos: ${camera?.position?.toArray()?.map(n=>n.toFixed(2))?.join(',')}`); }
 
     if (gameState === 'playing') {
+        // Ensure functions from other modules are available
         if (typeof updatePlayer === 'function' && players[localPlayerId]) { updatePlayer(dT); }
         if (typeof updateBullets === 'function') { updateBullets(dT); }
         if (typeof updateOtherPlayers === 'function') { updateOtherPlayers(dT); }
     }
-    if (renderer && scene && camera) { try { renderer.render(scene, camera); } catch (e) { console.error("Render error:", e); } }
+    if (renderer && scene && camera) { // Ensure Three.js components exist
+        try { renderer.render(scene, camera); } catch (e) { console.error("Render error:", e); }
+    }
 }
 
 // --- Utility Functions ---
 function onWindowResize() { if(camera){camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();} if(renderer)renderer.setSize(window.innerWidth,window.innerHeight); }
 
 // --- Input Handlers ---
-function onKeyDown(event) { keys[event.code] = true; if (event.code === 'Space') { event.preventDefault(); if (isOnGround && gameState === 'playing') { velocityY = JUMP_FORCE; isOnGround = false; } } }
-function onKeyUp(event) { keys[event.code] = false; }
-function onMouseDown(event) { if (gameState === 'playing' && !controls?.isLocked) { console.log("Click detect while unlocked, locking..."); controls?.lock(); } else if (gameState === 'playing' && controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); } }
+function onKeyDown(event) { /* console.log(`KeyDown: ${event.code}`); */ keys[event.code] = true; if (event.code === 'Space') { event.preventDefault(); if (isOnGround && gameState === 'playing') { velocityY = JUMP_FORCE; isOnGround = false; } } }
+function onKeyUp(event) { /* console.log(`KeyUp: ${event.code}`); */ keys[event.code] = false; }
+// Revised onMouseDown
+function onMouseDown(event) { if (gameState === 'playing' && !controls?.isLocked) { console.log("Click detect while unlocked, locking..."); controls?.lock(); } else if (gameState === 'playing' && controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); else console.error("shoot func missing!"); } }
 
 // --- View Model Functions ---
-function attachGunViewModel() { /* ... Same ... */ }
-function removeGunViewModel() { /* ... Same ... */ }
-
+function attachGunViewModel() { if(!gunModel||gunModel==='error'||!camera){console.warn("Cannot attach gun: Model/cam missing/fail");return;} if(gunViewModel&&gunViewModel.parent===camera)return; if(gunViewModel)removeGunViewModel(); try{gunViewModel=gunModel.clone(); gunViewModel.scale.set(GUN_SCALE,GUN_SCALE,GUN_SCALE); gunViewModel.position.copy(GUN_POS_OFFSET); currentRecoilOffset.set(0,0,0); camera.add(gunViewModel); console.log("Gun attached.");} catch(e){console.error("Error attaching gun:",e);gunViewModel=null;} }
+function removeGunViewModel() { if (gunViewModel && camera) { try{camera.remove(gunViewModel); gunViewModel=null; console.log("Gun removed.");} catch(e){console.error("Error removing gun:",e); gunViewModel=null;} } }
 
 // ========================================================
 // --- START THE APPLICATION ---
