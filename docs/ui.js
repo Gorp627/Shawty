@@ -1,7 +1,6 @@
 // docs/ui.js
 
-// Get UI Element references (might be better in init, but ok here for now if careful about DOMContentLoaded)
-// Ensure these run AFTER the DOM is ready, handled by placing script tags correctly or using DOMContentLoaded in core.js
+// Get UI Element references
 function getUIElements() {
     loadingScreen = loadingScreen || document.getElementById('loadingScreen');
     homeScreen = homeScreen || document.getElementById('homeScreen');
@@ -15,13 +14,11 @@ function getUIElements() {
     healthBarFill = healthBarFill || document.getElementById('healthBarFill');
     healthText = healthText || document.getElementById('healthText');
     killMessageDiv = killMessageDiv || document.getElementById('killMessage');
-     // Add null checks after getting elements in init is safer
 }
-
 
 // --- UI State Management ---
 function setGameState(newState, options = {}) {
-    console.log(`Set state: ${newState}`);
+    // console.log(`Set state: ${newState}`); // Reduce noise
     const previousState = gameState;
     if (gameState === newState && !(newState === 'loading' && options.error)) return;
     gameState = newState;
@@ -30,18 +27,20 @@ function setGameState(newState, options = {}) {
     getUIElements(); // Make sure refs exist
     const canvas = document.getElementById('gameCanvas');
 
-    if(loadingScreen){loadingScreen.style.display='none'; loadingScreen.classList.remove('assets','error');const p=loadingScreen.querySelector('p');if(p)p.style.color='';}
-    if(homeScreen){homeScreen.style.display='none';homeScreen.classList.remove('visible');}
-    if(gameUI){gameUI.style.display='none';gameUI.classList.remove('visible');}
-    if(canvas)canvas.style.display='none';
+    // Hide all first
+    if(loadingScreen) { loadingScreen.style.display = 'none'; loadingScreen.classList.remove('assets','error'); const p=loadingScreen.querySelector('p'); if(p)p.style.color=''; }
+    if(homeScreen) { homeScreen.style.display = 'none'; homeScreen.classList.remove('visible'); }
+    if(gameUI) { gameUI.style.display = 'none'; gameUI.classList.remove('visible'); }
+    if(canvas) canvas.style.display = 'none';
 
+    // Show target state
     switch(newState){
-        case'loading':if(loadingScreen){loadingScreen.style.display='flex';const p=loadingScreen.querySelector('p');if(p)p.innerHTML=options.message||'Loading...';if(options.assets)loadingScreen.classList.add('assets');if(options.error&&p){p.style.color='#e74c3c';loadingScreen.classList.add('error');}}break;
-        case'homescreen':if(homeScreen){homeScreen.style.display='flex';homeScreen.classList.add('visible');if(playerCountSpan)playerCountSpan.textContent=options.playerCount??playerCountSpan.textContent??'?';if(controls?.isLocked)controls.unlock();const obj=scene?.getObjectByName("PlayerControls");if(obj)scene.remove(obj);if(joinButton){joinButton.disabled=false;joinButton.textContent="Join Game";}}break;
-        case'joining':if(joinButton){joinButton.disabled=true;joinButton.textContent="Joining...";}if(options.waitingForAssets)setGameState('loading',{message:"Loading Assets...",assets:true});break;
-        case'playing':const cElem=document.getElementById('gameCanvas');if(gameUI){gameUI.style.display='block';gameUI.classList.add('visible');}else console.error("! gameUI");if(cElem){cElem.style.display='block';}else console.error("! gameCanvas");if(scene&&controls){if(!scene.getObjectByName("PlayerControls")){controls.getObject().name="PlayerControls";scene.add(controls.getObject());}setTimeout(function(){if(gameState==='playing'&&!controls.isLocked)controls.lock();},100);}else console.error("! Scene/Controls missing!");if(typeof onWindowResize === 'function') onWindowResize(); break; // Call resize
+        case'loading': if(loadingScreen){loadingScreen.style.display='flex'; const p=loadingScreen.querySelector('p');if(p)p.innerHTML=options.message||'Loading...';if(options.assets)loadingScreen.classList.add('assets');if(options.error&&p){p.style.color='#e74c3c';loadingScreen.classList.add('error');}} break;
+        case'homescreen': if(homeScreen){homeScreen.style.display='flex'; requestAnimationFrame(()=>{homeScreen.classList.add('visible');}); if(playerCountSpan)playerCountSpan.textContent=options.playerCount??playerCountSpan.textContent??'?'; if(controls?.isLocked)controls.unlock(); const obj=scene?.getObjectByName("PlayerControls"); if(obj)scene.remove(obj); if(typeof removeGunViewModel === 'function') removeGunViewModel(); else console.error("removeGunViewModel missing!"); if(joinButton){joinButton.disabled=false;joinButton.textContent="Join Game";}} break;
+        case'joining': if(joinButton){joinButton.disabled=true;joinButton.textContent="Joining...";} if(options.waitingForAssets)setGameState('loading',{message:"Loading Assets...",assets:true}); break;
+        case'playing': const cElem=document.getElementById('gameCanvas'); if(gameUI){gameUI.style.display='block';requestAnimationFrame(()=>{gameUI.classList.add('visible');});} else console.error("! gameUI"); if(cElem){cElem.style.display='block';} else console.error("! gameCanvas"); if(scene&&controls){if(!scene.getObjectByName("PlayerControls")){controls.getObject().name="PlayerControls";scene.add(controls.getObject());} if(typeof attachGunViewModel === 'function') attachGunViewModel(); else console.error("attachGunViewModel missing!"); setTimeout(function(){if(gameState==='playing'&&!controls.isLocked)controls.lock();},100);} else console.error("! Scene/Controls missing!"); if(typeof onWindowResize === 'function') onWindowResize(); break;
     }
-     console.log(`Switched state from ${previousState} to ${gameState}`);
+    // console.log(`Switched state from ${previousState} to ${gameState}`);
 }
 
 // --- Other UI Updates ---
