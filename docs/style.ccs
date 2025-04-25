@@ -1,28 +1,56 @@
 /* docs/style.css */
+/* Reset and Base Styles */
+* {
+    box-sizing: border-box;
+}
 
-/* --- Add these styles or replace existing ones --- */
+body {
+    margin: 0;
+    overflow: hidden; /* Prevent scrollbars */
+    background-color: #000; /* Fallback background */
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    height: 100vh;
+    width: 100vw;
+    position: relative; /* Context for absolute children */
+}
 
-#homeScreen {
-    /* Existing styles: position, top, left, width, height, z-index... */
-    /* Enhancement: Add background, better centering, etc. */
-    background: linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%); /* Gradient background */
-    flex-direction: column;
+/* Screen Overlays */
+#loadingScreen, #homeScreen {
+    position: fixed; /* Cover page */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
     justify-content: center;
     align-items: center;
     text-align: center;
+    z-index: 100; /* Above canvas and game UI */
+}
+
+#loadingScreen {
+    background-color: #1a4d2e; /* Dark Green */
+    color: #e8f6ef;
+    font-size: 2em;
+    flex-direction: column;
+    /* Starts visible implicitly */
+}
+
+#homeScreen {
+    background: linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%); /* Gradient background */
+    flex-direction: column;
     padding: 30px;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Nicer font? */
     display: none; /* Start hidden */
-    color: #ecf0f1; /* Default light text color */
+    color: #ecf0f1;
 }
 
 #homeScreen h1 {
-    font-size: 5em; /* Larger */
+    font-size: 5em;
     margin-bottom: 15px;
-    color: #ffffff; /* White title */
-    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5); /* More prominent shadow */
-    /* Optional: Add animation */
-    /* animation: pulse 2s infinite ease-in-out; */
+    color: #ffffff;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+    /* animation: pulse 2s infinite ease-in-out; */ /* Optional animation */
 }
 
 /* Optional Pulse Animation for Title */
@@ -36,23 +64,23 @@
     font-size: 1.4em;
     margin-bottom: 25px;
     color: #bdc3c7;
-    background-color: rgba(0, 0, 0, 0.2); /* Subtle background */
+    background-color: rgba(0, 0, 0, 0.2);
     padding: 5px 10px;
     border-radius: 5px;
 }
 
 #homeScreen input[type="text"] {
-    padding: 12px 15px; /* More padding */
+    padding: 12px 15px;
     margin-bottom: 15px;
     width: 80%;
-    max-width: 350px; /* Wider input */
-    border: none; /* Remove default border */
+    max-width: 350px;
+    border: none;
     border-radius: 25px; /* Rounded corners */
-    background-color: rgba(255, 255, 255, 0.9); /* Slightly transparent white */
+    background-color: rgba(255, 255, 255, 0.9);
     color: #34495e;
     font-size: 1.1em;
-    text-align: center; /* Center placeholder/text */
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); /* Inner shadow */
+    text-align: center;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
 }
 #homeScreen input::placeholder {
     color: #95a5a6;
@@ -62,10 +90,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 90%; /* Wider container */
+    width: 90%;
     max-width: 450px;
     margin-bottom: 25px;
-    background-color: rgba(0, 0, 0, 0.1); /* Subtle background for phrase */
+    background-color: rgba(0, 0, 0, 0.1);
     padding: 5px 15px;
     border-radius: 25px;
 }
@@ -73,80 +101,78 @@
      margin-right: 8px;
      font-size: 1.1em;
      color: #ecf0f1;
-     white-space: nowrap; /* Prevent wrapping */
+     white-space: nowrap;
 }
 .phrase-container input[type="text"] {
     flex-grow: 1;
     margin-bottom: 0;
     width: auto;
-    background-color: transparent; /* Make input background transparent */
-    border: none; /* Remove inner input border */
-    box-shadow: none; /* Remove inner shadow */
-    color: #ffffff; /* White text input */
-    text-align: left; /* Align input text left */
-     padding: 10px 5px; /* Adjust padding */
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    color: #ffffff;
+    text-align: left;
+    padding: 10px 5px;
+    font-size: 1.1em; /* Match other inputs */
 }
 .phrase-container input::placeholder {
-    color: rgba(236, 240, 241, 0.6); /* Lighter placeholder */
+    color: rgba(236, 240, 241, 0.6);
 }
 
 
 #homeScreen button#joinButton {
-    padding: 15px 35px; /* Bigger button */
+    padding: 15px 35px;
     font-size: 1.4em;
     font-weight: bold;
-    background-image: linear-gradient(to right, #27ae60, #2ecc71); /* Gradient background */
+    background-image: linear-gradient(to right, #27ae60, #2ecc71);
     color: white;
     border: none;
-    border-radius: 30px; /* Rounded */
+    border-radius: 30px;
     cursor: pointer;
     transition: transform 0.1s ease, box-shadow 0.2s ease;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Add shadow */
-    margin-top: 10px; /* Space above button */
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    margin-top: 10px;
 }
 
 #homeScreen button#joinButton:hover {
-    transform: scale(1.05); /* Slightly larger on hover */
+    transform: scale(1.05);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 #homeScreen button#joinButton:active {
-    transform: scale(1.02); /* Slightly smaller when clicked */
+    transform: scale(1.02);
+}
+#homeScreen button#joinButton:disabled { /* Style for disabled button */
+    background-image: linear-gradient(to right, #7f8c8d, #95a5a6); /* Grey gradient */
+    cursor: not-allowed;
+    transform: scale(1);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
-/* Ensure error message styles remain */
+
 .error-message {
-    color: #e74c3c;
+    color: #e74c3c; /* Red */
     margin-top: 20px;
     font-weight: bold;
-    min-height: 1.2em;
+    min-height: 1.2em; /* Prevent layout shift */
     background-color: rgba(0,0,0,0.3);
-    padding: 5px;
+    padding: 5px 10px;
     border-radius: 5px;
 }
 
-/* --- Make sure existing body/canvas styles prevent scrolling/whitespace --- */
-body {
-    margin: 0;
-    overflow: hidden; /* Critical */
-    background-color: #000;
-    color: white;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    height: 100vh;
-    width: 100vw;
-    position: relative;
-}
 
+/* Game Canvas */
 #gameCanvas {
-    display: block; /* Critical */
-    position: fixed; /* Critical */
+    display: block; /* Prevent extra space */
+    position: fixed; /* Cover behind UI */
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 1;
+    z-index: 1; /* Behind UI */
+    /* Starts hidden via JS */
 }
 
-/* --- Ensure #gameUI covers screen and doesn't interfere --- */
+/* In-Game UI Container */
 #gameUI {
     position: fixed;
     top: 0;
@@ -154,19 +180,85 @@ body {
     width: 100%;
     height: 100%;
     pointer-events: none; /* Allow clicks to pass through */
-    z-index: 10;
+    z-index: 10; /* Above canvas */
     display: none; /* Start hidden */
 }
 
-/* Adjust positioning of in-game elements if needed */
-#healthBarContainer {
-     bottom: 30px; /* Slightly higher */
-     left: 30px;
+/* Individual In-Game UI Elements */
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    color: lime;
 }
-#killMessage {
-     bottom: 70px; /* Slightly higher */
-}
+
 #info {
-    top: 15px;
-    left: 15px;
+    position: absolute;
+    top: 15px; /* Adjusted */
+    left: 15px; /* Adjusted */
+    background-color: rgba(0, 0, 0, 0.6); /* Slightly darker */
+    padding: 6px 8px;
+    border-radius: 4px;
+    color: white;
+    font-size: 0.9em;
+}
+
+#healthBarContainer {
+    position: absolute;
+    bottom: 30px; /* Adjusted */
+    left: 30px;  /* Adjusted */
+    width: 220px; /* Slightly wider */
+    height: 28px; /* Slightly taller */
+    background-color: rgba(50, 50, 50, 0.8);
+    border: 2px solid #ddd; /* Lighter border */
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 0 8px rgba(0,0,0,0.6);
+}
+
+#healthBarFill {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to right, #e74c3c, #f39c12, #f1c40f, #2ecc71); /* Adjusted gradient */
+    background-size: 200% 100%;
+    background-position: 0% 0%;
+    transition: width 0.3s ease-in-out, background-position 0.3s ease-in-out;
+}
+
+#healthText {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    font-size: 15px; /* Slightly larger */
+    text-shadow: 1px 1px 3px black;
+}
+
+#killMessage {
+    position: absolute;
+    bottom: 70px; /* Position above health bar - Adjusted */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(192, 57, 43, 0.85); /* Slightly different red */
+    color: white;
+    padding: 10px 18px; /* More padding */
+    border-radius: 5px;
+    font-size: 1.2em; /* Larger text */
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+    max-width: 80%;
+    pointer-events: none;
+}
+
+#killMessage.visible {
+    opacity: 1;
 }
