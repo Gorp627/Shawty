@@ -1,44 +1,30 @@
 // docs/core.js
 
-// Needs access to MOST globals and functions defined in other files.
-
 // ========================================================
 // INITIALIZATION FUNCTION DEFINITION
 // ========================================================
 function init() {
     console.log("Init Shawty - Split Files");
-    // Get UI Elements FIRST
-    getUIElements(); // Call function from ui.js
-    // NOW get canvas AFTER calling getUIElements OR just get it directly here
-    const canvas = document.getElementById('gameCanvas'); // <<< GET CANVAS HERE
-
-    // Null check elements needed by THIS function
-    if (!loadingScreen || !homeScreen || !gameUI || !canvas ) {
-         console.error("Critical UI element missing!");
-         if (loadingScreen) {
-              loadingScreen.style.display = 'flex';
-              const p = loadingScreen.querySelector('p');
-              if (p) p.innerHTML = "FATAL: UI Init Error!"; p.style.color = 'red';
-         }
-         return; // Stop init
-    }
+    getUIElements();
+    const canvas = document.getElementById('gameCanvas');
+    if (!loadingScreen || !homeScreen || !gameUI || !canvas ) { console.error("! Critical UI missing!"); return; }
     console.log("UI elements refs obtained.");
 
-    setGameState('loading'); // Start loading
+    setGameState('loading');
 
     // Setup Three.js Core
     try {
         scene=new THREE.Scene(); scene.background=new THREE.Color(0x87ceeb); scene.fog=new THREE.Fog(0x87ceeb,0,150);
         camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
-        renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true}); // Use canvas variable
+        renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true});
         renderer.setSize(window.innerWidth,window.innerHeight); renderer.shadowMap.enabled=true;
         clock=new THREE.Clock();
-        loader=new THREE.GLTFLoader();
-        dracoLoader=new THREE.DRACOLoader();
-        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
-        dracoLoader.setDecoderConfig({type:'js'});
-        loader.setDRACOLoader(dracoLoader); // Draco is enabled
-        console.log("Three.js core initialized. Draco ENABLED.");
+        // Loaders are initialized in config.js now
+        if (!loader || !dracoLoader) { // Check if loaders failed to init
+             console.error("Loaders were not initialized correctly in config.js!");
+             setGameState('loading',{message:"FATAL: Loader Init Error!",error:true}); return;
+        }
+        console.log("Three.js core scene/cam/renderer initialized.");
     } catch (e) { console.error("3js Init Error:", e); setGameState('loading',{message:"Graphics Error!",error:true}); return; }
 
     // Lighting
@@ -48,17 +34,12 @@ function init() {
     try {
         controls=new THREE.PointerLockControls(camera,document.body);
         controls.addEventListener('lock',function(){console.log('Locked');});
-        // Revised unlock listener - DOES NOT CHANGE STATE automatically
-        controls.addEventListener('unlock',function(){
-            console.log('Unlocked');
-            // Player must click canvas to re-lock (handled by onMouseDown)
-        });
+        controls.addEventListener('unlock',function(){ console.log('Unlocked'); /* No automatic state change */ });
         console.log("Controls initialized.");
     } catch (e) { console.error("Controls Init Error:", e); setGameState('loading',{message:"Controls Error!",error:true}); return; }
 
     // Start Loading Assets & Connecting
     console.log("Start loads & socket...");
-    // Ensure functions are defined before calling
     if (typeof loadSound === 'function') loadSound(); else console.error("loadSound not defined!");
     if (typeof loadPlayerModel === 'function') loadPlayerModel(); else console.error("loadPlayerModel not defined!");
     if (typeof loadGunModel === 'function') loadGunModel(); else console.error("loadGunModel not defined!"); // Still loading gun
@@ -78,22 +59,19 @@ function init() {
 
     // Start loop
     console.log("Start animate.");
-    animate(); // Defined below
+    animate();
 }
 
 // --- Animation Loop ---
 function animate() {
     requestAnimationFrame(animate);
-    const dT = clock ? clock.getDelta() : 0.016; // Use clock if available
+    const dT = clock ? clock.getDelta() : 0.016;
 
-    // *** ADDED THROTTLED CAMERA POSITION LOG ***
-    if (frameCount++ % 120 === 0) { // Log approx every 2 seconds
-        console.log(`Animate State: ${gameState}, Cam Pos: ${camera?.position?.toArray()?.map(n=>n.toFixed(2))?.join(',')}`);
-    }
-    // ***************************************
+    // <<< UNCOMMENT THROTTLED LOG >>>
+    if (frameCount++ % 300 === 0) { console.log(`Animate running. State: ${gameState}`); }
+    // <<< ----------------------- >>>
 
     if (gameState === 'playing') {
-        // Ensure functions from other modules are available
         if (typeof updatePlayer === 'function' && players[localPlayerId]) { updatePlayer(dT); }
         if (typeof updateBullets === 'function') { updateBullets(dT); }
         if (typeof updateOtherPlayers === 'function') { updateOtherPlayers(dT); }
@@ -106,27 +84,19 @@ function animate() {
 // --- Utility Functions ---
 function onWindowResize() { if(camera){camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();} if(renderer)renderer.setSize(window.innerWidth,window.innerHeight); }
 
-// Input Handlers (Defined here as they access global 'keys' and call 'shoot')
+// Input Handlers (Defined here)
 function onKeyDown(event) { keys[event.code] = true; if (event.code === 'Space') { event.preventDefault(); if (isOnGround && gameState === 'playing') { velocityY = JUMP_FORCE; isOnGround = false; } } }
 function onKeyUp(event) { keys[event.code] = false; }
-// Revised onMouseDown to handle re-locking
-function onMouseDown(event) { if (gameState === 'playing' && !controls?.isLocked) { console.log("Click detect while unlocked, locking..."); controls?.lock(); } else if (gameState === 'playing' && controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); } }
+function onMouseDown(event) { if (gameState === 'playing' && !controls?.isLocked) { controls?.lock(); } else if (gameState === 'playing' && controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); else console.error("shoot func missing!"); } }
 
-
-// --- View Model Functions (Defined in core.js) ---
-function attachGunViewModel() { /* ... Same as previous ... */ }
-function removeGunViewModel() { /* ... Same as previous ... */ }
+// --- View Model Functions (Defined here) ---
+function attachGunViewModel() { if(!gunModel||gunModel==='error'||!camera)return; if(gunViewModel&&gunViewModel.parent===camera)return; gunViewModel=gunModel.clone(); gunViewModel.scale.set(GUN_SCALE,GUN_SCALE,GUN_SCALE); gunViewModel.position.copy(GUN_POS_OFFSET); currentRecoilOffset.set(0,0,0); camera.add(gunViewModel); console.log("Gun view model attached."); }
+function removeGunViewModel() { if (gunViewModel && camera) { camera.remove(gunViewModel); gunViewModel = null; console.log("Gun view model removed."); } }
 
 
 // ========================================================
 // --- START THE APPLICATION ---
 // ========================================================
-if (document.readyState === 'loading') {
-     console.log("DOM Loading... waiting for DOMContentLoaded");
-     document.addEventListener('DOMContentLoaded', init);
-} else {
-     console.log("DOM Ready, calling init directly.");
-     init();
-}
-
- console.log("core.js loaded");
+if (document.readyState === 'loading') { console.log("DOM Loading..."); document.addEventListener('DOMContentLoaded', init); }
+else { console.log("DOM Ready."); init(); }
+console.log("core.js loaded");
