@@ -3,7 +3,44 @@
 // ========================================================
 // INITIALIZATION FUNCTION DEFINITION
 // ========================================================
-function init() { /* ... Same checks and setup ... */ }
+function init() {
+    console.log("Init Shawty - Split Files + Gun Logic");
+    // ... (Get UI Elements & Null Checks - SAME) ...
+    getUIElements();
+    const canvas = document.getElementById('gameCanvas');
+    if (!loadingScreen || !homeScreen || !gameUI || !canvas || !joinButton /* etc */) { console.error("! Critical UI missing!"); return; }
+    console.log("UI elements refs obtained.");
+
+    setGameState('loading');
+
+    // Setup Three.js Core
+    try { /* ... Same ... */ } catch (e) { /* ... error handling ... */ return; }
+
+    // Lighting
+    try { /* ... Same ... */ } catch(e){ /* ... error handling ... */ return; }
+
+    // Controls
+    try { /* ... Same (with unlock listener doing nothing) ... */ } catch (e) { /* ... error handling ... */ return; }
+
+    // Start Loading Assets & Connecting
+    console.log("Start loads & socket...");
+    if (typeof loadSound === 'function') loadSound(); else console.error("loadSound not defined!");
+    // *** COMMENT OUT PLAYER MODEL LOAD CALL ***
+    // if (typeof loadPlayerModel === 'function') loadPlayerModel(); else console.error("loadPlayerModel not defined!");
+    console.log("--- Skipping loadPlayerModel call (testing) ---"); // Add log
+    // ****************************************
+    if (typeof loadGunModel === 'function') loadGunModel(); else console.error("loadGunModel not defined!");
+    if (typeof loadMap === 'function') loadMap(MAP_PATH); else console.error("loadMap not defined!");
+    if (typeof setupSocketIO === 'function') setupSocketIO(); else console.error("setupSocketIO not defined!");
+
+
+    // Add Event Listeners
+    // ... (Same listener setup) ...
+
+    // Start loop
+    console.log("Start animate.");
+    animate();
+}
 
 // --- Animation Loop ---
 function animate() { /* ... Same ... */ }
@@ -16,44 +53,14 @@ function onKeyDown(event) { /* ... Same ... */ }
 function onKeyUp(event) { /* ... Same ... */ }
 function onMouseDown(event) { /* ... Same ... */ }
 
-// --- View Model Functions (Ensure Added to CAMERA) ---
-function attachGunViewModel() {
-    if (!gunModel || gunModel === 'error' || !camera) { console.warn("Cannot attach gun: Model/camera missing/fail"); return; }
-    if (gunViewModel && gunViewModel.parent === camera) return; // Already attached to camera
-    if (gunViewModel) removeGunViewModel(); // Clean up previous if any
+// --- View Model Functions ---
+function attachGunViewModel() { /* ... Same ... */ }
+function removeGunViewModel() { /* ... Same ... */ }
 
-    try {
-        gunViewModel = gunModel.clone();
-        gunViewModel.scale.set(GUN_SCALE, GUN_SCALE, GUN_SCALE);
-        gunViewModel.position.copy(GUN_POS_OFFSET);
-        currentRecoilOffset.set(0,0,0);
-        // *** ATTACH TO CAMERA ***
-        camera.add(gunViewModel);
-        // ************************
-        console.log("Gun view model attached TO CAMERA.");
-    } catch (e) {
-        console.error("Error attaching gun view model:", e);
-        gunViewModel = null;
-    }
-}
-function removeGunViewModel() {
-    if (gunViewModel && camera) { // Check if gun exists AND camera exists
-        try {
-             // *** REMOVE FROM CAMERA ***
-             camera.remove(gunViewModel);
-             // **************************
-             // Dispose resources if necessary (depends on cloning strategy)
-             gunViewModel = null;
-             console.log("Gun view model removed FROM CAMERA.");
-        } catch (e) {
-            console.error("Error removing gun view model:", e);
-            gunViewModel = null;
-        }
-    }
-}
 
 // ========================================================
 // --- START THE APPLICATION ---
 // ========================================================
-if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
+if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
+else { init(); }
 console.log("core.js loaded");
