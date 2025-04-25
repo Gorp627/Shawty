@@ -1,11 +1,11 @@
-// docs/main.js
+// docs/main.js - Simplified: No Gun, Draco Disabled Test
 
 // --- Configuration ---
 const SERVER_URL = 'https://gametest-psxl.onrender.com';
 const MAP_PATH = 'assets/maps/map.glb';
-const SOUND_PATH_GUNSHOT = 'assets/maps/gunshot.wav'; // User path
-const PLAYER_MODEL_PATH = 'assets/maps/Shawty1.glb'; // User path
-const GUN_MODEL_PATH = 'assets/maps/gun2.glb'; // User path
+const SOUND_PATH_GUNSHOT = 'assets/maps/gunshot.wav';
+const PLAYER_MODEL_PATH = 'assets/maps/Shawty1.glb';
+// REMOVED const GUN_MODEL_PATH = 'assets/maps/gun2.glb';
 
 const PLAYER_HEIGHT = 1.8;
 const PLAYER_RADIUS = 0.4;
@@ -18,17 +18,14 @@ const VOID_Y_LEVEL = -30;
 const PLAYER_COLLISION_RADIUS = PLAYER_RADIUS;
 const KILL_MESSAGE_DURATION = 4000;
 const BULLET_LIFETIME = 3000;
-const GUN_POS_OFFSET = new THREE.Vector3(0.4, -0.35, -0.7); // ADJUST
-const GUN_SCALE = 0.1; // ADJUST
-const RECOIL_AMOUNT = new THREE.Vector3(0, 0.015, 0.06); // ADJUST
-const RECOIL_RECOVER_SPEED = 20; // ADJUST
+// REMOVED Gun/Recoil Config
 
 // --- Global Variables ---
 let gameState = 'loading';
-let assetsReady = false; // Will be true when Map & Player Model are loaded/failed
+let assetsReady = false;
 let mapLoadState = 'loading';
 let playerModelLoadState = 'loading';
-let gunModelLoadState = 'loading'; // Still track gun separately
+// REMOVED let gunModelLoadState = 'loading';
 let socket;
 let localPlayerId = null;
 let localPlayerName = 'Anonymous';
@@ -36,157 +33,105 @@ let localPlayerPhrase = '...';
 let players = {};
 let bullets = [];
 let keys = {};
-let scene, camera, renderer, controls, clock, loader, dracoLoader;
+let scene, camera, renderer, controls, clock, loader, dracoLoader; // Keep dracoLoader declared for now
 let mapMesh = null;
 let playerModel = null;
-let gunModel = null;
-let gunViewModel = null;
+// REMOVED let gunModel = null;
+// REMOVED let gunViewModel = null;
 let velocityY = 0;
 let isOnGround = false;
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
 let gunshotSound;
-let frameCount = 0;
-let currentRecoilOffset = new THREE.Vector3(0, 0, 0);
+// REMOVED let currentRecoilOffset = new THREE.Vector3(0, 0, 0);
 
 // ========================================================
 // FUNCTION DEFINITIONS
 // ========================================================
 
 // --- Input Handling ---
-function onKeyDown(event) { keys[event.code] = true; if (event.code === 'Space') { event.preventDefault(); if (isOnGround && gameState === 'playing') { velocityY = JUMP_FORCE; isOnGround = false; } } }
-function onKeyUp(event) { keys[event.code] = false; }
-function onMouseDown(event) { if (gameState === 'playing' && !controls?.isLocked) { controls?.lock(); } else if (gameState === 'playing' && controls?.isLocked && event.button === 0) { shoot(); } }
+function onKeyDown(event) { /* ... Same ... */ }
+function onKeyUp(event) { /* ... Same ... */ }
+function onMouseDown(event) { /* ... Same ... */ }
 
 // --- UI State Management ---
-function setGameState(newState, options = {}) {
-    console.log(`Setting game state to: ${newState}`, options); const previousState = gameState;
-    loadingScreen = loadingScreen || document.getElementById('loadingScreen'); homeScreen = homeScreen || document.getElementById('homeScreen'); gameUI = gameUI || document.getElementById('gameUI'); const canvas = document.getElementById('gameCanvas');
-    if (gameState === newState && !(newState === 'loading' && options.error)) return; gameState = newState;
-    playerCountSpan = playerCountSpan || document.getElementById('playerCount'); joinButton = joinButton || document.getElementById('joinButton');
-    if(loadingScreen){loadingScreen.style.display='none';loadingScreen.classList.remove('assets','error');const p=loadingScreen.querySelector('p');if(p)p.style.color='';}
-    if(homeScreen){homeScreen.style.display='none';homeScreen.classList.remove('visible');}
-    if(gameUI){gameUI.style.display='none';gameUI.classList.remove('visible');}
-    if(canvas)canvas.style.display='none';
-    switch(newState){
-        case'loading':if(loadingScreen){loadingScreen.style.display='flex';const p=loadingScreen.querySelector('p');if(p)p.innerHTML=options.message||'Loading...';if(options.assets)loadingScreen.classList.add('assets');if(options.error&&p){p.style.color='#e74c3c';loadingScreen.classList.add('error');}}break;
-        case'homescreen':if(homeScreen){homeScreen.style.display='flex';requestAnimationFrame(()=>{homeScreen.classList.add('visible');});if(playerCountSpan)playerCountSpan.textContent=options.playerCount??playerCountSpan.textContent??'?';if(controls?.isLocked)controls.unlock();const obj=scene?.getObjectByName("PlayerControls");if(obj)scene.remove(obj);removeGunViewModel();if(joinButton){joinButton.disabled=false;joinButton.textContent="Join Game";}}break;
-        case'joining':if(joinButton){joinButton.disabled=true;joinButton.textContent="Joining...";}if(options.waitingForAssets)setGameState('loading',{message:"Loading Assets...",assets:true});break;
-        case'playing':const cElem=document.getElementById('gameCanvas');if(gameUI){gameUI.style.display='block';requestAnimationFrame(()=>{gameUI.classList.add('visible');});}else console.error("! gameUI");if(cElem){cElem.style.display='block';}else console.error("! gameCanvas");if(scene&&controls){if(!scene.getObjectByName("PlayerControls")){controls.getObject().name="PlayerControls";scene.add(controls.getObject());}attachGunViewModel();setTimeout(function(){if(gameState==='playing'&&!controls.isLocked)controls.lock();},100);}else console.error("! Scene/Controls missing!");onWindowResize();break;
-    } console.log(`Switched state from ${previousState} to ${gameState}`);
-}
-
+function setGameState(newState, options = {}) { /* ... Same (ensure joinButton re-enabled in homescreen) ... */ }
 
 // --- Asset Loading ---
 function loadSound() { /* ... Same ... */ }
-
-function loadPlayerModel() {
-    playerModelLoadState = 'loading'; console.log(`-> Starting P Model: ${PLAYER_MODEL_PATH}`); if (!loader) { console.error("! Loader missing"); playerModelLoadState = 'error'; checkAssetsReady(); return; }
-    loader.load(PLAYER_MODEL_PATH, function(gltf){ console.log(">>> P Model OK!"); playerModel=gltf.scene;playerModel.traverse(function(c){if(c.isMesh)c.castShadow=true;}); playerModelLoadState='loaded'; checkAssetsReady(); }, undefined, function(err){ console.error("!!! P Model ERR:",err); playerModelLoadState='error'; checkAssetsReady(); });
+function loadPlayerModel() { // Loads Player model only
+    playerModelLoadState = 'loading'; console.log(`Load P Model: ${PLAYER_MODEL_PATH}`); if (!loader)return;
+    loader.load(PLAYER_MODEL_PATH, function(gltf){ playerModel=gltf.scene;playerModel.traverse(function(c){if(c.isMesh)c.castShadow=true;});playerModelLoadState='loaded';checkAssetsReady(); }, undefined, function(err){ console.error("P Model ERR:",err);playerModelLoadState='error';checkAssetsReady(); });
 }
-function loadGunModel() {
-    gunModelLoadState = 'loading'; console.log(`-> Starting G Model: ${GUN_MODEL_PATH}`); if (!loader) { console.error("! Loader missing"); gunModelLoadState = 'error'; checkAssetsReady(); return; }
-    loader.load(GUN_MODEL_PATH, function(gltf){ console.log(">>> G Model OK!"); gunModel=gltf.scene;gunModel.traverse(function(c){if(c.isMesh){c.castShadow=false;c.receiveShadow=false;}}); gunModelLoadState='loaded'; checkAssetsReady(); }, undefined, function(err){ console.error("!!! G Model ERR:",err); gunModelLoadState='error'; checkAssetsReady(); });
+// REMOVED function loadGunModel() { ... }
+function loadMap(mapPath) { // Loads Map
+    mapLoadState = 'loading'; console.log(`Load Map: ${mapPath}`); if (!loader)return;
+    loader.load(mapPath, function(gltf){ mapMesh=gltf.scene;mapMesh.traverse(function(c){if(c.isMesh){c.castShadow=true; c.receiveShadow=true; c.userData.isCollidable=true;}});scene.add(mapMesh);mapLoadState='loaded';checkAssetsReady(); }, undefined, function(err){ console.error(`Map ERR (${mapPath}):`,err);mapLoadState='error';checkAssetsReady(); });
 }
-function loadMap(mapPath) {
-    mapLoadState = 'loading'; console.log(`-> Starting Map: ${mapPath}`); if (!loader) { console.error("! Loader missing"); mapLoadState = 'error'; checkAssetsReady(); return; }
-    loader.load(mapPath, function(gltf){ console.log(">>> Map OK!"); mapMesh=gltf.scene;mapMesh.traverse(function(c){if(c.isMesh){c.castShadow=true;c.receiveShadow=true;c.userData.isCollidable=true;}}); scene.add(mapMesh); mapLoadState='loaded'; checkAssetsReady(); }, undefined, function(err){ console.error(`!!! Map ERR (${mapPath}):`,err); mapLoadState='error'; checkAssetsReady(); });
-}
-
-function checkAssetsReady() { // Check only Map and Player Model for readiness to play
-    console.log(`CheckR: Map=${mapLoadState}, PModel=${playerModelLoadState}`); // Removed GunModel check here
-    const mapR = mapLoadState === 'loaded' || mapLoadState === 'error';
-    const pModelR = playerModelLoadState === 'loaded' || playerModelLoadState === 'error';
-
-    if (mapR && pModelR) { // Check if Map and Player Model are done (success or fail)
-        if (mapLoadState === 'error' || playerModelLoadState === 'error') {
-            assetsReady = false; // Mark as not ready for gameplay
-            console.error("Critical asset (Map or Player Model) loading failed.");
-            // Ensure error is shown, even if socket connected and tried to show homescreen
-            if (gameState !== 'loading' || !document.getElementById('loadingScreen').classList.contains('error')) {
-                setGameState('loading', { message: "FATAL: Asset Error!<br/>Check Console.", error: true });
-            }
+function checkAssetsReady() { // Checks Map and Player Model only
+    console.log(`CheckR: Map=${mapLoadState}, PModel=${playerModelLoadState}`);
+    const mapR=mapLoadState==='loaded'||mapLoadState==='error';
+    const pModelR=playerModelLoadState==='loaded'||playerModelLoadState==='error';
+    if(mapR && pModelR){ // Only check these two
+        if(mapLoadState==='error'||playerModelLoadState==='error'){
+            assetsReady=false;
+            // Log which one failed specifically
+            let errorMsg = "FATAL: Asset Error! ";
+            if (mapLoadState === 'error') errorMsg += "(Map Failed) ";
+            if (playerModelLoadState === 'error') errorMsg += "(Player Model Failed) ";
+            console.error(errorMsg.trim());
+            setGameState('loading',{message: errorMsg + "<br/>Check Console.",error:true});
         } else {
-            assetsReady = true; // Ready to potentially join game
-            console.log("Map & Player Model assets ready.");
-            // If we were in the 'joining' state waiting for assets, proceed
-            if (gameState === 'joining') {
-                 console.log("Assets ready while joining - proceeding.");
-                 sendJoinDetails();
-            }
-            // Note: Homescreen transition is now handled by socket 'connect'
+            assetsReady=true; console.log("Assets OK (Map + Player Model).");
+            if(socket?.connected && gameState==='loading'){ setGameState('homescreen',{playerCount:playerCountSpan?.textContent??'?'});}
+            else if(gameState==='joining'){ sendJoinDetails();}
         }
-    } else {
-        assetsReady = false; // Still waiting for Map or Player Model
-    }
-    // Check Gun model separately - don't block progress for it initially
-    if (gunModelLoadState === 'loaded' || gunModelLoadState === 'error') {
-        if (gunModelLoadState === 'error') {
-            console.warn("Gun model failed to load, will proceed without it.");
-            // We could potentially disable shooting or show a message later
-        } else {
-             console.log("Gun model ready.");
-             // If already playing, maybe attach it now? (Handled by setGameState('playing'))
-        }
-    }
+    } else { assetsReady=false; }
 }
 
 // --- Network & Joining ---
-function setupSocketIO() {
-    console.log(`Connect: ${SERVER_URL}`); socket=io(SERVER_URL,{transports:['websocket'],autoConnect:true});
-    socket.on('connect', function(){
-        console.log('Socket connected! ID:',socket.id);
-        // *** SHOW HOMESCREEN ON CONNECT (if not error state) ***
-        if (mapLoadState !== 'error' && playerModelLoadState !== 'error') {
-             console.log("Socket connected, showing homescreen (assets loading in background).");
-             // Request initial player count
-             setGameState('homescreen', { playerCount: '?' }); // Show '?' initially
-        } else {
-             console.log("Socket connected, but assets failed. Staying on error screen.");
-        }
-    });
-    socket.on('disconnect', function(reason){ console.warn('Disconnected:',reason); setGameState('homescreen',{playerCount:0}); infoDiv.textContent='Disconnected'; for(const id in players)removePlayerMesh(id); players={}; bullets=[]; });
-    socket.on('connect_error', function(err){ console.error('Connect Err:',err.message); mapLoadState='error'; playerModelLoadState='error'; gunModelLoadState = 'error'; assetsReady=false; setGameState('loading',{message:`Connect Fail!<br/>${err.message}`,error:true}); });
-    socket.on('playerCountUpdate', function(count){ playerCountSpan=playerCountSpan||document.getElementById('playerCount'); if(playerCountSpan)playerCountSpan.textContent=count; /* No state change here now */});
-    socket.on('initialize', function(data){ handleInitialize(data); });
-    socket.on('playerJoined', function(d){handlePlayerJoined(d);}); socket.on('playerLeft', function(id){handlePlayerLeft(id);}); socket.on('playerMoved', function(d){updateRemotePlayerPosition(d);}); socket.on('shotFired', function(d){spawnBullet(d);}); socket.on('healthUpdate', function(d){handleHealthUpdate(d);}); socket.on('playerDied', function(d){handlePlayerDied(d);}); socket.on('playerRespawned', function(d){handlePlayerRespawned(d);});
+function setupSocketIO() { /* ... Same ... */ }
+function handleInitialize(data) { /* ... Same ... */ }
+function attemptJoinGame() { /* ... Same ... */ }
+function sendJoinDetails() { /* ... Same ... */ }
+
+// --- Player Management ---
+function addPlayer(playerData) { // Uses Player Model
+    if(players[playerData.id]||playerData.id===localPlayerId)return; players[playerData.id]={...playerData,mesh:null,targetPosition:null,targetRotationY:null};
+    if(playerModel&&playerModel!=='error'){ try{const dS=0.3;// <<<=== ADJUST PLAYER SCALE const mI=playerModel.clone();mI.scale.set(dS,dS,dS);mI.traverse(function(c){if(c.isMesh)c.castShadow=true;}); const vY=playerData.y;mI.position.set(playerData.x,vY,playerData.z);mI.rotation.y=playerData.rotationY;scene.add(mI);players[playerData.id].mesh=mI;players[playerData.id].targetPosition=mI.position.clone();players[playerData.id].targetRotationY=mI.rotation.y;}catch(e){console.error(`Model error ${playerData.id}:`,e);addPlayerFallbackMesh(playerData);}}else{addPlayerFallbackMesh(playerData);}
 }
-
-function handleInitialize(data) { /* ... Same as previous ... */ }
-
-function attemptJoinGame() {
-    localPlayerName = playerNameInput.value.trim() || 'Anonymous'; localPlayerPhrase = playerPhraseInput.value.trim() || '...'; if(!localPlayerName){homeScreenError.textContent='Enter name';return;} if(localPlayerPhrase.length>20){homeScreenError.textContent='Phrase too long';return;} homeScreenError.textContent='';
-    console.log(`Attempting Join: "${localPlayerName}"`);
-    // *** Check assets here before sending details ***
-    if (assetsReady) { // assetsReady means Map & Player Model are loaded OK
-        setGameState('joining', { waitingForAssets: false }); // Assets are ready
-        sendJoinDetails();
-    } else if (mapLoadState === 'error' || playerModelLoadState === 'error') {
-        homeScreenError.textContent = 'Cannot join: Critical assets failed to load.';
-    } else {
-        console.log("Assets not ready yet, showing loading screen...");
-        setGameState('joining', { waitingForAssets: true }); // Show loading while assets finish
-        // checkAssetsReady() will call sendJoinDetails() when they are ready
-    }
-}
-function sendJoinDetails() { /* ... Same as previous ... */ }
-
-// --- Player Management & Model Loading ---
-function addPlayer(playerData) { /* ... Same as previous (ensure desiredScale=0.3 or adjusted) ... */ }
-function addPlayerFallbackMesh(playerData) { /* ... Same ... */ }
+function addPlayerFallbackMesh(playerData) { /* ... Same (Cylinder fallback) ... */ }
 function removePlayerMesh(playerId) { /* ... Same ... */ }
 function updateRemotePlayerPosition(playerData) { /* ... Same ... */ }
 
-// --- Game Logic Update Loop ---
-function updatePlayer(deltaTime) { /* ... Same ... */ }
+// --- Game Logic Update ---
+function updatePlayer(deltaTime) { // No gun view model update
+    if(gameState!=='playing'||!controls?.isLocked||!localPlayerId||!players[localPlayerId])return; const o=controls.getObject(); const s=players[localPlayerId]; if(!s||s.health<=0)return;
+    const sp=keys['ShiftLeft']?MOVEMENT_SPEED_SPRINTING:MOVEMENT_SPEED; const dS=sp*deltaTime; const pPos=o.position.clone();
+    velocityY-=GRAVITY*deltaTime; o.position.y+=velocityY*deltaTime;
+    if(keys['KeyW']){controls.moveForward(dS);} if(keys['KeyS']){controls.moveForward(-dS);} if(keys['KeyA']){controls.moveRight(-dS);} if(keys['KeyD']){controls.moveRight(dS);}
+    const cPos=o.position; for(const id in players){if(id!==localPlayerId&&players[id].mesh&&players[id].mesh.visible){const oM=players[id].mesh; const dXZ=new THREE.Vector2(cPos.x-oM.position.x,cPos.z-oM.position.z).length(); if(dXZ<PLAYER_COLLISION_RADIUS*2){o.position.x=pPos.x; o.position.z=pPos.z; o.position.y=cPos.y; break;}}}
+    let gY=0; if(o.position.y<gY+PLAYER_HEIGHT){o.position.y=gY+PLAYER_HEIGHT;if(velocityY<0)velocityY=0;isOnGround=true;}else{isOnGround=false;}
+    if(o.position.y<VOID_Y_LEVEL&&s.health>0){socket.emit('fellIntoVoid');s.health=0;updateHealthBar(0);showKillMessage("You fell into the void.");}
+    // updateViewModel(deltaTime); // REMOVED gun update
+    const lPos=o.position.clone(); lPos.y-=PLAYER_HEIGHT; const lS=players[localPlayerId]; const pc=lPos.distanceToSquared(new THREE.Vector3(lS?.x??0,lS?.y??0,lS?.z??0))>0.001; const cR=new THREE.Euler().setFromQuaternion(camera.quaternion,'YXZ'); const cRY=cR.y; const rc=Math.abs(cRY-(lS?.rotationY??0))>0.01;
+    if(pc||rc){ if(lS){lS.x=lPos.x;lS.y=lPos.y;lS.z=lPos.z;lS.rotationY=cRY;} socket.emit('playerUpdate',{x:lPos.x,y:lPos.y,z:lPos.z,rotationY:cRY});}
+}
 
-// --- View Model Update (Recoil) ---
-function updateViewModel(deltaTime) { /* ... Same ... */ }
-function attachGunViewModel() { /* ... Same ... */ }
-function removeGunViewModel() { /* ... Same ... */ }
+// --- View Model / Recoil REMOVED ---
+// function updateViewModel(deltaTime) { ... }
+// function attachGunViewModel() { ... }
+// function removeGunViewModel() { ... }
 
 // --- Shoot, Bullet, Interpolation, UI, Event Handlers ---
-function shoot() { /* ... Same ... */ }
+function shoot() { // Basic shoot, no recoil
+    if(gameState!=='playing'||!socket||!localPlayerId||!controls?.isLocked||!players[localPlayerId]||players[localPlayerId].health<=0)return;
+    // currentRecoilOffset.copy(RECOIL_AMOUNT); // REMOVED recoil
+    if(gunshotSound){try{gunshotSound.cloneNode().play().catch(function(e){});}catch(e){}}
+    const bP=new THREE.Vector3(),bD=new THREE.Vector3(); if(!camera)return;
+    camera.getWorldPosition(bP); camera.getWorldDirection(bD); // Shoot from camera
+    socket.emit('shoot',{position:{x:bP.x,y:bP.y,z:bP.z},direction:{x:bD.x,y:bD.y,z:bD.z}});
+}
 function spawnBullet(d) { /* ... Same ... */ }
 function updateBullets(dT) { /* ... Same ... */ }
 function updateOtherPlayers(dT) { /* ... Same ... */ }
@@ -195,49 +140,61 @@ function showKillMessage(m) { /* ... Same ... */ }
 function handlePlayerJoined(pD) { /* ... Same ... */ }
 function handlePlayerLeft(pId) { /* ... Same ... */ }
 function handleHealthUpdate(d) { /* ... Same ... */ }
-function handlePlayerDied(data) { /* ... Same ... */ }
-function handlePlayerRespawned(pD) { /* ... Same ... */ }
+function handlePlayerDied(data) { /* ... Same (uses name/phrase from server) ... */ }
+function handlePlayerRespawned(pD) { /* ... Same (uses name/phrase from server) ... */ }
 
 // --- Animation Loop ---
-function animate() { /* ... Same ... */ }
-
+function animate() { requestAnimationFrame(animate); const dT=clock?clock.getDelta():0.016; if(gameState==='playing'){if(players[localPlayerId]){updatePlayer(dT);}updateBullets(dT);updateOtherPlayers(dT);} if(renderer&&scene&&camera){try{renderer.render(scene,camera);}catch(e){console.error("Render error:",e);}}}
 // --- Utility Functions ---
-function onWindowResize() { /* ... Same ... */ }
+function onWindowResize() { if(camera){camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();} if(renderer)renderer.setSize(window.innerWidth,window.innerHeight); }
 
 // ========================================================
 // INITIALIZATION FUNCTION DEFINITION
 // ========================================================
 function init() {
-    console.log("Initializing Shawty...");
+    console.log("Initializing Shawty - Simplified Baseline + Menu/Models...");
     // Get UI Elements & Null Checks
-    loadingScreen=document.getElementById('loadingScreen'); if(!loadingScreen)return; homeScreen=document.getElementById('homeScreen'); if(!homeScreen)return; gameUI=document.getElementById('gameUI'); if(!gameUI)return; playerCountSpan=document.getElementById('playerCount'); if(!playerCountSpan)return; playerNameInput=document.getElementById('playerNameInput'); if(!playerNameInput)return; playerPhraseInput=document.getElementById('playerPhraseInput'); if(!playerPhraseInput)return; joinButton=document.getElementById('joinButton'); if(!joinButton)return; homeScreenError=document.getElementById('homeScreenError'); if(!homeScreenError)return; infoDiv=document.getElementById('info'); if(!infoDiv)return; healthBarFill=document.getElementById('healthBarFill'); if(!healthBarFill)return; healthText=document.getElementById('healthText'); if(!healthText)return; killMessageDiv=document.getElementById('killMessage'); if(!killMessageDiv)return; const canvas=document.getElementById('gameCanvas'); if(!canvas)return; console.log("UI elements found.");
+    loadingScreen=document.getElementById('loadingScreen'); if (!loadingScreen)return; homeScreen=document.getElementById('homeScreen'); if (!homeScreen)return; gameUI=document.getElementById('gameUI'); if (!gameUI)return; playerCountSpan=document.getElementById('playerCount'); if (!playerCountSpan)return; playerNameInput=document.getElementById('playerNameInput'); if (!playerNameInput)return; playerPhraseInput=document.getElementById('playerPhraseInput'); if (!playerPhraseInput)return; joinButton=document.getElementById('joinButton'); if (!joinButton)return; homeScreenError=document.getElementById('homeScreenError'); if (!homeScreenError)return; infoDiv=document.getElementById('info'); if (!infoDiv)return; healthBarFill=document.getElementById('healthBarFill'); if (!healthBarFill)return; healthText=document.getElementById('healthText'); if (!healthText)return; killMessageDiv=document.getElementById('killMessage'); if (!killMessageDiv)return; const canvas=document.getElementById('gameCanvas'); if (!canvas)return; console.log("UI elements found.");
 
-    setGameState('loading'); // Start loading
+    setGameState('loading');
 
     // Setup Three.js Core
-    try { /* ... Same ... */ } catch (e) { /* ... error handling ... */ return; }
+    try {
+        scene=new THREE.Scene(); scene.background=new THREE.Color(0x87ceeb); scene.fog=new THREE.Fog(0x87ceeb,0,150);
+        camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+        renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true}); renderer.setSize(window.innerWidth,window.innerHeight); renderer.shadowMap.enabled=true;
+        clock=new THREE.Clock();
+        loader=new THREE.GLTFLoader();
+        dracoLoader=new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+        dracoLoader.setDecoderConfig({type:'js'});
+        // *** DRACO IS DISABLED FOR THIS TEST ***
+        // loader.setDRACOLoader(dracoLoader); // Comment this out
+        console.log("Three.js core initialized. Draco setup SKIPPED.");
+    } catch (e) { console.error("3js Init Error:", e); setGameState('loading',{message:"Graphics Error!",error:true}); return; }
 
     // Lighting
-    try { /* ... Same ... */ } catch(e){ /* ... error handling ... */ return; }
+    try { const ambL=new THREE.AmbientLight(0xffffff,0.6);scene.add(ambL);const dirL=new THREE.DirectionalLight(0xffffff,0.9);dirL.position.set(10,15,10);dirL.castShadow=true;scene.add(dirL); } catch(e){ console.error("Lighting Error:", e); setGameState('loading',{message:"Graphics Error(Light)!",error:true}); return; }
 
     // Controls
-    try { /* ... Same (with revised unlock listener) ... */ } catch (e) { /* ... error handling ... */ return; }
+    try {
+        controls=new THREE.PointerLockControls(camera,document.body);
+        controls.addEventListener('lock',function(){console.log('Locked');});
+        controls.addEventListener('unlock',function(){console.log('Unlocked'); if(gameState==='playing')setGameState('homescreen',{playerCount:playerCountSpan?.textContent??'?'}); }); // Go home only if playing
+        console.log("Controls initialized.");
+    } catch (e) { console.error("Controls Init Error:", e); setGameState('loading',{message:"Controls Error!",error:true}); return; }
 
-    // Start Loading Assets & Connecting
-    console.log("Starting asset loads & socket...");
-    loadSound(); loadPlayerModel(); loadGunModel(); loadMap(MAP_PATH); setupSocketIO();
+    // Start Loading Assets & Connecting (NO GUN MODEL)
+    console.log("Start loads & socket..."); loadSound(); loadPlayerModel(); loadMap(MAP_PATH); setupSocketIO();
 
     // Add Event Listeners
-    console.log("Adding listeners...");
-    joinButton?.addEventListener('click',attemptJoinGame); window.addEventListener('resize',onWindowResize); document.addEventListener('keydown',onKeyDown); document.addEventListener('keyup',onKeyUp); document.addEventListener('mousedown',onMouseDown);
-    console.log("Listeners added.");
+    console.log("Add listeners..."); joinButton?.addEventListener('click',attemptJoinGame); window.addEventListener('resize',onWindowResize); document.addEventListener('keydown',onKeyDown); document.addEventListener('keyup',onKeyUp); document.addEventListener('mousedown',onMouseDown); console.log("Listeners added.");
 
-    // Start animation loop
-    console.log("Starting animate loop.");
-    animate();
+    // Start loop
+    console.log("Start animate."); animate();
 }
 
 // ========================================================
-// --- START THE APPLICATION (Call init) ---
+// --- START THE APPLICATION ---
 // ========================================================
 if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
