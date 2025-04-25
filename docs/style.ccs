@@ -1,4 +1,4 @@
-/* docs/style.ccs */
+/* docs/style.css */
 /* Reset and Base Styles */
 * {
     box-sizing: border-box;
