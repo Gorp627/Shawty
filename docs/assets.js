@@ -1,6 +1,7 @@
 // docs/assets.js
 
-// Asset Loading Functions need access to 'loader' and state variables
+// Needs access to globals: loader, playerModelLoadState, gunModelLoadState, mapLoadState, socket, gameState, playerCountSpan, players, bullets, gunshotSound, playerModel, gunModel, mapMesh, scene
+// Needs access to functions: checkAssetsReady, setGameState, sendJoinDetails
 
 function loadSound() { try{gunshotSound=new Audio(SOUND_PATH_GUNSHOT);gunshotSound.volume=0.4;gunshotSound.preload='auto';gunshotSound.load();console.log("Sound OK.");}catch(e){console.error("Audio err:",e);gunshotSound=null;} }
 
@@ -35,7 +36,9 @@ function loadMap(mapPath) {
     if (!loader) { console.error("! Loader not init before loadMap"); mapLoadState = 'error'; checkAssetsReady(); return; }
     loader.load(mapPath,
     function(gltf){ // Success
-        console.log(">>> Map OK!"); mapMesh=gltf.scene;mapMesh.traverse(function(c){if(c.isMesh){c.castShadow=true; c.receiveShadow=true; c.userData.isCollidable=true;}}); scene.add(mapMesh); mapLoadState='loaded'; checkAssetsReady();
+        console.log(">>> Map OK!"); mapMesh=gltf.scene;mapMesh.traverse(function(c){if(c.isMesh){c.castShadow=true; c.receiveShadow=true; c.userData.isCollidable=true;}});
+        if (scene) scene.add(mapMesh); else console.error("Scene not ready for map!"); // Add check
+        mapLoadState='loaded'; checkAssetsReady();
     },
     undefined, // Progress
     function(error){ // Error
@@ -43,18 +46,24 @@ function loadMap(mapPath) {
     });
 }
 
-// Readiness check includes Gun Model again
-function checkAssetsReady() {
-    console.log(`CheckR: Map=${mapLoadState}, PModel=${playerModelLoadState}, GModel=${gunModelLoadState}`);
-    const mapR=mapLoadState==='loaded'||mapLoadState==='error';const pModelR=playerModelLoadState==='loaded'||playerModelLoadState==='error';const gModelR=gunModelLoadState==='loaded'||gunModelLoadState==='error';
-    if(mapR && pModelR && gModelR){ // Check all three
-        if(mapLoadState==='error'||playerModelLoadState==='error'||gunModelLoadState==='error'){ // Check if any failed
+
+function checkAssetsReady() { // Checks all three assets now
+    // console.log(`CheckR: Map=${mapLoadState}, PModel=${playerModelLoadState}, GModel=${gunModelLoadState}`); // Reduce noise
+    const mapR=mapLoadState==='loaded'||mapLoadState==='error';
+    const pModelR=playerModelLoadState==='loaded'||playerModelLoadState==='error';
+    const gModelR=gunModelLoadState==='loaded'||gunModelLoadState==='error';
+    if(mapR && pModelR && gModelR){ // Wait for all 3
+        if(mapLoadState==='error'||playerModelLoadState==='error'||gunModelLoadState==='error'){ // Fail if any fail
             assetsReady=false; console.error("Asset load failed.");
-            setGameState('loading',{message:"FATAL: Asset Error!<br/>Check Console.",error:true});
+            // Ensure setGameState exists before calling
+            if(typeof setGameState === 'function') setGameState('loading',{message:"FATAL: Asset Error!<br/>Check Console.",error:true});
         } else {
-            assetsReady=true; console.log("Assets OK.");
-            if(socket?.connected && gameState==='loading'){ setGameState('homescreen',{playerCount:playerCountSpan?.textContent??'?'});}
-            else if(gameState==='joining'){ sendJoinDetails();}
+            assetsReady=true; console.log("Assets ready.");
+            if(socket?.connected && gameState==='loading'){
+                 if(typeof setGameState === 'function') setGameState('homescreen',{playerCount:playerCountSpan?.textContent??'?'});
+            } else if(gameState==='joining'){
+                 if(typeof sendJoinDetails === 'function') sendJoinDetails(); else console.error("sendJoinDetails missing!");
+            }
         }
     } else { assetsReady=false; } // Still waiting
 }
