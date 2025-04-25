@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shawty.</title>
-    <link rel="stylesheet" href="style.css"> <!-- Links the simplified functional style.css -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- Loading Screen -->
@@ -27,13 +27,13 @@
 
     <!-- In-Game UI -->
     <div id="gameUI">
-        <div id="crosshair">+</div>
-        <div id="info">Connecting...</div> <!-- Status/player name -->
+        <div id="crosshair"></div> <!-- Changed from '+' to empty div for CSS styling -->
+        <div id="info">Connecting...</div>
         <div id="healthBarContainer">
             <div id="healthBarFill"></div>
             <div id="healthText">100%</div>
         </div>
-        <div id="killMessage"></div> <!-- For displaying kill phrases -->
+        <div id="killMessage"></div>
     </div>
 
     <!-- Game Canvas -->
@@ -47,15 +47,14 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- === Your Split Game Code - Order Matters! === -->
-    <script src="config.js"></script>     <!-- Globals and Constants First -->
-    <script src="ui.js"></script>         <!-- UI Functions -->
-    <script src="assets.js"></script>     <!-- Asset Loading Functions -->
-    <script src="player.js"></script>     <!-- Player Creation/Update Logic -->
-    <script src="gameLogic.js"></script>  <!-- Core Gameplay Loop Logic (Local Player, Bullets, Shooting) -->
-    <script src="network.js"></script>    <!-- Socket.IO Setup & Event Handlers -->
-    <script src="core.js"></script>       <!-- Main Init, Animate Loop, Global Listeners -->
-    <!-- ========================================== -->
+    <!-- Your Split Game Code - Order Matters! -->
+    <script src="config.js"></script>
+    <script src="ui.js"></script>
+    <script src="assets.js"></script>
+    <script src="player.js"></script>
+    <script src="gameLogic.js"></script>
+    <script src="network.js"></script>
+    <script src="core.js"></script> <!-- init() called from here -->
 
 </body>
 </html>
