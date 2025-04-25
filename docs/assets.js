@@ -1,7 +1,7 @@
 // docs/assets.js
 
-// Asset Loading Functions need access to 'loader' and state variables
-// Relies on 'loader' being initialized globally in config.js
+// Needs access to globals: loader, playerModelLoadState, gunModelLoadState, mapLoadState, socket, gameState, playerCountSpan, players, bullets, gunshotSound, playerModel, gunModel, mapMesh, scene
+// Needs access to functions: checkAssetsReady, setGameState, sendJoinDetails
 
 function loadSound() { try{gunshotSound=new Audio(SOUND_PATH_GUNSHOT);gunshotSound.volume=0.4;gunshotSound.preload='auto';gunshotSound.load();console.log("Sound OK.");}catch(e){console.error("Audio err:",e);gunshotSound=null;} }
 
@@ -25,7 +25,7 @@ function loadMap(mapPath) {
 
 
 function checkAssetsReady() { // Checks all three assets now
-    console.log(`CheckR: Map=${mapLoadState}, PModel=${playerModelLoadState}, GModel=${gunModelLoadState}`);
+    // console.log(`CheckR: Map=${mapLoadState}, PModel=${playerModelLoadState}, GModel=${gunModelLoadState}`); // Reduce noise
     const mapR=mapLoadState==='loaded'||mapLoadState==='error';
     const pModelR=playerModelLoadState==='loaded'||playerModelLoadState==='error';
     const gModelR=gunModelLoadState==='loaded'||gunModelLoadState==='error';
