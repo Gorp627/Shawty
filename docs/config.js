@@ -5,7 +5,7 @@ const SERVER_URL = 'https://gametest-psxl.onrender.com';
 const MAP_PATH = 'assets/maps/map.glb';
 const SOUND_PATH_GUNSHOT = 'assets/maps/gunshot.wav';
 const PLAYER_MODEL_PATH = 'assets/maps/Shawty1.glb';
-const GUN_MODEL_PATH = 'assets/maps/gun2.glb';
+const GUN_MODEL_PATH = 'assets/maps/gun2.glb'; // User specified path
 
 const PLAYER_HEIGHT = 1.8;
 const PLAYER_RADIUS = 0.4;
@@ -19,8 +19,8 @@ const PLAYER_COLLISION_RADIUS = PLAYER_RADIUS;
 const KILL_MESSAGE_DURATION = 4000;
 const BULLET_LIFETIME = 3000;
 // --- Gun View Model Config - ADJUST THESE ---
-const GUN_POS_OFFSET = new THREE.Vector3(0, 0, -1); // Current offset
-const GUN_SCALE = 0.6; // <<< INCREASED SCALE - Try 0.4, 0.5, 0.6 etc.
+const GUN_POS_OFFSET = new THREE.Vector3(0.3, -0.3, -0.5); // Closer
+const GUN_SCALE = 1.0; // Larger for visibility test - ADJUST
 // --- Recoil Config - ADJUST THESE ---
 const RECOIL_AMOUNT = new THREE.Vector3(0, 0.015, 0.06);
 const RECOIL_RECOVER_SPEED = 20;
@@ -48,10 +48,10 @@ let isOnGround = false;
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
 let gunshotSound;
-let frameCount = 0;
+let frameCount = 0; // For throttled logging
 let currentRecoilOffset = new THREE.Vector3(0, 0, 0);
 
-// --- Loader Initialization --- // (Moved from init to ensure availability)
+// --- Loader Initialization --- //
 console.log("config.js: Initializing Loaders...");
 try {
     loader = new THREE.GLTFLoader();
