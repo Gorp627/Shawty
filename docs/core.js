@@ -1,43 +1,26 @@
 // docs/core.js
 
-// Needs access to MOST globals and functions defined in other files.
-
 // ========================================================
 // INITIALIZATION FUNCTION DEFINITION
 // ========================================================
 function init() {
     console.log("Init Shawty - Split Files + Gun Logic");
+    // Get UI Elements FIRST
+    if (typeof getUIElements === 'function') { getUIElements(); } else { console.error("getUIElements func missing!"); return; }
+    const canvas = document.getElementById('gameCanvas');
+    if (!loadingScreen || !homeScreen || !gameUI || !canvas || !joinButton || !playerNameInput /* etc */ ) { console.error("! Critical UI missing!"); return; } // Add checks for all elements grabbed in getUIElements
+    console.log("UI elements refs obtained.");
 
-    // --- Get UI Elements & Null Checks AT START OF INIT ---
-    loadingScreen=document.getElementById('loadingScreen'); if (!loadingScreen){console.error("! 'loadingScreen'");return;}
-    homeScreen=document.getElementById('homeScreen'); if (!homeScreen){console.error("! 'homeScreen'");return;}
-    gameUI=document.getElementById('gameUI'); if (!gameUI){console.error("! 'gameUI'");return;}
-    playerCountSpan=document.getElementById('playerCount'); if (!playerCountSpan){console.error("! 'playerCount'");return;}
-    playerNameInput=document.getElementById('playerNameInput'); if (!playerNameInput){console.error("! 'playerNameInput'");return;}
-    playerPhraseInput=document.getElementById('playerPhraseInput'); if (!playerPhraseInput){console.error("! 'playerPhraseInput'");return;}
-    joinButton=document.getElementById('joinButton'); if (!joinButton){console.error("! 'joinButton'");return;}
-    homeScreenError=document.getElementById('homeScreenError'); if (!homeScreenError){console.error("! 'homeScreenError'");return;}
-    infoDiv=document.getElementById('info'); if (!infoDiv){console.error("! 'info'");return;}
-    healthBarFill=document.getElementById('healthBarFill'); if (!healthBarFill){console.error("! 'healthBarFill'");return;}
-    healthText=document.getElementById('healthText'); if (!healthText){console.error("! 'healthText'");return;}
-    killMessageDiv=document.getElementById('killMessage'); if (!killMessageDiv){console.error("! 'killMessage'");return;}
-    const canvas=document.getElementById('gameCanvas'); if (!canvas){console.error("! 'gameCanvas'");return;}
-    console.log("All required UI elements found.");
-    // --- End UI Element Grab ---
-
-    // Now safe to set initial state
     setGameState('loading');
 
     // Setup Three.js Core
     try {
         scene=new THREE.Scene(); scene.background=new THREE.Color(0x87ceeb); scene.fog=new THREE.Fog(0x87ceeb,0,150);
         camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
-        renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true}); // Use canvas ref
-        renderer.setSize(window.innerWidth,window.innerHeight); renderer.shadowMap.enabled=true;
+        renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true}); renderer.setSize(window.innerWidth,window.innerHeight); renderer.shadowMap.enabled=true;
         clock=new THREE.Clock();
-        // Loaders should be initialized globally in config.js
         if (!loader || !dracoLoader) { throw new Error("Loaders not initialized!"); }
-        console.log("Three.js core initialized.");
+        console.log("Three.js core initialized. Draco ENABLED.");
     } catch (e) { console.error("3js Init Error:", e); setGameState('loading',{message:"Graphics Error!",error:true}); return; }
 
     // Lighting
@@ -47,7 +30,11 @@ function init() {
     try {
         controls=new THREE.PointerLockControls(camera,document.body);
         controls.addEventListener('lock',function(){console.log('Locked');});
-        controls.addEventListener('unlock',function(){ console.log('Unlocked'); /* No automatic state change */ });
+        // CORRECTED UNLOCK LISTENER - DOES NOTHING AUTOMATICALLY
+        controls.addEventListener('unlock',function(){
+            console.log('Unlocked');
+            // No automatic state change - player clicks canvas to re-lock
+        });
         console.log("Controls initialized.");
     } catch (e) { console.error("Controls Init Error:", e); setGameState('loading',{message:"Controls Error!",error:true}); return; }
 
@@ -55,14 +42,14 @@ function init() {
     console.log("Start loads & socket...");
     if(typeof loadSound === 'function')loadSound(); else console.error("loadSound missing!");
     if(typeof loadPlayerModel === 'function')loadPlayerModel(); else console.error("loadPlayerModel missing!");
-    if(typeof loadGunModel === 'function')loadGunModel(); else console.error("loadGunModel missing!");
+    if(typeof loadGunModel === 'function')loadGunModel(); else console.error("loadGunModel missing!"); // Load Gun
     if(typeof loadMap === 'function')loadMap(MAP_PATH); else console.error("loadMap missing!");
     if(typeof setupSocketIO === 'function')setupSocketIO(); else console.error("setupSocketIO missing!");
 
     // Add Event Listeners
     console.log("Add listeners...");
-    // joinButton ref is guaranteed IF we passed the checks above
-    if (typeof attemptJoinGame === 'function') { joinButton.addEventListener('click',attemptJoinGame); } else { console.error("attemptJoinGame missing!"); }
+    joinButton = joinButton || document.getElementById('joinButton'); // Ensure ref exists
+    if (joinButton && typeof attemptJoinGame === 'function') { joinButton.addEventListener('click',attemptJoinGame); } else { console.error("Join button/func missing!"); }
     window.addEventListener('resize',onWindowResize);
     document.addEventListener('keydown',onKeyDown);
     document.addEventListener('keyup',onKeyUp);
@@ -78,7 +65,7 @@ function init() {
 function animate() {
     requestAnimationFrame(animate);
     const dT = clock ? clock.getDelta() : 0.016;
-    // if (frameCount++ % 300 === 0) { console.log(`Animate running. State: ${gameState}`); }
+    if (frameCount++ % 300 === 0) { console.log(`Animate running. State: ${gameState}, Cam Pos: ${camera?.position?.toArray()?.map(n=>n.toFixed(2))?.join(',')}`); }
 
     if (gameState === 'playing') {
         if (typeof updatePlayer === 'function' && players[localPlayerId]) { updatePlayer(dT); }
@@ -94,11 +81,12 @@ function onWindowResize() { if(camera){camera.aspect=window.innerWidth/window.in
 // --- Input Handlers ---
 function onKeyDown(event) { keys[event.code] = true; if (event.code === 'Space') { event.preventDefault(); if (isOnGround && gameState === 'playing') { velocityY = JUMP_FORCE; isOnGround = false; } } }
 function onKeyUp(event) { keys[event.code] = false; }
-function onMouseDown(event) { if (gameState === 'playing' && !controls?.isLocked) { controls?.lock(); } else if (gameState === 'playing' && controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); } }
+// Revised onMouseDown
+function onMouseDown(event) { if (gameState === 'playing' && !controls?.isLocked) { console.log("Click detect while unlocked, locking..."); controls?.lock(); } else if (gameState === 'playing' && controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); else console.error("shoot func missing!"); } }
 
 // --- View Model Functions ---
-function attachGunViewModel() { /* ... Same ... */ }
-function removeGunViewModel() { /* ... Same ... */ }
+function attachGunViewModel() { if(!gunModel||gunModel==='error'||!camera){console.warn("Cannot attach gun: Model/cam missing/fail");return;} if(gunViewModel&&gunViewModel.parent===camera)return; if(gunViewModel)removeGunViewModel(); try{gunViewModel=gunModel.clone(); gunViewModel.scale.set(GUN_SCALE,GUN_SCALE,GUN_SCALE); gunViewModel.position.copy(GUN_POS_OFFSET); currentRecoilOffset.set(0,0,0); camera.add(gunViewModel); console.log("Gun attached.");} catch(e){console.error("Error attaching gun:",e);gunViewModel=null;} }
+function removeGunViewModel() { if (gunViewModel && camera) { try{camera.remove(gunViewModel); gunViewModel=null; console.log("Gun removed.");} catch(e){console.error("Error removing gun:",e); gunViewModel=null;} } }
 
 // ========================================================
 // --- START THE APPLICATION ---
