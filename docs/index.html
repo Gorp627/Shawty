@@ -3,37 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty.</title>
+    <title>Shawty. - Baseline</title>
     <link rel="stylesheet" href="style.ccs">
 </head>
 <body>
-    <!-- Loading Screen -->
-    <div id="loadingScreen">
-        <p>Loading...</p>
-    </div>
-
-    <!-- Home Screen -->
-    <div id="homeScreen">
-        <h1>Shawty.</h1>
-        <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
-        <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
-        <div class="phrase-container">
-             <span>You just got </span>
-             <input type="text" id="playerPhraseInput" placeholder="..............." maxlength="20">
-        </div>
-        <button id="joinButton">Join Game</button>
-        <p id="homeScreenError" class="error-message"></p>
-    </div>
-
+    <!-- No loading/home screen divs in this simpler baseline -->
     <!-- In-Game UI -->
     <div id="gameUI">
         <div id="crosshair">+</div>
-        <div id="info">Connecting...</div>
+        <div id="info">Connecting...</div> <!-- Status/player name -->
         <div id="healthBarContainer">
             <div id="healthBarFill"></div>
             <div id="healthText">100%</div>
         </div>
-        <div id="killMessage"></div>
+        <div id="killMessage"></div> <!-- Placeholder for later -->
     </div>
 
     <!-- Game Canvas -->
