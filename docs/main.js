@@ -18,7 +18,6 @@ const PLAYER_COLLISION_RADIUS = PLAYER_RADIUS;
 const KILL_MESSAGE_DURATION = 4000;
 
 // --- Global Variables ---
-// Game State
 let gameState = 'loading';
 let assetsReady = false;
 let mapLoadState = 'loading';
@@ -30,197 +29,19 @@ let localPlayerPhrase = '...';
 let players = {};
 let bullets = [];
 let keys = {};
-
-// Three.js Core
 let scene, camera, renderer, controls, clock, loader, dracoLoader;
 let mapMesh = null;
 let playerModel = null;
-
-// Physics
 let velocityY = 0;
 let isOnGround = false;
-
-// UI Elements
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
-
-// Sound
 let gunshotSound;
 
-
-// ========================================================
-// DEFINE ALL FUNCTIONS BEFORE CALLING THEM IN INIT
-// ========================================================
-
-// --- Input Handling ---
-function onKeyDown(event) {
-    keys[event.code] = true;
-    if (event.code === 'Space' && isOnGround && gameState === 'playing') { // Only jump when playing
-        velocityY = JUMP_FORCE;
-        isOnGround = false;
-    }
-}
-
-function onKeyUp(event) {
-    keys[event.code] = false;
-}
-
-function onMouseDown(event) {
-    if (gameState === 'playing' && controls.isLocked && event.button === 0) {
-        shoot();
-    }
-}
-
-// --- UI State Management ---
-function setGameState(newState, options = {}) {
-    console.log(`Setting game state to: ${newState}`, options);
-    const previousState = gameState;
-    gameState = newState;
-
-    // Ensure elements are defined before manipulating style
-    loadingScreen = loadingScreen || document.getElementById('loadingScreen');
-    homeScreen = homeScreen || document.getElementById('homeScreen');
-    gameUI = gameUI || document.getElementById('gameUI');
-    const canvas = document.getElementById('gameCanvas');
-
-    // Hide all screens initially
-    if(loadingScreen) loadingScreen.style.display = 'none'; loadingScreen.classList.remove('assets', 'error'); loadingScreen.querySelector('p').style.color = ''; // Reset error color
-    if(homeScreen) homeScreen.style.display = 'none'; homeScreen.classList.remove('visible');
-    if(gameUI) gameUI.style.display = 'none'; gameUI.classList.remove('visible');
-    if(canvas) canvas.style.display = 'none';
-
-    // Show the target screen
-    switch (newState) {
-        case 'loading':
-            if(loadingScreen) {
-                loadingScreen.style.display = 'flex';
-                loadingScreen.querySelector('p').innerHTML = options.message || 'Loading...';
-                if (options.assets) loadingScreen.classList.add('assets');
-                if (options.error) loadingScreen.querySelector('p').style.color = '#e74c3c';
-            }
-            break;
-        case 'homescreen':
-             if(homeScreen) {
-                homeScreen.style.display = 'flex';
-                homeScreen.classList.add('visible');
-                playerCountSpan = playerCountSpan || document.getElementById('playerCount'); // Ensure exists
-                if(playerCountSpan) playerCountSpan.textContent = options.playerCount ?? playerCountSpan.textContent; // Use ?? for nullish coalescing
-                if (controls && controls.isLocked) controls.unlock();
-                const playerControlsObject = scene?.getObjectByName("PlayerControls"); // Use optional chaining
-                if (playerControlsObject) scene.remove(playerControlsObject);
-                joinButton = joinButton || document.getElementById('joinButton'); // Ensure exists
-                if(joinButton) {
-                    joinButton.disabled = false;
-                    joinButton.textContent = "Join Game";
-                }
-            }
-            break;
-        case 'joining':
-             if(options.waitingForAssets) {
-                 setGameState('loading', { message: "Loading Assets...", assets: true });
-             } else {
-                 joinButton = joinButton || document.getElementById('joinButton');
-                 if(joinButton) {
-                     joinButton.disabled = true;
-                     joinButton.textContent = "Joining...";
-                 }
-                 // If homescreen isn't visible, show a joining message on loading screen
-                 if (homeScreen && homeScreen.style.display === 'none') {
-                     setGameState('loading', { message: "Joining..." });
-                 }
-             }
-            break;
-        case 'playing':
-            if(gameUI) {
-                gameUI.style.display = 'block';
-                gameUI.classList.add('visible');
-            }
-             if(canvas) canvas.style.display = 'block';
-            if (scene && controls && !scene.getObjectByName("PlayerControls")) { // Ensure scene exists
-                controls.getObject().name = "PlayerControls";
-                scene.add(controls.getObject());
-            }
-            if(controls) controls.lock(); // Attempt lock
-            onWindowResize(); // Resize now that canvas is visible
-            break;
-    }
-     console.log(`Switched state from ${previousState} to ${gameState}`);
-}
-
-
-// --- Asset Loading ---
-function loadSound() { /* ... Same as previous ... */ }
-function loadPlayerModel() { /* ... Same as previous ... */ }
-function loadMap(mapPath) { /* ... Same as previous ... */ }
-function checkAssetsReady() { /* ... Same as previous ... */ }
-
-// --- Network & Joining ---
-function setupSocketIO() { /* ... Same as previous ... */ }
-function attemptJoinGame() { /* ... Same as previous ... */ }
-function sendJoinDetails() { /* ... Same as previous ... */ }
-
-// --- Player Management & Model Loading ---
-function addPlayer(playerData) { /* ... Same as previous ... */ }
-function addPlayerFallbackMesh(playerData) { /* ... Same as previous ... */ }
-function removePlayerMesh(playerId) { /* ... Same as previous ... */ }
-function updateRemotePlayerPosition(playerData) { /* ... Same as previous ... */ }
-
-// --- Game Logic Update Loop ---
-function updatePlayer(deltaTime) { /* ... Same as previous ... */ }
-
-// --- Shoot, Bullet, Interpolation, UI, Event Handlers ---
-function shoot() { /* ... Same as previous ... */ }
-function spawnBullet(bulletData) { /* ... Same as previous ... */ }
-function updateBullets(deltaTime) { /* ... Same as previous ... */ }
-function updateOtherPlayers(deltaTime) { /* ... Same as previous ... */ }
-function updateHealthBar(health) { /* ... Same as previous ... */ }
-function showKillMessage(message) { /* ... Same as previous ... */ }
-function handlePlayerJoined(playerData) { /* ... Same as previous ... */ }
-function handlePlayerLeft(playerId) { /* ... Same as previous ... */ }
-function handleHealthUpdate(data) { /* ... Same as previous ... */ }
-function handlePlayerDied(data) { /* ... Same as previous ... */ }
-function handlePlayerRespawned(playerData) { /* ... Same as previous ... */ }
-
-// --- Animation Loop ---
-function animate() {
-    requestAnimationFrame(animate);
-    const deltaTime = clock ? clock.getDelta() : 0.016; // Use clock if available
-
-    // Update game logic only when playing
-    if (gameState === 'playing') {
-        if (players[localPlayerId]) {
-             updatePlayer(deltaTime);
-        }
-        updateBullets(deltaTime);
-        updateOtherPlayers(deltaTime);
-    }
-
-    // Always render
-    if (renderer && scene && camera) {
-        try {
-            renderer.render(scene, camera);
-        } catch (e) { console.error("Render error:", e); }
-    }
-}
-
-// --- Utility Functions ---
-function onWindowResize() {
-    if (camera) {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-    }
-    if (renderer) {
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-}
-
-
-// ========================================================
-// INITIALIZATION FUNCTION (runs after definitions)
-// ========================================================
+// --- Initialization ---
 function init() {
     console.log("Initializing Shawty...");
-    // Get UI Elements
+    // Get UI Elements (ensure DOM is ready)
     loadingScreen = document.getElementById('loadingScreen');
     homeScreen = document.getElementById('homeScreen');
     gameUI = document.getElementById('gameUI');
@@ -235,7 +56,7 @@ function init() {
     killMessageDiv = document.getElementById('killMessage');
 
     // Set Initial UI State
-    setGameState('loading'); // NOW safe to call
+    setGameState('loading'); // Initial call
 
     // Basic Three.js Scene Setup
     scene = new THREE.Scene();
@@ -268,7 +89,7 @@ function init() {
     controls.addEventListener('unlock', () => {
         console.log('Pointer Unlocked');
         if (gameState === 'playing') {
-            setGameState('homescreen', { playerCount: playerCountSpan.textContent });
+            setGameState('homescreen', { playerCount: playerCountSpan?.textContent ?? '?' }); // Use optional chaining & nullish coalescing
         }
     });
 
@@ -276,24 +97,314 @@ function init() {
     loadSound();
     loadPlayerModel();
     loadMap(MAP_PATH);
-    setupSocketIO(); // NOW safe to call as it uses showHomeScreen
+    setupSocketIO();
 
-    // Add Event Listeners (NOW safe to call as handlers are defined)
-    joinButton.addEventListener('click', attemptJoinGame);
-    window.addEventListener('resize', onWindowResize); // No definition needed, standard practice
-    document.addEventListener('keydown', onKeyDown); // Handler now defined
-    document.addEventListener('keyup', onKeyUp);     // Handler now defined
-    document.addEventListener('mousedown', onMouseDown); // Handler now defined
+    // Add Event Listeners
+    joinButton?.addEventListener('click', attemptJoinGame); // Optional chaining
+    window.addEventListener('resize', onWindowResize, false);
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    document.addEventListener('mousedown', onMouseDown);
 
-    // Start the animation loop
+    // Start animation loop
     animate();
 }
 
+// --- Asset Loading ---
+function loadSound() { /* ... Same ... */ }
+
+function loadPlayerModel() {
+    playerModelLoadState = 'loading';
+    console.log(`Loading player model from: ${PLAYER_MODEL_PATH}`);
+    loader.load(PLAYER_MODEL_PATH, (gltf) => {
+        console.log("Player model loaded successfully!");
+        playerModel = gltf.scene;
+        playerModel.traverse((child) => { if (child.isMesh) { child.castShadow = true; } });
+        playerModelLoadState = 'loaded';
+        checkAssetsReady();
+    }, undefined, (error) => {
+        // *** MORE DETAILED ERROR LOGGING HERE ***
+        console.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+        console.error("!!! FATAL: Error loading player model:", error);
+        console.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+        if (error instanceof ErrorEvent) { // Often network errors provide this
+            console.error("Network/ErrorEvent details:", error.message);
+        } else if (error instanceof ProgressEvent) {
+             console.error("ProgressEvent indicates likely network failure (e.g., 404). Check Network tab!");
+        }
+        playerModelLoadState = 'error';
+        checkAssetsReady(); // Important to call checkAssetsReady even on error
+    });
+}
+
+function loadMap(mapPath) {
+    mapLoadState = 'loading';
+    console.log(`Loading map from: ${mapPath}`);
+    loader.load(
+        mapPath,
+        (gltf) => {
+            console.log("Map loaded successfully!");
+            mapMesh = gltf.scene;
+            mapMesh.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.userData.isCollidable = true;
+                }
+            });
+            scene.add(mapMesh);
+            mapLoadState = 'loaded';
+            checkAssetsReady();
+        },
+        (xhr) => { /* Progress */ },
+        (error) => {
+             // *** MORE DETAILED ERROR LOGGING HERE ***
+            console.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            console.error(`!!! FATAL: Error loading map (${mapPath}):`, error);
+            console.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+             if (error instanceof ErrorEvent) {
+                console.error("Network/ErrorEvent details:", error.message);
+            } else if (error instanceof ProgressEvent) {
+                console.error("ProgressEvent indicates likely network failure (e.g., 404). Check Network tab!");
+            }
+            mapLoadState = 'error';
+            checkAssetsReady(); // Important to call checkAssetsReady even on error
+        }
+    );
+}
+
+function checkAssetsReady() {
+    console.log(`checkAssetsReady: Map=${mapLoadState}, Model=${playerModelLoadState}`);
+    if ((mapLoadState === 'loaded' || mapLoadState === 'error') &&
+        (playerModelLoadState === 'loaded' || playerModelLoadState === 'error'))
+    {
+        if (mapLoadState === 'error' || playerModelLoadState === 'error') {
+            assetsReady = false;
+            console.error("Critical asset loading failed. Setting permanent error state.");
+            // Make the error message very clear on the loading screen
+            setGameState('loading', { message: "FATAL: Asset Load Error!<br/>Check Console (F12).", error: true });
+        } else {
+            assetsReady = true;
+            console.log("Assets ready.");
+            // Assets are ready, if socket is also connected, proceed to homescreen.
+            // If socket is not yet connected, the 'connect' handler will call this again.
+            if (socket && socket.connected && gameState === 'loading') {
+                console.log("Assets ready and socket connected. Showing homescreen.");
+                setGameState('homescreen', { playerCount: playerCountSpan?.textContent ?? '?' });
+            } else if (gameState === 'joining') {
+                // If we were waiting for assets after clicking Join
+                 console.log("Assets finished loading while joining, sending details to server.");
+                 sendJoinDetails();
+            }
+        }
+    } else {
+        assetsReady = false;
+    }
+}
+
+
+// --- UI State Management ---
+function setGameState(newState, options = {}) {
+    console.log(`Setting game state to: ${newState}`, options);
+    const previousState = gameState;
+
+    // Ensure UI elements are available
+    loadingScreen = loadingScreen || document.getElementById('loadingScreen');
+    homeScreen = homeScreen || document.getElementById('homeScreen');
+    gameUI = gameUI || document.getElementById('gameUI');
+    const canvas = document.getElementById('gameCanvas');
+
+    // Don't change state if already in the target state (prevents infinite loops)
+    // Exception: allow reloading 'loading' state if error occurs
+    if (gameState === newState && newState !== 'loading') {
+        console.warn(`Already in state: ${newState}. Ignoring redundant call.`);
+        return;
+    }
+    gameState = newState;
+
+
+    // Hide all screens initially
+    if(loadingScreen) loadingScreen.style.display = 'none'; loadingScreen.classList.remove('assets', 'error'); loadingScreen.querySelector('p').style.color = '';
+    if(homeScreen) homeScreen.style.display = 'none'; homeScreen.classList.remove('visible');
+    if(gameUI) gameUI.style.display = 'none'; gameUI.classList.remove('visible');
+    if(canvas) canvas.style.display = 'none';
+
+    // Show the target screen
+    switch (newState) {
+        case 'loading':
+            if(loadingScreen) {
+                loadingScreen.style.display = 'flex';
+                loadingScreen.querySelector('p').innerHTML = options.message || 'Loading...';
+                if (options.assets) loadingScreen.classList.add('assets');
+                if (options.error) {
+                     loadingScreen.querySelector('p').style.color = '#e74c3c'; // Make error text red
+                     loadingScreen.classList.add('error'); // Add error class if needed for more styling
+                }
+            }
+            break;
+        case 'homescreen':
+             if(homeScreen) {
+                homeScreen.style.display = 'flex';
+                homeScreen.classList.add('visible'); // Fade in
+                playerCountSpan = playerCountSpan || document.getElementById('playerCount');
+                if(playerCountSpan) playerCountSpan.textContent = options.playerCount ?? playerCountSpan.textContent;
+                if (controls && controls.isLocked) controls.unlock();
+                const playerControlsObject = scene?.getObjectByName("PlayerControls");
+                if (playerControlsObject) scene.remove(playerControlsObject);
+                joinButton = joinButton || document.getElementById('joinButton');
+                if(joinButton) {
+                    joinButton.disabled = false;
+                    joinButton.textContent = "Join Game";
+                }
+            }
+            break;
+        case 'joining':
+             // This state primarily manages button state and potentially shows loading screen
+             joinButton = joinButton || document.getElementById('joinButton');
+             if(joinButton) {
+                joinButton.disabled = true;
+                joinButton.textContent = "Joining...";
+             }
+             if(options.waitingForAssets) {
+                 // Re-use 'loading' state visually while waiting for assets
+                 setGameState('loading', { message: "Loading Assets...", assets: true });
+             }
+             // Otherwise, stay visually on homescreen but with button disabled
+            break;
+        case 'playing':
+            if(gameUI) {
+                gameUI.style.display = 'block'; // Make UI container visible
+                requestAnimationFrame(() => { // Ensure display:block is applied before adding class
+                    gameUI.classList.add('visible'); // Fade in
+                });
+            }
+             if(canvas) canvas.style.display = 'block';
+            if (scene && controls && !scene.getObjectByName("PlayerControls")) {
+                controls.getObject().name = "PlayerControls";
+                scene.add(controls.getObject());
+            }
+            if(controls) controls.lock();
+            onWindowResize();
+            break;
+    }
+     console.log(`Switched state from ${previousState} to ${gameState}`);
+}
+
+
+// --- Network & Joining ---
+function setupSocketIO() {
+    console.log(`Attempting to connect to server: ${SERVER_URL}`);
+    socket = io(SERVER_URL, { transports: ['websocket'], autoConnect: true });
+
+    socket.on('connect', () => {
+        console.log('Socket connected! ID:', socket.id);
+        // Socket is ready, check if assets are also ready to show homescreen
+        checkAssetsReady(); // This will transition to homescreen if assets are already loaded
+    });
+
+    socket.on('disconnect', (reason) => {
+        console.warn('Disconnected from server! Reason:', reason);
+        setGameState('homescreen', {playerCount: 0});
+        infoDiv.textContent = 'Disconnected';
+        for (const id in players) { removePlayerMesh(id); }
+        players = {}; bullets = [];
+    });
+
+     socket.on('connect_error', (err) => {
+        console.error('Connection Error:', err.message);
+        // Explicitly set error state and show error message
+        mapLoadState = 'error'; // Assume assets can't load if connection fails
+        playerModelLoadState = 'error';
+        assetsReady = false;
+        setGameState('loading', { message: `Connection Failed!<br/>${err.message}`, error: true});
+    });
+
+    socket.on('playerCountUpdate', (count) => {
+        console.log("Player count update:", count);
+        playerCountSpan = playerCountSpan || document.getElementById('playerCount');
+        if (playerCountSpan) playerCountSpan.textContent = count;
+        // If assets are ready and we are connected, ensure homescreen is shown
+        // (This handles cases where count arrives *after* assets are ready)
+        if (assetsReady && socket.connected && gameState === 'loading') {
+            setGameState('homescreen', { playerCount: count });
+        }
+    });
+
+    socket.on('initialize', (data) => { /* ... Same ... */ });
+    socket.on('playerJoined', (playerData) => { handlePlayerJoined(playerData); });
+    socket.on('playerLeft', (playerId) => { handlePlayerLeft(playerId); });
+    socket.on('playerMoved', (playerData) => { updateRemotePlayerPosition(playerData); });
+    socket.on('shotFired', (bulletData) => { spawnBullet(bulletData); });
+    socket.on('healthUpdate', (data) => { handleHealthUpdate(data); });
+    socket.on('playerDied', (data) => { handlePlayerDied(data); });
+    socket.on('playerRespawned', (playerData) => { handlePlayerRespawned(playerData); });
+}
+
+function attemptJoinGame() {
+    localPlayerName = playerNameInput.value.trim() || 'Anonymous';
+    localPlayerPhrase = playerPhraseInput.value.trim() || '...';
+    if (!localPlayerName) { homeScreenError.textContent = 'Please enter a name.'; return; }
+    if (localPlayerPhrase.length > 20) { homeScreenError.textContent = 'Catchphrase too long (max 20 chars).'; return; }
+    homeScreenError.textContent = '';
+
+    console.log(`Attempting to join as "${localPlayerName}"`);
+    setGameState('joining', { waitingForAssets: !assetsReady });
+
+    if (assetsReady) {
+        sendJoinDetails();
+    } else {
+        console.log("Waiting for assets to load before sending join details...");
+        // checkAssetsReady() will call sendJoinDetails() when assets are ready
+    }
+}
+
+function sendJoinDetails() {
+    if (socket && socket.connected && gameState === 'joining') {
+        console.log("Sending player details to server.");
+        socket.emit('setPlayerDetails', { name: localPlayerName, phrase: localPlayerPhrase });
+        // Stay in 'joining' state visually (button disabled or loading screen shown)
+        // Server 'initialize' response will trigger switch to 'playing'
+    } else if (gameState !== 'joining') {
+         console.warn("Attempted to send join details but no longer in 'joining' state.");
+         setGameState('homescreen', {playerCount: playerCountSpan?.textContent ?? '?'});
+    } else {
+        console.error("Cannot send join details: Socket not connected.");
+        homeScreenError.textContent = 'Connection issue. Cannot join.';
+        setGameState('homescreen', {playerCount: playerCountSpan?.textContent ?? '?'});
+    }
+}
+
+// --- Player Management & Model Loading ---
+function addPlayer(playerData) { /* ... Same ... */ }
+function addPlayerFallbackMesh(playerData) { /* ... Same ... */ }
+function removePlayerMesh(playerId) { /* ... Same ... */ }
+function updateRemotePlayerPosition(playerData) { /* ... Same ... */ }
+
+// --- Game Logic Update Loop ---
+function updatePlayer(deltaTime) { /* ... Same ... */ }
+
+// --- Shoot, Bullet, Interpolation, UI, Event Handlers ---
+function shoot() { /* ... Same ... */ }
+function spawnBullet(bulletData) { /* ... Same ... */ }
+function updateBullets(deltaTime) { /* ... Same ... */ }
+function updateOtherPlayers(deltaTime) { /* ... Same ... */ }
+function updateHealthBar(health) { /* ... Same ... */ }
+function showKillMessage(message) { /* ... Same ... */ }
+function handlePlayerJoined(playerData) { /* ... Same ... */ }
+function handlePlayerLeft(playerId) { /* ... Same ... */ }
+function handleHealthUpdate(data) { /* ... Same ... */ }
+function handlePlayerDied(data) { /* ... Same ... */ }
+function handlePlayerRespawned(playerData) { /* ... Same ... */ }
+
+// --- Animation Loop ---
+function animate() { /* ... Same ... */ }
+
+// --- Utility Functions ---
+function onWindowResize() { /* ... Same ... */ }
 
 // --- Start ---
-// Use DOMContentLoaded to ensure elements exist before `init` runs
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
-    init(); // DOMContentLoaded has already fired
+    init();
 }
