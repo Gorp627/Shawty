@@ -1,4 +1,4 @@
-// server/server.js
+// server/server.js - Baseline Version
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
@@ -10,73 +10,43 @@ const server = http.createServer(app);
 // --- Configuration ---
 const io = new Server(server, {
     cors: {
-        origin: ["https://gorp627.github.io", "http://localhost:8080"], // USER'S GitHub Pages URL + localhost
-        // origin: "*", // Less secure, use for debugging origin issues
+        origin: ["https://gorp627.github.io", "http://localhost:8080"], // Adjust origin
         methods: ["GET", "POST"]
     }
 });
 
 const PORT = process.env.PORT || 3000;
-const RESPAWN_DELAY = 4000; // milliseconds
+const RESPAWN_DELAY = 4000;
 
 // --- Game State ---
-let players = {}; // { socket.id: { id, x, y, z, rotationY, health, name, phrase } }
+let players = {}; // { socket.id: { id, x, y, z, rotationY, health } } // Simplified state
 
 // Function to broadcast player count
 function broadcastPlayerCount() {
     const count = Object.keys(players).length;
-    io.emit('playerCountUpdate', count); // Send to all connections
-    console.log("Player count updated:", count);
+    io.emit('playerCountUpdate', count);
 }
 
 // --- Socket.IO Connection Handling ---
 io.on('connection', (socket) => {
-    console.log(`User tentative connection: ${socket.id}`);
+    console.log(`User connected: ${socket.id}`); // Connect immediately
 
-    // Send initial player count
-    socket.emit('playerCountUpdate', Object.keys(players).length);
+    // Create player object immediately for baseline
+    players[socket.id] = {
+        id: socket.id,
+        x: Math.random() * 10 - 5, y: 0, z: Math.random() * 10 - 5, rotationY: 0,
+        health: 100
+    };
 
-    // Listen for player setting their details
-    socket.on('setPlayerDetails', (details) => {
-        // Validate and sanitize input
-        const name = details.name ? String(details.name).substring(0, 16).trim() : 'Anonymous';
-        const phrase = details.phrase ? String(details.phrase).substring(0, 20).trim() : '...';
-        const finalName = name === '' ? 'Anonymous' : name;
-        const finalPhrase = phrase === '' ? '...' : phrase;
-
-        if (players[socket.id]) {
-            console.log(`Player ${socket.id} (${players[socket.id].name}) tried to set details again.`);
-            players[socket.id].name = finalName;
-            players[socket.id].phrase = finalPhrase;
-            return;
-        }
-
-        console.log(`Player ${socket.id} fully joined as "${finalName}" with phrase "${finalPhrase}"`);
-
-        // Create player object in state
-        players[socket.id] = {
-            id: socket.id,
-            x: Math.random() * 15 - 7.5,
-            y: 0, // Logical Y (feet on ground)
-            z: Math.random() * 15 - 7.5,
-            rotationY: 0,
-            health: 100,
-            name: finalName,
-            phrase: finalPhrase
-        };
-
-        // Initialize the new player (sends all current player data)
-        socket.emit('initialize', { id: socket.id, players: players });
-
-        // Notify other players about the new player
-        socket.broadcast.emit('playerJoined', players[socket.id]);
-
-        // Broadcast updated player count to everyone
-        broadcastPlayerCount();
-    });
+    // Initialize the new player
+    socket.emit('initialize', { id: socket.id, players: players });
+    // Notify other players
+    socket.broadcast.emit('playerJoined', players[socket.id]);
+    // Broadcast updated player count
+    broadcastPlayerCount();
 
 
-    // --- Standard Event Handlers ---
+    // --- Event Handlers ---
     socket.on('playerUpdate', (playerData) => {
         const player = players[socket.id];
         if (player) {
@@ -95,77 +65,37 @@ io.on('connection', (socket) => {
     });
 
     socket.on('hit', (data) => {
-        const { targetId, damage } = data;
-        const shooterId = socket.id;
-        const targetPlayer = players[targetId];
-        const shooterPlayer = players[shooterId];
-
+        const { targetId, damage } = data; const shooterId = socket.id;
+        const targetPlayer = players[targetId]; const shooterPlayer = players[shooterId];
         if (targetPlayer && targetPlayer.health > 0 && shooterPlayer) {
             targetPlayer.health -= damage;
-            console.log(`Player ${targetPlayer.name} hit by ${shooterPlayer.name}. Health: ${targetPlayer.health}`);
+            console.log(`Player ${targetId} hit by ${shooterId}. HP: ${targetPlayer.health}`);
             if (targetPlayer.health <= 0) {
-                targetPlayer.health = 0;
-                console.log(`Player ${targetPlayer.name} defeated by ${shooterPlayer.name}`);
-                io.emit('playerDied', {
-                    targetId: targetId, killerId: shooterId,
-                    killerName: shooterPlayer.name, killerPhrase: shooterPlayer.phrase
-                 });
+                targetPlayer.health = 0; console.log(`Player ${targetId} defeated by ${shooterId}`);
+                io.emit('playerDied', { targetId: targetId, killerId: shooterId }); // Simplified event
                 scheduleRespawn(targetId);
-            } else {
-                io.emit('healthUpdate', { id: targetId, health: targetPlayer.health });
-            }
+            } else { io.emit('healthUpdate', { id: targetId, health: targetPlayer.health }); }
         }
     });
 
     socket.on('fellIntoVoid', () => {
         const player = players[socket.id];
         if (player && player.health > 0) {
-            console.log(`Player ${player.name} (${socket.id}) fell into the void.`);
-            player.health = 0;
-            io.emit('playerDied', { targetId: socket.id, killerId: null, killerName: null, killerPhrase: null });
+            console.log(`Player ${socket.id} fell into void.`); player.health = 0;
+            io.emit('playerDied', { targetId: socket.id, killerId: null }); // Simplified event
             scheduleRespawn(socket.id);
         }
     });
 
     socket.on('disconnect', () => {
-        const player = players[socket.id];
-        if (player) {
-            console.log(`User ${player.name} (${socket.id}) disconnected.`);
-            delete players[socket.id];
-            io.emit('playerLeft', socket.id);
-            broadcastPlayerCount();
-        } else {
-            console.log(`User ${socket.id} (unjoined/details not set) disconnected.`);
-        }
+        if (players[socket.id]) { console.log(`User ${socket.id} disconnected.`); delete players[socket.id]; io.emit('playerLeft', socket.id); broadcastPlayerCount(); }
+        else { console.log(`User ${socket.id} (unjoined) disconnected.`); }
     });
 });
 
 // --- Helper Function for Respawns ---
-function scheduleRespawn(playerId) {
-    setTimeout(() => {
-        const player = players[playerId];
-        if (player) {
-            player.health = 100;
-            player.x = Math.random() * 15 - 7.5; player.y = 0; player.z = Math.random() * 15 - 7.5;
-            player.rotationY = 0;
-            console.log(`Player ${player.name} (${playerId}) respawned.`);
-            io.emit('playerRespawned', player);
-        }
-    }, RESPAWN_DELAY);
-}
-
-// --- Basic HTTP Server for Root Path ---
-app.get('/', (req, res) => {
-    const indexPath = path.join(__dirname, 'index.html');
-    res.sendFile(indexPath, (err) => {
-        if (err) { res.status(200).send('Shawty Server is Running. Connect via WebSocket.'); }
-    });
-});
-
+function scheduleRespawn(playerId) { setTimeout(() => { const player = players[playerId]; if (player) { player.health = 100; player.x = Math.random() * 10 - 5; player.y = 0; player.z = Math.random() * 10 - 5; player.rotationY = 0; console.log(`${playerId} respawned.`); io.emit('playerRespawned', player); } }, RESPAWN_DELAY); }
+// --- Basic HTTP Server ---
+app.get('/', (req, res) => { const p = path.join(__dirname, 'index.html'); res.sendFile(p, (err) => { if (err) res.status(200).send('Shawty Server Running.'); }); });
 // --- Start Server ---
-server.listen(PORT, () => {
-    console.log(`Shawty Server listening on *:${PORT}`);
-    if (Array.isArray(io.opts.cors.origin)) {
-        console.log(`Allowed origins: ${io.opts.cors.origin.join(', ')}`);
-    } else { console.log(`Allowed origins: ${io.opts.cors.origin}`); }
-});
+server.listen(PORT, () => { console.log(`Shawty Server listening on *:${PORT}`); });
