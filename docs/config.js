@@ -19,11 +19,11 @@ const PLAYER_COLLISION_RADIUS = PLAYER_RADIUS;
 const KILL_MESSAGE_DURATION = 4000;
 const BULLET_LIFETIME = 3000;
 // --- Gun View Model Config - ADJUST THESE ---
-const GUN_POS_OFFSET = new THREE.Vector3(0.4, -0.35, -0.7); // Right, Down, Forward
-const GUN_SCALE = 0.35; // Try 0.3, 0.4, 0.5 etc.
+const GUN_POS_OFFSET = new THREE.Vector3(0.4, -0.35, -0.7); // Current offset
+const GUN_SCALE = 0.5; // <<< INCREASED SCALE - Try 0.4, 0.5, 0.6 etc.
 // --- Recoil Config - ADJUST THESE ---
-const RECOIL_AMOUNT = new THREE.Vector3(0, 0.015, 0.06); // Y(Up), Z(Back)
-const RECOIL_RECOVER_SPEED = 20; // Higher is faster
+const RECOIL_AMOUNT = new THREE.Vector3(0, 0.015, 0.06);
+const RECOIL_RECOVER_SPEED = 20;
 
 // --- Global Variables ---
 let gameState = 'loading';
@@ -40,25 +40,25 @@ let bullets = [];
 let keys = {};
 let scene, camera, renderer, controls, clock, loader, dracoLoader; // Three.js Core
 let mapMesh = null;
-let playerModel = null; // Template
-let gunModel = null;    // Template
-let gunViewModel = null;// Instance
+let playerModel = null;
+let gunModel = null;
+let gunViewModel = null;
 let velocityY = 0;
 let isOnGround = false;
-// UI Elements (Declare here, get in ui.js or core.js)
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
 let gunshotSound;
-let frameCount = 0; // For throttled logging
-let currentRecoilOffset = new THREE.Vector3(0, 0, 0); // For recoil
+let frameCount = 0;
+let currentRecoilOffset = new THREE.Vector3(0, 0, 0);
 
+// --- Loader Initialization --- // (Moved from init to ensure availability)
 console.log("config.js: Initializing Loaders...");
 try {
     loader = new THREE.GLTFLoader();
     dracoLoader = new THREE.DRACOLoader();
     dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
     dracoLoader.setDecoderConfig({ type: 'js' });
-    loader.setDRACOLoader(dracoLoader); // Assume Draco is needed
+    loader.setDRACOLoader(dracoLoader); // Assuming Draco is needed
     console.log("config.js: Loaders Initialized.");
 } catch(e) {
     console.error("CRITICAL ERROR Initializing Loaders:", e);
