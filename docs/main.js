@@ -1,10 +1,10 @@
 // docs/main.js
 
 // --- Configuration ---
-const SERVER_URL = 'https://gametest-psxl.onrender.com'; // USER PROVIDED SERVER URL
-const MAP_PATH = 'assets/maps/map.glb'; // USER PROVIDED MAP PATH
-const SOUND_PATH_GUNSHOT = 'assets/maps/gunshot.wav'; // USER PROVIDED SOUND PATH (in maps folder?)
-const PLAYER_MODEL_PATH = 'assets/maps/Shawty1.glb'; // USER PROVIDED MODEL PATH (in maps folder?)
+const SERVER_URL = 'https://gametest-psxl.onrender.com';
+const MAP_PATH = 'assets/maps/map.glb';
+const SOUND_PATH_GUNSHOT = 'assets/maps/gunshot.wav'; // Note: Sound in maps folder?
+const PLAYER_MODEL_PATH = 'assets/maps/Shawty1.glb'; // Note: Model in maps folder?
 
 const PLAYER_HEIGHT = 1.8;
 const PLAYER_RADIUS = 0.4;
@@ -88,13 +88,13 @@ function setGameState(newState, options = {}) {
 
     // Prevent redundant state changes unless it's an error update for loading screen
     if (gameState === newState && !(newState === 'loading' && options.error)) {
-        // console.warn(`Already in state: ${newState}. Ignoring redundant call.`); // Can be noisy
+        // console.warn(`Already in state: ${newState}. Ignoring redundant call.`);
         return;
     }
     gameState = newState;
 
     // Hide all sections first
-    if(loadingScreen) { loadingScreen.style.display = 'none'; loadingScreen.classList.remove('assets', 'error'); if(loadingScreen.querySelector('p')) loadingScreen.querySelector('p').style.color = ''; }
+    if(loadingScreen) { loadingScreen.style.display = 'none'; loadingScreen.classList.remove('assets', 'error'); const p = loadingScreen.querySelector('p'); if(p) p.style.color = ''; }
     if(homeScreen) { homeScreen.style.display = 'none'; homeScreen.classList.remove('visible'); }
     if(gameUI) { gameUI.style.display = 'none'; gameUI.classList.remove('visible'); }
     if(canvas) canvas.style.display = 'none';
@@ -142,9 +142,9 @@ function setGameState(newState, options = {}) {
              // Otherwise, stay visually on homescreen (button disabled)
             break;
         case 'playing':
-            // *** DEBUGGING FOR WHITE SCREEN ***
+            // *** DEBUGGING LOGS from previous step (can be removed if working) ***
             console.log(">>> Setting state to PLAYING");
-            const canvasElem = document.getElementById('gameCanvas'); // Use different var name
+            const canvasElem = document.getElementById('gameCanvas');
 
             if(gameUI) {
                 gameUI.style.display = 'block';
@@ -157,7 +157,6 @@ function setGameState(newState, options = {}) {
                  console.log(">>> Canvas display set to block.");
             } else { console.error(">>> gameCanvas element not found!"); }
 
-            // Add controls object IF NOT ALREADY THERE
             if (scene && controls) {
                 if (!scene.getObjectByName("PlayerControls")) {
                     console.log(">>> Adding player controls object to scene.");
@@ -166,18 +165,15 @@ function setGameState(newState, options = {}) {
                 } else {
                      console.log(">>> Player controls object already in scene.");
                 }
-                // Log camera and controls position AFTER initialize should have set them
-                 console.log(">>> Position Check - Camera:", camera?.position.toArray()); // Log array form
-                 console.log(">>> Position Check - Controls Object:", controls?.getObject()?.position.toArray()); // Log array form
+                 console.log(">>> Position Check - Camera:", camera?.position.toArray());
+                 console.log(">>> Position Check - Controls Object:", controls?.getObject()?.position.toArray());
 
                 console.log(">>> Attempting controls.lock()...");
-                // Use timeout to ensure canvas is rendered before lock attempt? Might help some browsers.
-                // setTimeout(() => {
-                    controls.lock();
-                // }, 100); // Short delay
+                 // Sometimes a slight delay helps ensure the browser is ready for lock
+                 setTimeout(() => { if(gameState === 'playing') controls.lock(); }, 100);
             } else { console.error(">>> Scene or Controls not ready when setting state to playing!");}
 
-            onWindowResize(); // Ensure size is correct
+            onWindowResize();
             console.log(">>> Game state set to PLAYING complete.");
             // *** END DEBUGGING SECTION ***
             break;
@@ -264,19 +260,16 @@ function checkAssetsReady() {
         } else {
             assetsReady = true;
             console.log("Assets ready.");
-            // Now that assets are ready, if socket is also connected, proceed to homescreen.
-            // If socket is not yet connected, the 'connect' handler will call this again.
-            if (socket?.connected && gameState === 'loading') { // Check if still in initial loading state
+            if (socket?.connected && gameState === 'loading') {
                 console.log("Assets ready and socket connected. Showing homescreen.");
                 setGameState('homescreen', { playerCount: playerCountSpan?.textContent ?? '?' });
             } else if (gameState === 'joining') {
-                 // If we were waiting for assets after clicking Join
                  console.log("Assets finished loading while joining, sending details to server.");
                  sendJoinDetails();
             }
         }
     } else {
-        assetsReady = false; // Still waiting
+        assetsReady = false;
     }
 }
 
@@ -287,13 +280,7 @@ function setupSocketIO() {
 
     socket.on('connect', () => {
         console.log('Socket connected! ID:', socket.id);
-        // Socket is ready, check if assets are also ready to show homescreen
-        checkAssetsReady();
-        // It's possible playerCountUpdate arrives *before* connect sometimes.
-        // If homescreen is already shown, let's ensure the count is updated if available.
-        if (gameState === 'homescreen' && playerCountSpan && playerCountSpan.textContent === '?') {
-            console.log("Connected, on homescreen, but count is still '?'. Waiting for update.");
-        }
+        checkAssetsReady(); // Check if assets ready now that socket is connected
     });
 
     socket.on('disconnect', (reason) => {
@@ -306,22 +293,21 @@ function setupSocketIO() {
 
      socket.on('connect_error', (err) => {
         console.error('Connection Error:', err.message);
-        mapLoadState = 'error'; // Assume assets can't load
+        mapLoadState = 'error';
         playerModelLoadState = 'error';
         assetsReady = false;
         setGameState('loading', { message: `Connection Failed!<br/>${err.message}`, error: true});
     });
 
     socket.on('playerCountUpdate', (count) => {
-        console.log("Player count update received:", count); // Add log
+        console.log("Player count update received:", count);
         playerCountSpan = playerCountSpan || document.getElementById('playerCount');
         if (playerCountSpan) {
-            playerCountSpan.textContent = count; // Update the text
+            playerCountSpan.textContent = count;
             console.log("Updated playerCountSpan text content.");
         } else {
             console.warn("playerCountSpan element not found when trying to update count.");
         }
-        // If assets are ready and we are connected, ensure homescreen is shown
         if (assetsReady && socket.connected && gameState === 'loading') {
             console.log("Assets ready and socket connected via playerCountUpdate. Showing homescreen.");
             setGameState('homescreen', { playerCount: count });
@@ -331,8 +317,8 @@ function setupSocketIO() {
     socket.on('initialize', (data) => {
         console.log('Initialize received from server. Setting up local player...');
         localPlayerId = data.id;
-        for (const id in players) { removePlayerMesh(id); }
-        players = {}; bullets = [];
+        for (const id in players) { removePlayerMesh(id); } // Clear old meshes
+        players = {}; bullets = []; // Clear state
 
         let initialPlayerPosX = 0, initialPlayerPosY = 0, initialPlayerPosZ = 0;
 
@@ -344,13 +330,10 @@ function setupSocketIO() {
                 initialPlayerPosY = playerData.y; // Logical Y
                 initialPlayerPosZ = playerData.z;
                 const visualY = initialPlayerPosY + PLAYER_HEIGHT;
-                // Ensure controls object exists before setting position
                 if (controls?.getObject()) {
                     controls.getObject().position.set(initialPlayerPosX, visualY, initialPlayerPosZ);
                     console.log(`Set controls position based on server: X=${initialPlayerPosX}, Y=${visualY}, Z=${initialPlayerPosZ}`);
-                } else {
-                    console.error("Controls object not found when trying to set initial position!");
-                }
+                } else { console.error("Controls object not found when trying to set initial position!"); }
                 velocityY = 0; isOnGround = true;
                 updateHealthBar(playerData.health);
                 infoDiv.textContent = `Playing as ${localPlayerName}`;
@@ -387,6 +370,7 @@ function attemptJoinGame() {
         sendJoinDetails();
     } else {
         console.log("Waiting for assets to load before sending join details...");
+        // checkAssetsReady() will call sendJoinDetails() when assets are ready
     }
 }
 
@@ -394,7 +378,7 @@ function sendJoinDetails() {
     if (socket?.connected && gameState === 'joining') {
         console.log("Sending player details to server.");
         socket.emit('setPlayerDetails', { name: localPlayerName, phrase: localPlayerPhrase });
-        // Remain visually in 'joining' state until server 'initialize'
+        // Server 'initialize' response triggers switch to 'playing'
     } else if (gameState !== 'joining') {
          console.warn("Attempted to send join details but no longer in 'joining' state.");
          setGameState('homescreen', {playerCount: playerCountSpan?.textContent ?? '?'});
@@ -405,6 +389,7 @@ function sendJoinDetails() {
     }
 }
 
+
 // --- Player Management & Model Loading ---
 function addPlayer(playerData) {
     console.log(`Adding player ${playerData.id} (${playerData.name})`);
@@ -413,7 +398,7 @@ function addPlayer(playerData) {
     players[playerData.id] = { ...playerData, mesh: null, targetPosition: null, targetRotationY: null };
 
     if (playerModel && playerModel !== 'error') {
-        try { // Add try-catch around cloning/adding
+        try {
             const modelInstance = playerModel.clone();
             console.log(`Cloned model for player ${playerData.id}`);
             const visualY = playerData.y; // Assume model origin at feet
@@ -425,7 +410,7 @@ function addPlayer(playerData) {
             players[playerData.id].targetRotationY = modelInstance.rotation.y;
         } catch (e) {
             console.error(`Error cloning/adding model for ${playerData.id}:`, e);
-            addPlayerFallbackMesh(playerData); // Use fallback on error
+            addPlayerFallbackMesh(playerData);
         }
     } else {
         console.warn(`Player model not ready/failed, using fallback for ${playerData.id}`);
@@ -436,12 +421,12 @@ function addPlayer(playerData) {
 function addPlayerFallbackMesh(playerData) {
      if (!players[playerData.id] || players[playerData.id].mesh) return;
      console.warn(`Using fallback mesh for player ${playerData.id}`);
-     try { // Add try-catch for fallback mesh creation
+     try {
          const geometry = new THREE.CylinderGeometry(PLAYER_RADIUS, PLAYER_RADIUS, PLAYER_HEIGHT, 8);
          const material = new THREE.MeshStandardMaterial({ color: 0xff00ff }); // Magenta fallback
          const mesh = new THREE.Mesh(geometry, material);
          mesh.castShadow = true;
-         const visualY = playerData.y + (PLAYER_HEIGHT / 2); // Cylinder origin is center
+         const visualY = playerData.y + (PLAYER_HEIGHT / 2);
          mesh.position.set(playerData.x, visualY, playerData.z);
          mesh.rotation.y = playerData.rotationY;
          scene.add(mesh);
@@ -450,7 +435,6 @@ function addPlayerFallbackMesh(playerData) {
          players[playerData.id].targetRotationY = mesh.rotation.y;
      } catch(e) {
          console.error(`Error creating fallback mesh for ${playerData.id}:`, e);
-         // Player will be invisible if fallback also fails
      }
 }
 
@@ -458,10 +442,8 @@ function removePlayerMesh(playerId) {
     if (players[playerId] && players[playerId].mesh) {
         try {
             scene.remove(players[playerId].mesh);
-            // Dispose geometry/material to prevent memory leaks
             if (players[playerId].mesh.geometry) players[playerId].mesh.geometry.dispose();
             if (players[playerId].mesh.material) {
-                 // Handle potential array of materials
                  if (Array.isArray(players[playerId].mesh.material)) {
                      players[playerId].mesh.material.forEach(m => m.dispose());
                  } else {
@@ -469,10 +451,8 @@ function removePlayerMesh(playerId) {
                  }
             }
             console.log(`Removed mesh for player ${playerId}`);
-        } catch (e) {
-            console.error(`Error removing mesh for ${playerId}:`, e);
-        }
-        players[playerId].mesh = null; // Clear reference
+        } catch (e) { console.error(`Error removing mesh for ${playerId}:`, e); }
+        players[playerId].mesh = null;
     }
 }
 
@@ -494,7 +474,7 @@ function updateRemotePlayerPosition(playerData) {
 
 // --- Game Logic Update Loop ---
 function updatePlayer(deltaTime) {
-    if (gameState !== 'playing' || !controls?.isLocked || !localPlayerId || !players[localPlayerId]) return; // Optional chaining for controls
+    if (gameState !== 'playing' || !controls?.isLocked || !localPlayerId || !players[localPlayerId]) return;
     const playerObject = controls.getObject();
     const playerState = players[localPlayerId];
     if (!playerState || playerState.health <= 0) return;
@@ -508,7 +488,7 @@ function updatePlayer(deltaTime) {
     if (keys['KeyD']) { moveDirection.x = 1; }
     const isMovingHorizontal = moveDirection.x !== 0 || moveDirection.z !== 0;
 
-    const previousPosition = playerObject.position.clone(); // Store before any movement
+    const previousPosition = playerObject.position.clone();
 
     // Apply Gravity first
     velocityY -= GRAVITY * deltaTime;
@@ -516,12 +496,13 @@ function updatePlayer(deltaTime) {
 
     // Apply Horizontal Movement if needed
     if (isMovingHorizontal) {
+        // These methods apply movement directly relative to camera look direction
         controls.moveForward(moveDirection.z * speed);
         controls.moveRight(moveDirection.x * speed);
     }
 
     // Collision Detection (Player-Player)
-    const currentPosition = playerObject.position; // Position after potentially moving
+    const currentPosition = playerObject.position;
     let collisionReverted = false;
     for (const id in players) {
         if (id !== localPlayerId && players[id].mesh && players[id].mesh.visible) {
@@ -529,7 +510,6 @@ function updatePlayer(deltaTime) {
             const distanceXZ = new THREE.Vector2(currentPosition.x - otherPlayerMesh.position.x, currentPosition.z - otherPlayerMesh.position.z).length();
             if (distanceXZ < PLAYER_COLLISION_RADIUS * 2) {
                 console.log("Player collision - reverting horizontal move");
-                // Revert X and Z, keep new Y (gravity applied)
                 playerObject.position.x = previousPosition.x;
                 playerObject.position.z = previousPosition.z;
                 collisionReverted = true;
@@ -543,7 +523,7 @@ function updatePlayer(deltaTime) {
     let groundY = 0;
     if (playerObject.position.y < groundY + PLAYER_HEIGHT) {
         playerObject.position.y = groundY + PLAYER_HEIGHT;
-        if (velocityY < 0) velocityY = 0; // Stop downward velocity only
+        if (velocityY < 0) velocityY = 0;
         isOnGround = true;
     } else {
         isOnGround = false;
@@ -577,25 +557,24 @@ function updatePlayer(deltaTime) {
 
 
 // --- Shoot, Bullet, Interpolation, UI, Event Handlers ---
-function shoot() { /* ... Same ... */ }
-function spawnBullet(bulletData) { /* ... Same ... */ }
-function updateBullets(deltaTime) { /* ... Same ... */ }
-function updateOtherPlayers(deltaTime) { /* ... Same ... */ }
-function updateHealthBar(health) { /* ... Same ... */ }
-function showKillMessage(message) { /* ... Same ... */ }
-function handlePlayerJoined(playerData) { /* ... Same ... */ }
-function handlePlayerLeft(playerId) { /* ... Same ... */ }
-function handleHealthUpdate(data) { /* ... Same ... */ }
-function handlePlayerDied(data) { /* ... Same ... */ }
-function handlePlayerRespawned(playerData) { /* ... Same ... */ }
+function shoot() { /* ... Same as previous ... */ }
+function spawnBullet(bulletData) { /* ... Same as previous ... */ }
+function updateBullets(deltaTime) { /* ... Same as previous ... */ }
+function updateOtherPlayers(deltaTime) { /* ... Same as previous ... */ }
+function updateHealthBar(health) { /* ... Same as previous ... */ }
+function showKillMessage(message) { /* ... Same as previous ... */ }
+function handlePlayerJoined(playerData) { /* ... Same as previous ... */ }
+function handlePlayerLeft(playerId) { /* ... Same as previous ... */ }
+function handleHealthUpdate(data) { /* ... Same as previous ... */ }
+function handlePlayerDied(data) { /* ... Same as previous ... */ }
+function handlePlayerRespawned(playerData) { /* ... Same as previous ... */ }
 
 
 // --- Animation Loop ---
 function animate() {
     requestAnimationFrame(animate);
-    const deltaTime = clock.getDelta(); // Use uncapped delta
+    const deltaTime = clock ? clock.getDelta() : 0.016;
 
-    // Update logic only when playing
     if (gameState === 'playing') {
         if (players[localPlayerId]) {
              updatePlayer(deltaTime);
@@ -604,7 +583,6 @@ function animate() {
         updateOtherPlayers(deltaTime);
     }
 
-    // Always render
     if (renderer && scene && camera) {
         try {
             renderer.render(scene, camera);
@@ -625,9 +603,85 @@ function onWindowResize() {
 }
 
 
-// --- Start ---
+// ========================================================
+// INITIALIZATION FUNCTION DEFINITION
+// ========================================================
+function init() {
+    console.log("Initializing Shawty...");
+    // Get UI Elements
+    loadingScreen = document.getElementById('loadingScreen');
+    homeScreen = document.getElementById('homeScreen');
+    gameUI = document.getElementById('gameUI');
+    playerCountSpan = document.getElementById('playerCount');
+    playerNameInput = document.getElementById('playerNameInput');
+    playerPhraseInput = document.getElementById('playerPhraseInput');
+    joinButton = document.getElementById('joinButton');
+    homeScreenError = document.getElementById('homeScreenError');
+    infoDiv = document.getElementById('info');
+    healthBarFill = document.getElementById('healthBarFill');
+    healthText = document.getElementById('healthText');
+    killMessageDiv = document.getElementById('killMessage');
+
+    // Set Initial UI State
+    setGameState('loading'); // Safe to call now
+
+    // Basic Three.js Scene Setup
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 0, 150);
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    clock = new THREE.Clock();
+    loader = new THREE.GLTFLoader();
+    dracoLoader = new THREE.DRACOLoader();
+    dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+    dracoLoader.setDecoderConfig({ type: 'js' });
+    loader.setDRACOLoader(dracoLoader);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    directionalLight.position.set(10, 15, 10);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 1024;
+    directionalLight.shadow.mapSize.height = 1024;
+    scene.add(directionalLight);
+
+    // Controls
+    controls = new THREE.PointerLockControls(camera, document.body);
+    controls.addEventListener('lock', () => console.log('Pointer Locked'));
+    controls.addEventListener('unlock', () => {
+        console.log('Pointer Unlocked');
+        if (gameState === 'playing') {
+             setGameState('homescreen', { playerCount: playerCountSpan?.textContent ?? '?' });
+        }
+    });
+
+    // Start Loading Assets & Connecting
+    loadSound();
+    loadPlayerModel();
+    loadMap(MAP_PATH);
+    setupSocketIO(); // Safe now
+
+    // Add Event Listeners (Safe now)
+    joinButton?.addEventListener('click', attemptJoinGame);
+    window.addEventListener('resize', onWindowResize);
+    document.addEventListener('keydown', onKeyDown); // Handler defined above
+    document.addEventListener('keyup', onKeyUp);
+    document.addEventListener('mousedown', onMouseDown);
+
+    // Start animation loop
+    animate(); // Safe now
+}
+
+// ========================================================
+// --- START THE APPLICATION (Call init) ---
+// ========================================================
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', init); // Call init after DOM ready
 } else {
-    init();
+    init(); // Call init immediately if DOM already ready
 }
