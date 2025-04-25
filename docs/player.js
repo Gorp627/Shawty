@@ -7,7 +7,7 @@ function addPlayer(playerData) {
     players[playerData.id]={...playerData,mesh:null,targetPosition:null,targetRotationY:null};
     if(playerModel&&playerModel!=='error'){
         try{ // Ensure try has catch
-            const dS=0.8;//<<< ADJUST SCALE
+            const dS=0.3;//<<< ADJUST SCALE
             const mI=playerModel.clone();
             mI.scale.set(dS,dS,dS);
             mI.traverse(function(c){if(c.isMesh)c.castShadow=true;});
