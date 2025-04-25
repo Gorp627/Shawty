@@ -46,11 +46,10 @@ io.on('connection', (socket) => {
 
         if (players[socket.id]) {
             console.log(`Player ${socket.id} (${players[socket.id].name}) tried to set details again.`);
-            // Optionally update details if needed
+            // Update existing player details if needed
             players[socket.id].name = finalName;
             players[socket.id].phrase = finalPhrase;
-            // Consider broadcasting an update if name/phrase changes are allowed mid-game
-            return;
+            return; // Don't re-initialize
         }
 
         console.log(`Player ${socket.id} fully joined as "${finalName}" with phrase "${finalPhrase}"`);
@@ -58,9 +57,9 @@ io.on('connection', (socket) => {
         // Create player object in state
         players[socket.id] = {
             id: socket.id,
-            x: Math.random() * 15 - 7.5, // Slightly larger spawn area X
-            y: 0,                       // Logical Y (feet on ground)
-            z: Math.random() * 15 - 7.5, // Slightly larger spawn area Z
+            x: Math.random() * 15 - 7.5,
+            y: 0, // Logical Y (feet on ground)
+            z: Math.random() * 15 - 7.5,
             rotationY: 0,
             health: 100,
             name: finalName,
@@ -70,7 +69,7 @@ io.on('connection', (socket) => {
         // Initialize the new player (sends all current player data)
         socket.emit('initialize', { id: socket.id, players: players });
 
-        // Notify other players about the new player (including name/phrase)
+        // Notify other players about the new player
         socket.broadcast.emit('playerJoined', players[socket.id]);
 
         // Broadcast updated player count to everyone
@@ -86,13 +85,13 @@ io.on('connection', (socket) => {
             player.y = playerData.y; // Store logical Y from client
             player.z = playerData.z;
             player.rotationY = playerData.rotationY;
-            // Broadcast including name/phrase for potential UI updates elsewhere
+            // Broadcast including name/phrase
             socket.broadcast.emit('playerMoved', player);
         }
     });
 
     socket.on('shoot', (bulletData) => {
-        if (!players[socket.id]) return; // Ignore if player hasn't set details
+        if (!players[socket.id]) return;
         // console.log(`Player ${players[socket.id].name} (${socket.id}) fired.`); // Reduce log noise
         io.emit('shotFired', {
             shooterId: socket.id,
@@ -106,17 +105,15 @@ io.on('connection', (socket) => {
         const { targetId, damage } = data;
         const shooterId = socket.id;
         const targetPlayer = players[targetId];
-        const shooterPlayer = players[shooterId]; // Get shooter for name/phrase
+        const shooterPlayer = players[shooterId];
 
-        // Validate players and target health
         if (targetPlayer && targetPlayer.health > 0 && shooterPlayer) {
             targetPlayer.health -= damage;
             console.log(`Player ${targetPlayer.name} hit by ${shooterPlayer.name}. Health: ${targetPlayer.health}`);
 
             if (targetPlayer.health <= 0) {
-                targetPlayer.health = 0; // Clamp
+                targetPlayer.health = 0;
                 console.log(`Player ${targetPlayer.name} defeated by ${shooterPlayer.name}`);
-                // Send killer details with the death event
                 io.emit('playerDied', {
                     targetId: targetId,
                     killerId: shooterId,
@@ -125,7 +122,6 @@ io.on('connection', (socket) => {
                  });
                 scheduleRespawn(targetId);
             } else {
-                // Send only health update if not dead
                 io.emit('healthUpdate', { id: targetId, health: targetPlayer.health });
             }
         }
@@ -136,7 +132,6 @@ io.on('connection', (socket) => {
         if (player && player.health > 0) {
             console.log(`Player ${player.name} (${socket.id}) fell into the void.`);
             player.health = 0;
-            // Send death event with no killer details
             io.emit('playerDied', {
                 targetId: socket.id,
                 killerId: null,
@@ -150,15 +145,12 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const player = players[socket.id];
         if (player) {
-            // If player was fully joined (in players object)
             console.log(`User ${player.name} (${socket.id}) disconnected.`);
-            delete players[socket.id]; // Remove from state
-            io.emit('playerLeft', socket.id); // Notify others
-            broadcastPlayerCount(); // Update count
+            delete players[socket.id];
+            io.emit('playerLeft', socket.id);
+            broadcastPlayerCount();
         } else {
-            // If player disconnected before setting details
-            console.log(`User ${socket.id} (unjoined) disconnected.`);
-            // No need to update count or notify others
+            console.log(`User ${socket.id} (unjoined/details not set) disconnected.`);
         }
     });
 });
@@ -167,26 +159,24 @@ io.on('connection', (socket) => {
 function scheduleRespawn(playerId) {
     setTimeout(() => {
         const player = players[playerId];
-        if (player) { // Check if player still exists (didn't disconnect during delay)
+        if (player) {
             player.health = 100;
-            player.x = Math.random() * 15 - 7.5; // Respawn in spawn area
-            player.y = 0; // Logical Y
+            player.x = Math.random() * 15 - 7.5;
+            player.y = 0;
             player.z = Math.random() * 15 - 7.5;
             player.rotationY = 0;
             console.log(`Player ${player.name} (${playerId}) respawned.`);
-            // Send full player data on respawn, including name/phrase
+            // Send full player data on respawn
             io.emit('playerRespawned', player);
         }
     }, RESPAWN_DELAY);
 }
 
 // --- Basic HTTP Server for Root Path ---
-// Serve an optional status page or info file
 app.get('/', (req, res) => {
-    const indexPath = path.join(__dirname, 'index.html'); // Optional file in server dir
+    const indexPath = path.join(__dirname, 'index.html');
     res.sendFile(indexPath, (err) => {
         if (err) {
-            // If index.html doesn't exist in server dir, send simple text
             res.status(200).send('Shawty Server is Running. Connect via WebSocket.');
         }
     });
@@ -195,7 +185,6 @@ app.get('/', (req, res) => {
 // --- Start Server ---
 server.listen(PORT, () => {
     console.log(`Shawty Server listening on *:${PORT}`);
-    // Ensure correct origin is logged if using specific origins
     if (Array.isArray(io.opts.cors.origin)) {
         console.log(`Allowed origins: ${io.opts.cors.origin.join(', ')}`);
     } else {
