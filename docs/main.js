@@ -416,7 +416,7 @@ function addPlayer(playerData) {
     if (playerModel && playerModel !== 'error') {
         try {
             const modelInstance = playerModel.clone();
-            const desiredScale = 0.08; // <<< ADJUST THIS AS NEEDED
+            const desiredScale = 0.3; // <<< ADJUST THIS AS NEEDED
             modelInstance.scale.set(desiredScale, desiredScale, desiredScale);
             modelInstance.traverse((child) => { if (child.isMesh) { child.castShadow = true; } });
             const visualY = playerData.y;
