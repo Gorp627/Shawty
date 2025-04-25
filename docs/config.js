@@ -19,7 +19,7 @@ const PLAYER_COLLISION_RADIUS = PLAYER_RADIUS;
 const KILL_MESSAGE_DURATION = 4000;
 const BULLET_LIFETIME = 3000;
 // --- Gun View Model Config - ADJUST THESE ---
-const GUN_POS_OFFSET = new THREE.Vector3(0.3, -0.4, -0.3); // Current offset
+const GUN_POS_OFFSET = new THREE.Vector3(0, 0, -1); // Current offset
 const GUN_SCALE = 0.6; // <<< INCREASED SCALE - Try 0.4, 0.5, 0.6 etc.
 // --- Recoil Config - ADJUST THESE ---
 const RECOIL_AMOUNT = new THREE.Vector3(0, 0.015, 0.06);
