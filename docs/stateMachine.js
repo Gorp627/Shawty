@@ -15,7 +15,7 @@ const stateMachine = {
         this.emit('transition', { from: oldState, to: newState, options: options}); // Emit generic event
     },
     on: function(eventName, callback) { if (!this.listeners[eventName]) this.listeners[eventName] = []; this.listeners[eventName].push(callback); },
-    emit: function(eventName, options = {}) { if (this.listeners[eventName]) this.listeners[eventName].forEach(callback => callback(options)); },
+    emit: function(eventName, options = {}) { if (this.listeners[eventName]) this.listeners[eventName].forEach(callback => { try { callback(options); } catch(e) { console.error(`Error in listener for ${eventName}:`, e); } }); },
     is: function(state) { return this.currentState === state; }
 };
 window.stateMachine = stateMachine; // Explicitly export globally
