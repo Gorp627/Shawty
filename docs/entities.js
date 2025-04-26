@@ -12,7 +12,7 @@ class ClientPlayer {
     }
 
     updateData(serverData) { this.x = serverData.x??this.x??0; this.y=serverData.y??this.y??0; this.z=serverData.z??this.z??0; this.rotationY = serverData.r??serverData.rotationY??this.rotationY??0; this.health = serverData.h??serverData.health??this.health; this.name = serverData.n??serverData.name??this.name; this.phrase=serverData.phrase??this.phrase; this.setInterpolationTargets(); }
-    setInterpolationTargets() { const pH=CONFIG?.PLAYER_HEIGHT||1.8; let vY=this.y; if(this.mesh&&this.mesh.geometry instanceof THREE.CylinderGeometry)vY=this.y+pH/2; this.targetPosition.set(this.x, vY, this.z); this.targetRotationY=this.rotationY; }
+    setInterpolationTargets() { const pH=CONFIG?.PLAYER_HEIGHT||1.8; let vY=this.y; if(this.mesh&&this.mesh.geometry instanceof THREE.CylinderGeometry)vY=this.y+pH/2; else vY = this.y; /* Assume model origin at feet for GLB, center for cylinder */ this.targetPosition.set(this.x, vY, this.z); this.targetRotationY=this.rotationY; }
 
     loadMesh() {
         console.log(`[Entities] Loading mesh for player ${this.id}`);
@@ -23,7 +23,7 @@ class ClientPlayer {
                 this.mesh = playerModelData.clone();
                 const scale = 0.3; this.mesh.scale.set(scale, scale, scale);
                 this.mesh.traverse(c=>{if(c.isMesh){c.castShadow=true;c.receiveShadow=true;}});
-                const initialVY = this.y; // Assume model origin at feet
+                const initialVY = this.y; // Assume model origin is at feet from server data (Y=0 is ground)
                 this.mesh.position.set(this.x, initialVY, this.z); this.mesh.rotation.y = this.rotationY;
                 this.targetPosition.copy(this.mesh.position); this.targetRotationY = this.rotationY;
                 if (scene) { scene.add(this.mesh); console.log(`[Entities] Added player model mesh ${this.id}`); }
@@ -35,9 +35,13 @@ class ClientPlayer {
     loadFallbackMesh() {
         if (this.mesh) return; console.warn(`[Entities] Creating fallback ${this.id}`);
         try {
-            const r=CONFIG?.PLAYER_RADIUS||0.4, h=CONFIG?.PLAYER_HEIGHT||1.8;
+            // Use consistent radius name from config
+            const r = CONFIG.PLAYER_RADIUS || 0.4;
+            const h = CONFIG.PLAYER_HEIGHT || 1.8;
             const geo=new THREE.CylinderGeometry(r,r,h,8); const mat=new THREE.MeshStandardMaterial({color:0xff00ff,roughness:0.7}); this.mesh=new THREE.Mesh(geo,mat); this.mesh.castShadow=true; this.mesh.receiveShadow=true;
-            const initialVY=this.y+h/2; this.mesh.position.set(this.x,initialVY,this.z); this.mesh.rotation.y=this.rotationY;
+            // Cylinder origin is center, server Y is feet, so adjust visual Y
+            const initialVY=this.y+h/2;
+            this.mesh.position.set(this.x,initialVY,this.z); this.mesh.rotation.y=this.rotationY;
             this.targetPosition.copy(this.mesh.position); this.targetRotationY=this.rotationY;
             if(scene) { scene.add(this.mesh); console.log(`[Entities] Added fallback mesh ${this.id}`); }
             else { console.error("[Entities] Scene missing!"); }
