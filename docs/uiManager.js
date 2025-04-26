@@ -25,8 +25,17 @@ const UIManager = {
          this.killMessageDiv = document.getElementById('killMessage');
          this.canvas = document.getElementById('gameCanvas');
 
-         // Basic check
-         if (!this.loadingScreen || !this.homeScreen || !this.gameUI || !this.canvas || !this.joinButton /* etc */ ) {
+         // Assign to globals used by network.js etc. Needs careful management or passing refs.
+         // For now, assign back to potential globals for simplicity if other modules rely on them
+         loadingScreen=this.loadingScreen; homeScreen=this.homeScreen; gameUI=this.gameUI;
+         playerCountSpan=this.playerCountSpan; playerNameInput=this.playerNameInput;
+         playerPhraseInput=this.playerPhraseInput; joinButton=this.joinButton;
+         homeScreenError=this.homeScreenError; infoDiv=this.infoDiv;
+         healthBarFill=this.healthBarFill; healthText=this.healthText;
+         killMessageDiv=this.killMessageDiv;
+
+
+         if (!this.loadingScreen || !this.homeScreen || !this.gameUI || !this.canvas || !this.joinButton ) {
              console.error("!!! UIManager: Critical UI element missing during init!");
              document.body.innerHTML = "<p style='color:red;'>UI Element Init Error!</p>";
              return false; // Signal failure
@@ -46,42 +55,10 @@ const UIManager = {
      },
 
      // --- UI Visibility ---
-     showLoading: function(message = "Loading...", isError = false, isAssets = false) {
-         if(!this.loadingScreen) return;
-         if(this.homeScreen) this.homeScreen.style.display = 'none'; this.homeScreen.classList.remove('visible');
-         if(this.gameUI) this.gameUI.style.display = 'none'; this.gameUI.classList.remove('visible');
-         if(this.canvas) this.canvas.style.display = 'none'; this.canvas.classList.remove('visible');
-         this.loadingScreen.style.display = 'flex';
-         const p = this.loadingScreen.querySelector('p');
-         if (p) p.innerHTML = message;
-         this.loadingScreen.classList.toggle('assets', !!isAssets);
-         this.loadingScreen.classList.toggle('error', !!isError);
-         if (p && isError) p.style.color = 'red'; else if (p) p.style.color = '';
-     },
-     showHomescreen: function(playerCount = '?') {
-          if(!this.homeScreen) return;
-          if(this.loadingScreen) this.loadingScreen.style.display = 'none';
-          if(this.gameUI) this.gameUI.style.display = 'none'; this.gameUI.classList.remove('visible');
-          if(this.canvas) this.canvas.style.display = 'none'; this.canvas.classList.remove('visible');
-          if(this.joinButton) { this.joinButton.disabled = false; this.joinButton.textContent = "Join Game"; }
-          if(this.playerCountSpan) this.playerCountSpan.textContent = playerCount ?? this.playerCountSpan.textContent ?? '?';
-          this.homeScreen.style.display = 'flex';
-          requestAnimationFrame(() => { this.homeScreen?.classList.add('visible'); });
-     },
-     showJoining: function(waitingAssets = false) {
-         if (!this.joinButton || !this.loadingScreen) return;
-         if (waitingAssets) { this.showLoading("Loading Assets..."); this.loadingScreen?.classList.add('assets'); }
-         else { if (this.homeScreen) this.homeScreen.style.display = 'flex'; this.joinButton.disabled = true; this.joinButton.textContent = "Joining..."; }
-     },
-     showGame: function() {
-         if(!this.gameUI || !this.canvas) return;
-         if(this.loadingScreen) this.loadingScreen.style.display = 'none';
-         if(this.homeScreen) this.homeScreen.style.display = 'none'; this.homeScreen.classList.remove('visible');
-         this.gameUI.style.display = 'block';
-         this.canvas.style.display = 'block';
-         requestAnimationFrame(() => { this.gameUI?.classList.add('visible'); this.canvas?.classList.add('visible'); });
-         if(this.infoDiv) this.infoDiv.textContent = `Playing as ${localPlayerName || 'Player'}`;
-     },
+     showLoading: function(message = "Loading...", isError = false, isAssets = false) { if(!this.loadingScreen) return; if(this.homeScreen) this.homeScreen.style.display = 'none'; this.homeScreen.classList.remove('visible'); if(this.gameUI) this.gameUI.style.display = 'none'; this.gameUI.classList.remove('visible'); if(this.canvas) this.canvas.style.display = 'none'; this.canvas.classList.remove('visible'); this.loadingScreen.style.display = 'flex'; const p = this.loadingScreen.querySelector('p'); if (p) p.innerHTML = message; this.loadingScreen.classList.toggle('assets', !!isAssets); this.loadingScreen.classList.toggle('error', !!isError); if (p && isError) p.style.color = 'red'; else if (p) p.style.color = ''; },
+     showHomescreen: function(playerCount = '?') { if(!this.homeScreen) return; if(this.loadingScreen) this.loadingScreen.style.display = 'none'; if(this.gameUI) this.gameUI.style.display = 'none'; this.gameUI.classList.remove('visible'); if(this.canvas) this.canvas.style.display = 'none'; this.canvas.classList.remove('visible'); if(this.joinButton) { this.joinButton.disabled = false; this.joinButton.textContent = "Join Game"; } if(this.playerCountSpan) this.playerCountSpan.textContent = playerCount ?? this.playerCountSpan.textContent ?? '?'; this.homeScreen.style.display = 'flex'; requestAnimationFrame(() => { this.homeScreen?.classList.add('visible'); }); },
+     showJoining: function(waitingAssets = false) { if (!this.joinButton || !this.loadingScreen) return; if (waitingAssets) { this.showLoading("Loading Assets..."); this.loadingScreen?.classList.add('assets'); } else { if (this.homeScreen) this.homeScreen.style.display = 'flex'; this.joinButton.disabled = true; this.joinButton.textContent = "Joining..."; } },
+     showGame: function() { if(!this.gameUI || !this.canvas) return; if(this.loadingScreen) this.loadingScreen.style.display = 'none'; if(this.homeScreen) this.homeScreen.style.display = 'none'; this.homeScreen.classList.remove('visible'); this.gameUI.style.display = 'block'; this.canvas.style.display = 'block'; requestAnimationFrame(() => { this.gameUI?.classList.add('visible'); this.canvas?.classList.add('visible'); }); if(this.infoDiv) this.infoDiv.textContent = `Playing as ${localPlayerName || 'Player'}`; },
 
      // --- In-Game UI Updates ---
      updatePlayerCount: function(count) { if(this.playerCountSpan) this.playerCountSpan.textContent = count; },
