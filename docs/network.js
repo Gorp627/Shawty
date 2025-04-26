@@ -72,7 +72,7 @@ const Network = {
         socket.on('playerJoined',     (data) => { Network.handlePlayerJoined(data); }); // MODIFIED for message
         socket.on('playerLeft',       (id)   => { Network.handlePlayerLeft(id); });     // MODIFIED for message
         socket.on('gameStateUpdate',  (data) => { Network.handleGameStateUpdate(data); });
-        // socket.on('shotFired',        (data) => { Network.handleShotFired(data); }); // REMOVED
+        // REMOVED socket.on('shotFired', ...
         socket.on('healthUpdate',     (data) => { Network.handleHealthUpdate(data); });
         socket.on('playerDied',       (data) => { Network.handlePlayerDied(data); }); // Simplified message
         socket.on('playerRespawned',  (data) => { Network.handlePlayerRespawned(data); }); // MODIFIED logic
@@ -124,7 +124,7 @@ const Network = {
              UIManager?.showError("Init Fail", "homescreen");
              return;
          }
-         console.log("[Net] Storing init data, setting networkReady=true.");
+         console.log("[Net] Storing init data, networkReady=true.");
          initializationData = data; // Store data globally
          networkIsInitialized = true; // Set flag globally
          // Call the central function to check readiness and potentially start the game
@@ -135,7 +135,7 @@ const Network = {
              stateMachine?.transitionTo('homescreen');
              UIManager?.showError("Startup Error","homescreen");
          }
-    },
+    }, // End handleInitialize
 
     // Player Joined: Add player representation and show UI message
     handlePlayerJoined: function(playerData) {
@@ -188,7 +188,8 @@ const Network = {
         const player = this._getPlayer(data.id);
         if (player) {
             player.health = data.health;
-            if (data.id === localPlayerId && UIManager) { // Update local health bar
+            // console.log(`[Net] Health update for ${player.name || data.id}: ${player.health}`); // Less verbose
+            if (data.id === localPlayerId && UIManager) {
                 UIManager.updateHealthBar(player.health);
             }
         }
@@ -251,7 +252,7 @@ const Network = {
              player.y = playerData.y;
              player.z = playerData.z;
              player.rotationY = playerData.rotationY;
-             player.name = playerData.name;
+             player.name = playerData.name; // Update name/phrase in case of change
              player.phrase = playerData.phrase;
              // --- END direct property updates ---
 
