@@ -8,7 +8,7 @@
 </head>
 <body>
     <!-- UI Screens -->
-    <div id="loadingScreen" class="screen visible"><p>Loading...</p></div> <!-- Start loading visible -->
+    <div id="loadingScreen" class="screen visible"><p>Loading...</p></div>
     <div id="homeScreen" class="screen">
         <h1>Shawty.</h1>
         <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
@@ -35,7 +35,7 @@
     <!-- Game Canvas -->
     <canvas id="gameCanvas"></canvas>
 
-    <!-- Libraries (Order matters less here) -->
+    <!-- Libraries -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
@@ -43,17 +43,19 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- Core & Game Logic - ORDER MATTERS -->
-    <script src="config.js"></script>       <!-- Global constants/variables -->
-    <script src="utils.js"></script>        <!-- Helper functions -->
-    <script src="stateMachine.js"></script> <!-- Game state management -->
-    <script src="loadManager.js"></script>  <!-- Asset loading controller -->
-    <script src="entities.js"></script>     <!-- Player, Bullet classes -->
-    <script src="uiManager.js"></script>    <!-- UI DOM manipulation -->
-    <script src="input.js"></script>       <!-- Keyboard/mouse input handling -->
-    <script src="effects.js"></script>      <!-- Muzzle flash, impacts -->
-    <script src="network.js"></script>     <!-- Socket.IO communication -->
-    <script src="game.js"></script>        <!-- Main init, update, animate -->
+    <!-- === Your Split Game Code - CORRECTED ORDER === -->
+    <script src="config.js"></script>         <!-- 1. Globals, Constants, Loader Init -->
+    <script src="utils.js"></script>        <!-- 2. Helper functions -->
+    <script src="stateMachine.js"></script> <!-- 3. State Machine Definition -->
+    <script src="loadManager.js"></script>  <!-- 4. Asset Loading Controller -->
+    <script src="entities.js"></script>     <!-- 5. Class definitions (Player, Bullet) -->
+    <script src="uiManager.js"></script>    <!-- 6. UI Management Object/Functions -->
+    <script src="input.js"></script>       <!-- 7. Input Management Object -->
+    <script src="effects.js"></script>      <!-- 8. Effects Object -->
+    <script src="network.js"></script>     <!-- 9. Socket.IO Setup & Handlers -->
+    <script src="gameLogic.js"></script>    <!-- 10. Functions defining game rules/updates (shoot, updatePlayer etc.) -->
+    <script src="game.js"></script>        <!-- 11. Main Game Class (uses all others, calls init/animate) -->
+    <!-- ========================================== -->
 
 </body>
 </html>
