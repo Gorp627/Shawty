@@ -2,26 +2,146 @@
 
 const loadManager = {
     assets: {
+        // Added 'data' field to store the loaded asset
         map: { state: 'pending', path: CONFIG.MAP_PATH, data: null },
         playerModel: { state: 'pending', path: CONFIG.PLAYER_MODEL_PATH, data: null },
-        gunshotSound: { state: 'pending', path: CONFIG.SOUND_PATH_GUNSHOT, type: 'audio', data: null },
+        // gunModel: { state: 'pending', path: CONFIG.GUN_MODEL_PATH, data: null }, // REMOVED
+        gunshotSound: { state: 'pending', path: CONFIG.SOUND_PATH_GUNSHOT, type: 'audio', data: null }, // Keep for potential future use or other sounds
     },
     loaders: {}, // GLTF Loader initialized in game.js
-    requiredForGame: ['map', 'playerModel', 'gunshotSound'],
+    requiredForGame: ['map', 'playerModel', /* 'gunshotSound' // Optional now */ ], // Gunshot sound not strictly required if not shooting
     eventListeners: {'ready': [], 'error': [], 'progress': [], 'assetLoaded': []},
 
-    isAssetReady: function(key) { /* ... (no changes needed from previous) ... */ const a=this.assets[key];if(!a)return!1;const iS=a.state==='loaded';const hD=!!(a.data&&a.data!=='error');return iS&&hD; },
-    getAssetData: function(key) { /* ... (no changes needed from previous) ... */ if(this.isAssetReady(key)){return this.assets[key].data;}return null; },
-    startLoading: function() { /* ... (no changes needed from previous) ... */ console.log("[LM] Start Loading...");if(!loader||!loader.dracoLoader){console.error("[LM] Loader Missing!");this.trigger('error',{m:'GFX/Draco Fail'});if(stateMachine)stateMachine.transitionTo('loading',{message:'FATAL: Loader Fail!',error:!0});return;}let c=0;for(const k in this.assets){if(this.assets[k].state==='pending'){c++;this.loadAsset(k);}}if(c===0){console.log("[LM] No pending assets.");this.checkCompletion();} },
-    loadAsset: function(key) { /* ... (no changes needed from previous) ... */ const a=this.assets[key];if(!a||a.state!=='pending')return;a.state='loading';console.log(`[LM] Loading ${key}...`);const m=this;const sT=Date.now();const p=(xhr)=>{if(xhr.lengthComputable)m.trigger('progress',{key:key,progress:Math.round(xhr.loaded/xhr.total*100)});};const ok=(ld)=>{console.log(`[LM] Net OK ${key} in ${Date.now()-sT}ms.`);m._assetLoadedCallback(key,!0,ld);};const err=(e)=>{console.error(`[LM] !!! FAIL ${key}`,e);m._assetLoadedCallback(key,!1,e);};if(a.type==='audio'){try{const aud=new Audio();const l=()=>{cleanup();ok(aud);};const e=(ev)=>{cleanup();err(ev);};const cleanup=()=>{aud.removeEventListener('canplaythrough',l);aud.removeEventListener('error',e);};aud.addEventListener('canplaythrough',l);aud.addEventListener('error',e);aud.src=a.path;aud.preload='auto';aud.load();}catch(e){err(e);}}else{if(!loader){err("GLTF Loader missing");return;}loader.load(a.path,ok,p,err);} },
+    // Helper to check if an asset is fully loaded and processed
+    isAssetReady: function(key) {
+        const asset = this.assets[key];
+        if (!asset) return false; // Asset not defined in config
+        const isLoadedState = asset.state === 'loaded';
+        const hasValidData = !!(asset.data && asset.data !== 'error');
+        return isLoadedState && hasValidData;
+    },
+
+    // Helper to retrieve loaded asset data
+    getAssetData: function(key) {
+        if (this.isAssetReady(key)) { return this.assets[key].data; }
+        // console.warn(`[LoadManager] Attempted to getAssetData for non-ready asset: ${key}`);
+        return null; // Return null if not ready
+    },
+
+    startLoading: function() {
+        console.log("[LoadManager] Start Loading All Assets...");
+        // Ensure the global loader and its draco sub-loader are available
+        if (!loader || !loader.dracoLoader) {
+             console.error("[LoadManager] Critical Loader Missing (GLTF or Draco)! Check game.js initialization.");
+             this.trigger('error',{m:'GFX/Draco Loader Fail'});
+             if (typeof stateMachine !== 'undefined') {
+                stateMachine.transitionTo('loading', {message: 'FATAL: Graphics/Draco Loader Failed!', error: true});
+             }
+             return; // Stop loading
+         }
+        console.log("[LoadManager] Verified GLTF & DracoLoader available.");
+
+        let assetsToLoadCount = 0;
+        for (const key in this.assets) {
+            // Only load assets that are currently 'pending'
+            if (this.assets[key].state === 'pending') {
+                assetsToLoadCount++;
+                this.loadAsset(key);
+            }
+        }
+
+        if (assetsToLoadCount === 0) {
+            console.log("[LoadManager] No pending assets found on startLoading. Checking completion immediately.");
+            // This case might happen on a reload where assets are cached but state is reset
+            this.checkCompletion();
+        }
+    },
+
+    loadAsset: function(key) {
+        const asset = this.assets[key];
+        if (!asset || asset.state !== 'pending') return; // Don't load if not pending
+
+        asset.state = 'loading'; // Mark as loading
+        console.log(`[LoadManager] Loading ${key} from ${asset.path}...`);
+        const manager = this;
+        const loadStartTime = Date.now();
+
+        // Progress handler
+        const onProg = function(xhr){
+            if(xhr.lengthComputable) {
+                manager.trigger('progress', {key:key, progress:Math.round(xhr.loaded/xhr.total*100)});
+            }
+        };
+        // Success handler (passes the raw loaded asset)
+        const onSuccess = function(loadedAsset){
+             const loadTime = Date.now() - loadStartTime;
+             console.log(`[LoadManager] Successfully loaded network request for ${key} in ${loadTime}ms.`);
+             // Pass to the internal callback for processing and assignment
+             manager._assetLoadedCallback(key, true, loadedAsset);
+        };
+        // Error handler
+        const onError = function(err){
+             console.error(`[LoadManager] !!! Loading FAILED for ${key}. Path: ${asset.path}`);
+             // Log the specific error object provided by the loader/browser
+             console.error(`[LoadManager] >>> Error details for ${key}:`, err);
+             // Pass error to internal callback
+             manager._assetLoadedCallback(key, false, err);
+        };
+
+
+        // --- Asset Type Specific Loading ---
+        if (asset.type === 'audio') {
+            try {
+                const audio = new Audio(); // Create audio element
+                // console.log(`[LoadManager] Created Audio object for ${key}`); // Less verbose
+
+                // Define event handlers scoped to this load attempt
+                const audioLoaded = () => {
+                    console.log(`[LoadManager] Audio event 'canplaythrough' triggered for ${key}`);
+                    cleanupAudioListeners(); // Remove listeners
+                    onSuccess(audio); // Call general success handler with the audio object
+                };
+                const audioError = (e) => {
+                     console.error(`[LoadManager] Audio event 'error' triggered for ${key}`, e);
+                     cleanupAudioListeners(); // Remove listeners
+                     onError(e); // Call general error handler with the error event
+                };
+                const cleanupAudioListeners = () => {
+                    audio.removeEventListener('canplaythrough', audioLoaded);
+                    audio.removeEventListener('error', audioError);
+                    // console.log(`[LoadManager] Cleaned up audio listeners for ${key}`);
+                };
+
+                // Attach listeners before setting src
+                audio.addEventListener('canplaythrough', audioLoaded);
+                audio.addEventListener('error', audioError);
+
+                audio.src = asset.path; // Set the source path
+                audio.preload = 'auto'; // Hint to browser
+                // console.log(`[LoadManager] Set src for ${key} to ${asset.path}. Calling load()...`); // Less verbose
+                audio.load(); // Explicitly call load to start fetching
+                // console.log(`[LoadManager] audio.load() called for ${key}. Waiting for events...`); // Less verbose
+
+            } catch (e) {
+                 console.error(`[LoadManager] Error creating/loading Audio for ${key}`, e);
+                 onError(e); // Catch synchronous errors during Audio object creation/setup
+            }
+        } else { // Assume GLTF/GLB
+            if (!loader) { // Double check loader exists here
+                 onError("GLTF Loader missing at load time");
+                 return;
+            }
+            // console.log(`[LoadManager] Calling GLTFLoader.load for ${key}`); // Less verbose
+            // Use the global GLTFLoader instance initialized in game.js
+            loader.load(asset.path, onSuccess, onProg, onError);
+        }
+    },
 
     // MODIFIED _assetLoadedCallback
     _assetLoadedCallback: function(assetKey, success, loadedAssetOrError) {
         const assetEntry = this.assets[assetKey]; if (!assetEntry) return;
         assetEntry.state = success ? 'loaded' : 'error';
         assetEntry.data = 'error'; // Default
-        // --- REMOVED global assignment removal --- We will assign mapMesh globally again
-        // window[assetKey] = 'error';
 
         console.log(`[LoadManager] Callback ${assetKey}: success=${success}. State: ${assetEntry.state}`);
         try {
@@ -59,14 +179,14 @@ const loadManager = {
 
     checkCompletion: function() {
         let allRequiredDone = true; let anyError = false;
-        for (const key of this.requiredForGame) {
+        for (const key of this.requiredForGame) { // Checks map, playerModel now
             const assetInfo = this.assets[key]; if (!assetInfo) { anyError = true; continue; }
             const assetState = assetInfo.state;
             if (assetState === 'pending' || assetState === 'loading') { allRequiredDone = false; break; }
             // Use isAssetReady (which checks state AND internal data)
             if (!this.isAssetReady(key)) {
                 anyError = true;
-                console.warn(`[LoadManager] checkCompletion: Problem for asset '${key}'. State: ${assetState}.`);
+                 console.warn(`[LoadManager] checkCompletion: Problem detected for asset '${key}'. State: ${assetState}.`);
             }
             // *** ADDED CHECK for global mapMesh specifically ***
             if (key === 'map' && (typeof window.mapMesh === 'undefined' || !window.mapMesh || window.mapMesh === 'error')) {
