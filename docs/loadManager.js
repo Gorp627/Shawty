@@ -18,6 +18,12 @@ const loadManager = {
         if (!asset) return false; // Asset not defined in config
         const isLoadedState = asset.state === 'loaded';
         const hasValidData = !!(asset.data && asset.data !== 'error');
+        // Detailed logging for debugging discrepancies
+        // if (isLoaded && !globalReady) {
+        //     console.warn(`[LoadManager] isAssetReady Discrepancy: Asset '${key}' state is loaded, but global var is not ready (value: ${globalVar}).`);
+        // } else if (!isLoaded && globalReady) {
+        //      console.warn(`[LoadManager] isAssetReady Discrepancy: Asset '${key}' state is ${asset.state}, but global var IS ready.`);
+        // }
         return isLoadedState && hasValidData;
     },
 
