@@ -6,7 +6,6 @@ const CONFIG = {
     SOUND_PATH_GUNSHOT: 'assets/maps/gunshot.wav',
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
     GUN_MODEL_PATH: 'assets/maps/gun2.glb',
-    // HEALTH_PACK_MODEL_PATH: 'assets/models/health_pack.glb', // Removed
 
     PLAYER_HEIGHT: 1.8, PLAYER_RADIUS: 0.4,
     MOVEMENT_SPEED: 6.0, MOVEMENT_SPEED_SPRINTING: 9.5,
@@ -23,8 +22,6 @@ const CONFIG = {
     RECOIL_RECOVER_SPEED: 22, // ADJUST
     MUZZLE_FLASH_DURATION: 60, MUZZLE_FLASH_SCALE: 0.2,
     BULLET_IMPACT_DURATION: 300, BULLET_IMPACT_PARTICLES: 5,
-
-    // Health Pack Config Removed
 
     CLIENT_UPDATE_INTERVAL: 1000 / 20,
     SERVER_BROADCAST_INTERVAL: 1000 / 15
@@ -52,4 +49,4 @@ let velocityY = 0; let isOnGround = false;
 // Recoil State
 let currentRecoilOffset = new THREE.Vector3(0, 0, 0);
 
-console.log("config.js loaded"); // Keep this log
+console.log("config.js loaded");
