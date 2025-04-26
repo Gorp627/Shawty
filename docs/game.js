@@ -20,13 +20,13 @@ class Game {
         // Bind LoadManager Listener BEFORE starting load
         console.log("[Game] Binding LoadManager listeners...");
         if (typeof loadManager !== 'undefined') {
-            loadManager.on('ready', () => { // Arrow function to keep 'this' context if needed
-                 console.log("[Game] LoadManager 'ready' event received."); // Add log
+            loadManager.on('ready', () => { // Use LoadManager's ready event
+                 console.log("[Game] LoadManager 'ready' event received.");
                  if(typeof Network !== 'undefined' && Network.isConnected()) { // Check Network specifically
                       if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('homescreen', {playerCount: UIManager.playerCountSpan?.textContent ?? '?'});
                  } else {
-                     console.log("[Game] Assets ready, but waiting for socket connection...");
-                      if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message: 'Connecting...'});
+                     console.log("[Game] Assets ready, waiting for socket connection...");
+                     if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message: 'Connecting...'}); // Update loading msg
                  }
             });
              loadManager.on('error', (data) => {
@@ -61,8 +61,8 @@ class Game {
              const canvas = document.getElementById('gameCanvas'); if (!canvas) throw new Error("Canvas missing!");
              this.renderer = renderer || new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true;
              this.controls = controls || new THREE.PointerLockControls(this.camera, document.body);
-             this.controls.addEventListener('lock', function () { /* console.log('Locked'); */ }); // Reduce noise
-             this.controls.addEventListener('unlock', function () { console.log('Unlocked'); if (stateMachine.is('playing')) stateMachine.transitionTo('homescreen', {playerCount: UIManager?.playerCountSpan?.textContent ?? '?'}); });
+             this.controls.addEventListener('lock', function () { console.log('Locked'); });
+             this.controls.addEventListener('unlock', function () { console.log('Unlocked'); if (typeof stateMachine !== 'undefined' && stateMachine.is('playing')) stateMachine.transitionTo('homescreen', {playerCount: UIManager?.playerCountSpan?.textContent ?? '?'}); });
               // Assign to globals AFTER creation
              scene = this.scene; camera = this.camera; renderer = this.renderer; controls = this.controls; clock = this.clock;
               // Lighting
@@ -76,8 +76,7 @@ class Game {
          // Check if manager objects exist on window AFTER scripts should have loaded
          if(typeof UIManager === 'undefined' || typeof Input === 'undefined' || typeof stateMachine === 'undefined' || typeof loadManager === 'undefined' || typeof Network === 'undefined' || typeof Effects === 'undefined') {
               console.error("One or more managers are undefined! Check script files and load order in index.html.");
-              // Attempt to show error via body manipulation if UIManager is missing
-              if (typeof UIManager === 'undefined' || !UIManager.showError) { document.body.innerHTML = "<p style='color:red; text-align:center;'>MANAGER LOAD ERROR</p>"; }
+              if (typeof UIManager === 'undefined' || !UIManager.showError) { document.body.innerHTML = "<p style='color:red;'>MANAGER LOAD ERROR</p>"; }
               else { UIManager.showError("Manager Load Error!", 'loading'); }
               return false; // Stop initialization
          }
