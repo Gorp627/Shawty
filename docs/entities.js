@@ -1,6 +1,6 @@
 // docs/entities.js
 
-// Needs access to globals: scene, THREE, CONFIG, playerModel, loadManager
+// Needs access to globals: scene, THREE, CONFIG, loadManager
 // Accesses other classes: Bullet (defined below)
 
 // --- Player Class (Client-side representation) ---
@@ -50,18 +50,15 @@ class ClientPlayer {
     }
 
     loadMesh() {
-        // *** ADDED CHECK: Use loadManager.isAssetReady for robustness ***
-        const isPlayerModelReady = loadManager && loadManager.isAssetReady('playerModel');
-        console.log(`[Entities] Checking playerModel readiness for ${this.id}. Result: ${isPlayerModelReady}`);
+        // *** MODIFIED: Get data directly from loadManager ***
+        console.log(`[Entities] Attempting to load mesh for player ${this.id}`);
+        // Use the getter which also checks readiness internally
+        const playerModelData = loadManager?.getAssetData('playerModel');
 
-        // Also check if the global variable is actually a THREE object
-        const playerModelObject = window.playerModel;
-        const isObjectValid = playerModelObject && playerModelObject instanceof THREE.Object3D;
-
-        if (isPlayerModelReady && isObjectValid) {
-            console.log(`[Entities] playerModel IS ready for ${this.id}. Attempting clone...`);
+        if (playerModelData && playerModelData instanceof THREE.Object3D) {
+            console.log(`[Entities] playerModel data found for ${this.id}. Cloning...`);
             try {
-                this.mesh = playerModelObject.clone(); // Clone the verified global model
+                this.mesh = playerModelData.clone(); // Clone the model data retrieved from LM
 
                 const defaultScale = 0.3; // Example scale, adjust as needed
                 this.mesh.scale.set(defaultScale, defaultScale, defaultScale);
@@ -96,7 +93,7 @@ class ClientPlayer {
             }
         } else {
             // If asset not ready or invalid, use fallback
-            console.warn(`[Entities] playerModel NOT ready or invalid for ${this.id}. Using fallback. isReady=${isPlayerModelReady}, isValidObject=${isObjectValid}`);
+            console.warn(`[Entities] playerModel data not retrieved or invalid for ${this.id}. Using fallback.`);
             this.loadFallbackMesh();
         }
     }
