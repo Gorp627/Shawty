@@ -1,32 +1,33 @@
-/* docs/style.css - Refactored Structure */
+/* docs/style.css - Simplified Functional Version + Dot Crosshair */
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; background-color: #000; color: white; font-family: sans-serif; }
 
 /* Screen Overlays - Unified Class */
-.screen { position: fixed; inset: 0; /* top,left,right,bottom=0 */ display: none; /* Start hidden by default */ flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 100; background-color: #222; }
-.screen.visible { display: flex; } /* JS adds this class */
+.screen { position: fixed; inset: 0; display: none; /* Start hidden by default */ flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 100; background-color: #222; transition: opacity 0.5s ease-in-out; }
+.screen.visible { display: flex; opacity: 1; } /* JS adds this class */
 
-#loadingScreen { background-color: #1a4d2e; color: #e8f6ef; font-size: 1.5em; }
+#loadingScreen { background-color: #1a4d2e; color: #e8f6ef; font-size: 1.5em; opacity: 1;} /* Start visible */
 #loadingScreen.error p { color: red !important; }
 
-#homeScreen { background-color: #334; color: #eee; }
+#homeScreen { background-color: #334; color: #eee; opacity: 0;} /* Start hidden */
+#homeScreen.visible { display: flex; opacity: 1; }
 #homeScreen h1 { font-size: 3em; margin-bottom: 20px; color: #fff; }
 #homeScreen p { font-size: 1.1em; margin-bottom: 15px; }
 #homeScreen input[type="text"] { padding: 8px 10px; margin-bottom: 10px; width: 70%; max-width: 300px; border: 1px solid #ccc; border-radius: 3px; background-color: #fff; color: #333; font-size: 1em; }
-.phrase-container { margin-bottom: 15px; display: inline-block; }
-.phrase-container span { margin-right: 5px; }
+.phrase-container { margin-bottom: 15px; display: inline-block;}
+.phrase-container span { margin-right: 5px;}
 .phrase-container input[type="text"] { display: block; margin-left: auto; margin-right: auto; margin-top: 5px; }
 #homeScreen button#joinButton { padding: 10px 20px; font-size: 1.1em; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
 #homeScreen button#joinButton:hover { background-color: #45a049; }
 #homeScreen button#joinButton:disabled { background-color: #777; cursor: not-allowed; opacity: 0.8; }
 .error-message { color: red; margin-top: 10px; font-weight: bold; min-height: 1em; }
 
-/* Game UI Container */
-#gameUI { position: fixed; inset: 0; pointer-events: none; z-index: 10; display: none; }
+/* In-Game UI Container */
+#gameUI { position: fixed; inset: 0; pointer-events: none; z-index: 10; display: none; opacity: 1; }
 #gameUI.visible { display: block; }
 
 /* Game Canvas */
-#gameCanvas { display: block; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none; }
+#gameCanvas { display: block; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none;}
 #gameCanvas.visible { display: block; }
 
 /* In-Game Elements */
@@ -38,7 +39,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%;
 #killMessage { position: absolute; bottom: 55px; left: 50%; transform: translateX(-50%); background-color: rgba(192, 57, 43, 0.8); color: white; padding: 8px 12px; border-radius: 4px; font-size: 1.1em; text-align: center; opacity: 0; transition: opacity 0.5s ease-in-out; max-width: 80%; pointer-events: none; }
 #killMessage.visible { opacity: 1; }
 
-/* Particle Effects (Basic) */
+/* Particle Effects */
 .particle { position: absolute; width: 5px; height: 5px; background-color: orange; border-radius: 50%; pointer-events: none; z-index: 11; opacity: 1; transition: transform 0.5s linear, opacity 0.5s linear; }
-.muzzle-flash { position: absolute; width: 30px; height: 30px; background: radial-gradient(circle, rgba(255,220,150,0.8) 0%, rgba(255,150,50,0.6) 40%, rgba(255,100,0,0) 70%); border-radius: 50%; pointer-events: none; z-index: 20; /* Above gun? */ transform: translate(-50%, -50%) scale(0); /* Start small/hidden */ opacity: 0; }
-.muzzle-flash.visible { transform: translate(-50%, -50%) scale(1); opacity: 1; transition: transform 0.05s ease-out, opacity 0.05s ease-out; } /* Fast flash */
+.muzzle-flash { position: absolute; width: 30px; height: 30px; background: radial-gradient(circle, rgba(255,220,150,0.8) 0%, rgba(255,150,50,0.6) 40%, rgba(255,100,0,0) 70%); border-radius: 50%; pointer-events: none; z-index: 20; transform: translate(-50%, -50%) scale(0); opacity: 0; }
+.muzzle-flash.visible { transform: translate(-50%, -50%) scale(1); opacity: 1; transition: transform 0.05s ease-out, opacity 0.05s ease-out; }
