@@ -2,31 +2,31 @@
 
 const loadManager = {
     assets: {
-        map: { state: 'pending', path: CONFIG.MAP_PATH },
-        playerModel: { state: 'pending', path: CONFIG.PLAYER_MODEL_PATH },
-        gunModel: { state: 'pending', path: CONFIG.GUN_MODEL_PATH },
-        gunshotSound: { state: 'pending', path: CONFIG.SOUND_PATH_GUNSHOT, type: 'audio' },
+        // Added 'data' field to store the loaded asset
+        map: { state: 'pending', path: CONFIG.MAP_PATH, data: null },
+        playerModel: { state: 'pending', path: CONFIG.PLAYER_MODEL_PATH, data: null },
+        gunModel: { state: 'pending', path: CONFIG.GUN_MODEL_PATH, data: null },
+        gunshotSound: { state: 'pending', path: CONFIG.SOUND_PATH_GUNSHOT, type: 'audio', data: null },
     },
-    loaders: {}, // GLTF Loader initialized in game.js now
-    requiredForGame: ['map', 'playerModel', 'gunModel', 'gunshotSound'], // Add gunshotSound as required
+    loaders: {}, // GLTF Loader initialized in game.js
+    requiredForGame: ['map', 'playerModel', 'gunModel', 'gunshotSound'], // Assets needed before 'ready' fires
     eventListeners: {'ready': [], 'error': [], 'progress': [], 'assetLoaded': []},
 
-    // Method to check if a specific asset is ready (state is loaded AND global var exists and is not 'error')
+    // Helper to check if an asset is fully loaded and processed
     isAssetReady: function(key) {
         const asset = this.assets[key];
-        if (!asset) return false; // Asset not defined in config
-        const isLoaded = asset.state === 'loaded';
-        const globalVar = window[key];
-        const globalReady = !!(globalVar && globalVar !== 'error');
-        // Detailed logging for debugging discrepancies
-        // if (isLoaded && !globalReady) {
-        //     console.warn(`[LoadManager] isAssetReady Discrepancy: Asset '${key}' state is loaded, but global var is not ready (value: ${globalVar}).`);
-        // } else if (!isLoaded && globalReady) {
-        //      console.warn(`[LoadManager] isAssetReady Discrepancy: Asset '${key}' state is ${asset.state}, but global var IS ready.`);
-        // }
-        return isLoaded && globalReady;
+        // Check if asset exists, state is 'loaded', and data is present and not the error string
+        return !!(asset && asset.state === 'loaded' && asset.data && asset.data !== 'error');
     },
 
+    // Helper to retrieve loaded asset data
+    getAssetData: function(key) {
+        if (this.isAssetReady(key)) {
+            return this.assets[key].data;
+        }
+        console.warn(`[LoadManager] Attempted to getAssetData for non-ready asset: ${key}`);
+        return null; // Return null if not ready
+    },
 
     startLoading: function() {
         console.log("[LoadManager] Start Loading All Assets...");
@@ -138,17 +138,20 @@ const loadManager = {
     },
 
     _assetLoadedCallback: function(assetKey, success, loadedAssetOrError) {
-        if (!this.assets[assetKey]) {
+        const assetEntry = this.assets[assetKey];
+        if (!assetEntry) {
              console.warn(`[LoadManager] Received callback for unknown asset key: ${assetKey}`);
              return;
         }
 
-        // Ensure state reflects success accurately based on the callback flag
-        this.assets[assetKey].state = success ? 'loaded' : 'error';
-        console.log(`[LoadManager] Callback ${assetKey}: success=${success}. State: ${this.assets[assetKey].state}`);
 
-        // --- Assign Global Variable ---
-        window[assetKey] = 'error'; // Default global to error, overwrite on success
+        // Ensure state reflects success accurately based on the callback flag
+        assetEntry.state = success ? 'loaded' : 'error';
+        // Default data to error, overwrite on successful processing
+        assetEntry.data = 'error';
+
+        console.log(`[LoadManager] Callback ${assetKey}: success=${success}. State: ${assetEntry.state}`);
+
         try {
             if (success) {
                 // Handle successful load based on type
@@ -156,36 +159,34 @@ const loadManager = {
                     // ** Critical check for Audio instance **
                     console.log(`[LoadManager] Processing successful callback for gunshotSound. Received:`, loadedAssetOrError);
                     if (loadedAssetOrError instanceof Audio) {
-                        console.log(`[LoadManager] Assigning window.gunshotSound = [Audio Object]`);
-                        window[assetKey] = loadedAssetOrError; // Assign the Audio object directly
+                        console.log(`[LoadManager] Storing Audio data for ${assetKey}`);
+                        assetEntry.data = loadedAssetOrError; // Store the Audio object directly
                         // ** Crucial: Verify assignment immediately **
-                        if (window[assetKey] instanceof Audio) {
-                             console.log("[LoadManager] >>> window.gunshotSound verified as Audio object after assignment.");
+                        if (assetEntry.data instanceof Audio) {
+                             console.log("[LoadManager] >>> gunshotSound data verified as Audio object after assignment.");
                         } else {
-                             console.error("[LoadManager] !!! Assignment of window.gunshotSound failed verification!");
-                             this.assets[assetKey].state = 'error'; // Correct state if assignment failed
-                             // window[assetKey] remains 'error'
+                             console.error("[LoadManager] !!! Assignment of gunshotSound data failed verification!");
+                             assetEntry.state = 'error'; // Correct state if assignment failed
                         }
                     } else {
                          console.error(`[LoadManager] !!! gunshotSound SUCCESS callback but received invalid type! Expected Audio, got ${typeof loadedAssetOrError}.`);
-                         this.assets[assetKey].state = 'error'; // Mark asset state as error
-                         // window[assetKey] remains 'error'
+                         assetEntry.state = 'error'; // Mark asset state as error
                     }
                 } else { // GLTF model/map
                     const gltfData = loadedAssetOrError;
                     const sceneObject = gltfData?.scene;
                     // Check if the extracted scene is a valid THREE.Object3D (includes Group)
                     if (sceneObject && sceneObject instanceof THREE.Object3D) {
-                        console.log(`[LoadManager] Assigning window.${assetKey} = [THREE.Object3D]`);
-                        window[assetKey] = sceneObject; // Assign the scene graph
+                        console.log(`[LoadManager] Storing THREE.Object3D data for ${assetKey}`);
+                        assetEntry.data = sceneObject; // Store the scene graph
 
                         // --- Post-Load Processing (Shadows, Adding to Scene) ---
                         if (assetKey === 'map' && typeof scene !== 'undefined') {
-                            scene.add(window[assetKey]);
+                            scene.add(assetEntry.data); // Add map using stored data
                             console.log(`[LoadManager] Added map to the main scene.`);
                         } else if (assetKey === 'playerModel' || assetKey === 'gunModel') {
                             // Traverse and set shadow casting properties
-                            window[assetKey].traverse(function(child) {
+                            assetEntry.data.traverse(function(child) {
                                 if (child.isMesh) {
                                     child.castShadow = (assetKey === 'playerModel'); // Player casts shadows
                                     child.receiveShadow = true; // All model parts receive shadows
@@ -195,30 +196,27 @@ const loadManager = {
                         }
                     } else {
                         console.error(`[LoadManager] !!! GLTF loaded for ${assetKey} but 'scene' is missing or not a valid THREE.Object3D!`);
-                        this.assets[assetKey].state = 'error'; // Mark asset state as error
-                        // window[assetKey] remains 'error'
+                        assetEntry.state = 'error'; // Mark asset state as error
                     }
                 }
             } else { // Explicit error from loader (onError callback was hit)
                 console.error(`[LoadManager] !!! ${assetKey} reported load failure in callback.`);
-                this.assets[assetKey].state = 'error'; // Ensure state reflects the error
-                // window[assetKey] remains 'error'
+                assetEntry.state = 'error'; // Ensure state reflects the error
             }
         } catch (e) {
             // Catch errors during the assignment/processing itself
             console.error(`[LoadManager] !!! Error during assignment/processing for ${assetKey}:`, e);
-            this.assets[assetKey].state = 'error'; // Mark as error if processing fails
-            // window[assetKey] remains 'error'
+            assetEntry.state = 'error'; // Mark as error if processing fails
         } finally {
-            // Log the final state of the global variable after try/catch/assignment attempt
-            const finalGlobalVar = window[assetKey];
-            const varType = finalGlobalVar === 'error' ? "'error'" : (finalGlobalVar ? `[${finalGlobalVar.constructor?.name || typeof finalGlobalVar}]` : String(finalGlobalVar));
-            console.log(`[LoadManager] Final value of window.${assetKey} after callback processing: ${varType}`);
+             // Log the final state of the stored data
+            const finalData = assetEntry.data;
+            const dataType = finalData === 'error' ? "'error'" : (finalData ? `[${finalData.constructor?.name || typeof finalData}]` : String(finalData));
+            console.log(`[LoadManager] Final stored data for ${assetKey}: ${dataType}`);
         }
 
 
         // Trigger event listeners for this specific asset
-        this.trigger('assetLoaded', { key: assetKey, success: this.assets[assetKey].state === 'loaded' });
+        this.trigger('assetLoaded', { key: assetKey, success: assetEntry.state === 'loaded' });
         // Check overall completion status AFTER this asset has been processed
         this.checkCompletion();
 
@@ -231,7 +229,9 @@ const loadManager = {
 
         for (const key of this.requiredForGame) {
             const assetInfo = this.assets[key];
-            const assetState = assetInfo?.state || 'missing';
+            if (!assetInfo) { console.error(`Required asset ${key} not found in config!`); anyError = true; continue; } // Skip if not in assets list
+
+            const assetState = assetInfo.state;
 
             // Check state first - if any required asset is still pending or loading, we're not done
             if (assetState === 'pending' || assetState === 'loading') {
@@ -239,18 +239,12 @@ const loadManager = {
                 break; // Exit loop early
             }
 
-            // If not pending/loading, check if it ended in error OR if the global isn't ready according to our helper
-            // This covers cases where state might be 'loaded' but global var is 'error' or missing
+            // If not pending/loading, check if it ended in error OR if the stored data is invalid
+            // Use isAssetReady which checks state AND data validity
             if (!this.isAssetReady(key)) {
                 anyError = true;
                  // Log details only if there's an actual problem detected by isAssetReady
-                 if (assetState === 'error') {
-                    // console.warn(`[LoadManager] checkCompletion: Asset '${key}' has error state.`);
-                 } else { // State is 'loaded' or 'missing' but global isn't ready
-                    console.warn(`[LoadManager] checkCompletion: Problem detected for asset '${key}'. State: ${assetState}, isAssetReady: false.`);
-                 }
-                 // Optional: Break here if you want to fail fast on the first error/problem
-                 // break;
+                 console.warn(`[LoadManager] checkCompletion: Problem detected for required asset '${key}'. State: ${assetState}, isAssetReady: false.`);
             }
         }
 
@@ -290,5 +284,6 @@ const loadManager = {
         }
     }
 };
+// Make loadManager globally accessible (needed by other modules)
 window.loadManager = loadManager;
 console.log("loadManager.js loaded");
