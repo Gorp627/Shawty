@@ -1,11 +1,11 @@
 // docs/effects.js
 
-// Needs access to globals: scene, camera, gunViewModel, CONFIG, currentRecoilOffset, gunModel
+// Needs access to globals: scene, camera, gunViewModel, CONFIG, currentRecoilOffset, gunModel, loadManager
 // Needs access to utils: createImpactParticle
 
 const Effects = {
     muzzleFlash: null,
-    flashDuration: CONFIG.MUZZLE_FLASH_DURATION || 50, // Duration in ms
+    flashDuration: CONFIG?.MUZZLE_FLASH_DURATION || 50, // Use optional chaining and default
     flashIntensity: 3, // Adjust intensity as needed
     flashColor: 0xfff5a0, // Yellowish-white color
     flashActive: false,
@@ -27,101 +27,73 @@ const Effects = {
     triggerMuzzleFlash: function() {
         // Check essential components
         if (!this.muzzleFlash || !gunViewModel || !camera || typeof CONFIG === 'undefined' || !scene) {
-             // console.warn("[Effects] Cannot trigger muzzle flash: Prerequisites missing."); // Keep logging minimal
+             // console.warn("[Effects] Cannot trigger muzzle flash: Prerequisites missing."); // Less verbose
              return;
         }
-        // Ensure gunViewModel is properly attached to the camera for localToWorld to work correctly
         if (gunViewModel.parent !== camera) {
              console.warn("[Effects] Cannot trigger muzzle flash: Gun view model not attached to camera.");
              return;
         }
-
-        // Clear any existing timeout to reset the flash if triggered rapidly
         if (this.flashTimeout) clearTimeout(this.flashTimeout);
 
         try {
-            // Calculate world position of the muzzle offset relative to the gun view model
-            const worldMuzzlePosition = gunViewModel.localToWorld(CONFIG.MUZZLE_LOCAL_OFFSET.clone());
+            // Ensure muzzle offset exists in config
+            const muzzleOffset = CONFIG.MUZZLE_LOCAL_OFFSET ? CONFIG.MUZZLE_LOCAL_OFFSET.clone() : new THREE.Vector3(0, 0, -1); // Default offset
+            const worldMuzzlePosition = gunViewModel.localToWorld(muzzleOffset);
 
-            // Position the light at the muzzle
             this.muzzleFlash.position.copy(worldMuzzlePosition);
-
-            // Set intensity and add to scene if not already added
             this.muzzleFlash.intensity = this.flashIntensity;
             this.flashActive = true;
-            if (this.muzzleFlash.parent !== scene) {
-                 scene.add(this.muzzleFlash);
-            }
+            if (this.muzzleFlash.parent !== scene) { scene.add(this.muzzleFlash); }
 
-            // Set timeout to turn off the flash
+            const duration = CONFIG.MUZZLE_FLASH_DURATION || 50; // Get duration from config or default
             this.flashTimeout = setTimeout(() => {
                  this.muzzleFlash.intensity = 0;
                  this.flashActive = false;
-                 // Remove from scene when inactive to potentially save resources
-                 if (scene && this.muzzleFlash.parent === scene) {
-                     scene.remove(this.muzzleFlash);
-                 }
-                 this.flashTimeout = null; // Clear timeout reference
-            }, this.flashDuration);
+                 if (scene && this.muzzleFlash.parent === scene) { scene.remove(this.muzzleFlash); }
+                 this.flashTimeout = null;
+            }, duration);
 
         } catch (e) {
             console.error("[Effects] Muzzle flash error:", e);
-            // Ensure flash is turned off in case of error
             this.muzzleFlash.intensity = 0;
             if (scene && this.muzzleFlash.parent === scene) scene.remove(this.muzzleFlash);
-            if (this.flashTimeout) clearTimeout(this.flashTimeout);
-            this.flashTimeout = null;
+            if (this.flashTimeout) clearTimeout(this.flashTimeout); this.flashTimeout = null;
         }
     },
 
-    // Placeholder for creating impact effects (e.g., particles)
     createImpact: function(position) {
          if (!position) return;
-         // Use utility function if available
          if (typeof createImpactParticle === 'function') {
-             const particleCount = CONFIG?.BULLET_IMPACT_PARTICLES || 5; // Use config value or default
-             for (let i = 0; i < particleCount; i++) {
-                 createImpactParticle(position);
-             }
-         } else {
-             console.warn("[Effects] createImpactParticle utility function not found.");
-         }
+             const particleCount = CONFIG?.BULLET_IMPACT_PARTICLES || 5;
+             for (let i = 0; i < particleCount; i++) { createImpactParticle(position); }
+         } else { console.warn("[Effects] createImpactParticle utility function not found."); }
      },
 
-     // Placeholder for updating ongoing effects (e.g., particle movement)
     update: function(deltaTime) {
-        // Update particle systems or other time-dependent effects here
+        // Placeholder for future particle/effect updates
     },
 
-    // Updates the position and handles recoil recovery for the gun view model
     updateViewModel: function(deltaTime) {
-         // Check required globals
-         if(!gunViewModel || !camera || typeof CONFIG === 'undefined' || typeof currentRecoilOffset === 'undefined') return;
-
-         // Smoothly interpolate recoil offset back to zero
-         currentRecoilOffset.lerp(new THREE.Vector3(0, 0, 0), deltaTime * CONFIG.RECOIL_RECOVER_SPEED);
-
-         // Calculate final position including base offset and current recoil offset
-         const finalPosition = CONFIG.GUN_POS_OFFSET.clone().add(currentRecoilOffset);
+         if(!gunViewModel || !camera || !CONFIG || !currentRecoilOffset) return; // Check required globals
+         const recoverSpeed = CONFIG.RECOIL_RECOVER_SPEED || 10; // Use config or default
+         currentRecoilOffset.lerp(new THREE.Vector3(0, 0, 0), deltaTime * recoverSpeed);
+         const baseOffset = CONFIG.GUN_POS_OFFSET ? CONFIG.GUN_POS_OFFSET.clone() : new THREE.Vector3(0, 0, 0); // Use config or default
+         const finalPosition = baseOffset.add(currentRecoilOffset);
          gunViewModel.position.copy(finalPosition);
-
-         // Rotation is handled implicitly by the gunViewModel being a child of the camera
     },
 
-    // Attaches the loaded gun model to the camera to act as a view model
     attachGunViewModel: function() {
          console.log("[Effects] Attempting to attach gun view model...");
 
-         // ** MODIFIED Prerequisite Check - Explicitly use window.gunModel **
-         const gunModelIsReady = !!(window.gunModel && window.gunModel !== 'error' && window.gunModel instanceof THREE.Object3D);
-         const cameraIsReady = !!(camera); // camera is already global
-         const configIsReady = !!(CONFIG); // CONFIG is already global
+         // *** ADDED CHECK: Use loadManager.isAssetReady for robustness ***
+         const gunModelIsReady = loadManager && loadManager.isAssetReady('gunModel') && window.gunModel instanceof THREE.Object3D;
+         const cameraIsReady = !!(camera);
+         const configIsReady = !!(CONFIG);
 
-         // Log the results of the checks performed *inside* this function
          console.log(`[Effects] >>> attachGunViewModel Checks: gunModelIsReady=${gunModelIsReady}, cameraIsReady=${cameraIsReady}, configIsReady=${configIsReady}`);
 
          if (!gunModelIsReady || !cameraIsReady || !configIsReady) {
-             // Use the results just checked for the log message
              console.warn(`[Effects] Cannot attach gun: Prereqs missing/fail. gun=${gunModelIsReady}, cam=${cameraIsReady}, cfg=${configIsReady}`);
              return; // Stop if prerequisites aren't met
          }
@@ -137,22 +109,21 @@ const Effects = {
          }
 
          try {
-             // *** ADDED LOGGING FOR VALUES USED ***
-             console.log("[Effects] Cloning gun model. Using Offset:", CONFIG.GUN_POS_OFFSET.toArray(), "Scale:", CONFIG.GUN_SCALE);
+             // Use config values with defaults
+             const gunScale = CONFIG.GUN_SCALE || 0.1;
+             const gunOffset = CONFIG.GUN_POS_OFFSET ? CONFIG.GUN_POS_OFFSET.clone() : new THREE.Vector3(0, -0.2, -0.5);
 
-             gunViewModel = window.gunModel.clone(); // Clone from the explicitly checked global
+             console.log("[Effects] Cloning gun model. Using Offset:", gunOffset.toArray(), "Scale:", gunScale);
+             gunViewModel = window.gunModel.clone(); // Clone from the verified global model
 
-             gunViewModel.scale.set(CONFIG.GUN_SCALE, CONFIG.GUN_SCALE, CONFIG.GUN_SCALE);
-             gunViewModel.position.copy(CONFIG.GUN_POS_OFFSET);
-             // *** Keep or comment out rotation based on testing ***
-             gunViewModel.rotation.y = Math.PI; // Rotate 180 degrees around Y (Try commenting this out if gun is still invisible)
-             // gunViewModel.rotation.set(0, 0, 0); // Try resetting rotation completely
+             gunViewModel.scale.set(gunScale, gunScale, gunScale);
+             gunViewModel.position.copy(gunOffset);
+             gunViewModel.rotation.y = Math.PI; // Standard rotation - adjust if needed based on model export
 
+             // Reset recoil state
              if (typeof currentRecoilOffset !== 'undefined') {
                  currentRecoilOffset.set(0, 0, 0);
-             } else {
-                 console.warn("[Effects] currentRecoilOffset global missing, cannot reset on attach.");
-             }
+             } else { console.warn("[Effects] currentRecoilOffset global missing."); }
 
              // Add to camera
              camera.add(gunViewModel);
@@ -164,13 +135,13 @@ const Effects = {
          }
      },
 
-    // Removes the gun view model from the camera
     removeGunViewModel: function() {
          // Check if gunViewModel exists and is attached to the camera
          if (gunViewModel && camera && gunViewModel.parent === camera) {
              try {
                  camera.remove(gunViewModel);
                  // Optional: Dispose of geometry/materials if the clone won't be reused
+                 // Consider performance implications before enabling deep disposal
                  // gunViewModel.traverse(child => { ... dispose logic ... });
                  gunViewModel = null; // Clear the global reference
                  console.log("[Effects] Gun view model removed from camera.");
@@ -179,19 +150,17 @@ const Effects = {
                  gunViewModel = null; // Ensure reference is cleared even on error
              }
          } else if (gunViewModel) {
+             // If gunViewModel exists but isn't properly parented, just clear the reference
              console.log("[Effects] Gun view model exists but is not attached to camera, clearing reference.");
              gunViewModel = null;
          }
     },
 
-    // Applies an immediate recoil impulse to the view model offset
     triggerRecoil: function() {
          // Check dependencies
          if (typeof currentRecoilOffset !== 'undefined' && typeof CONFIG !== 'undefined' && CONFIG.RECOIL_AMOUNT) {
              // Directly set the offset to the configured recoil amount
-             // The updateViewModel function will handle lerping it back to zero
              currentRecoilOffset.copy(CONFIG.RECOIL_AMOUNT);
-             // console.log("Triggered recoil, offset:", currentRecoilOffset.toArray());
          } else {
              console.error("[Effects] Cannot trigger recoil: currentRecoilOffset or CONFIG.RECOIL_AMOUNT missing!");
          }
