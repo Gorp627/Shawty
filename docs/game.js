@@ -11,7 +11,6 @@ class Game {
     constructor() {
         this.scene = null; this.camera = null; this.renderer = null; this.controls = null; this.clock = null;
         this.players = players; // Use global players object
-        // this.bullets = bullets; // REMOVED: Bullets array no longer exists globally
         this.keys = keys;       // Use global keys object
         console.log("[Game] Instance created.");
     }
@@ -119,7 +118,7 @@ class Game {
              console.log(`[Game State Listener] Transition: ${data.from} -> ${data.to}`);
              if (data.to === 'homescreen') {
                  networkIsInitialized = false; initializationData = null; console.log("[Game] Reset network flags.");
-                 if (data.from === 'playing') { console.log("[Game] Cleanup after playing..."); if(Effects)Effects.removeGunViewModel?.(); /* No bullets to clear */ for(const id in players){if(id !== localPlayerId && Network._removePlayer)Network._removePlayer(id);} players[localPlayerId]=null; delete players[localPlayerId]; localPlayerId=null; if(controls?.isLocked)controls.unlock(); }
+                 if (data.from === 'playing') { console.log("[Game] Cleanup after playing..."); /* No effects/bullets to clear */ for(const id in players){if(id !== localPlayerId && Network._removePlayer)Network._removePlayer(id);} players[localPlayerId]=null; delete players[localPlayerId]; localPlayerId=null; if(controls?.isLocked)controls.unlock(); }
              } else if (data.to === 'playing') {
                  console.log("[Game] >>> Entering 'playing' state listener."); // Simplified log
                  console.log("[Game] State transitioned to 'playing'.");
@@ -139,8 +138,8 @@ class Game {
             try{ if(updateLocalPlayer) updateLocalPlayer(dt); } catch(e){console.error("Err updateLP:",e);}
             try{ if(updateRemotePlayers) updateRemotePlayers(dt); } catch(e){console.error("Err updateRP:",e);}
             // try{ if(updateBullets) updateBullets(dt); } catch(e){console.error("Err updateB:",e);} // REMOVED call to updateBullets
-            // Try updating simplified Effects (might just handle recoil recovery now)
-            try{ if(Effects?.updateViewModel) Effects.updateViewModel(dt); } catch(e){console.error("Err Effects.update:",e);}
+            // Removed Effects.updateViewModel call as it's likely empty now
+            try{ if(Effects?.update) Effects.update(dt); } catch(e){console.error("Err Effects.update:",e);}
         }
     }
 
@@ -154,8 +153,39 @@ class Game {
     startGamePlay(data) {
         console.log('[Game] startGamePlay called.');
         localPlayerId = data.id; console.log(`[Game] Local ID: ${localPlayerId}`);
-        console.log("[Game] Clearing state."); for(const id in players)Network._removePlayer(id); players={}; /* bullets=[] REMOVED */ let iPosX=0,iPosY=0,iPosZ=0;
-        for(const id in data.players){ const sPD=data.players[id]; if(id===localPlayerId){console.log(`[Game] Init local ${sPD.name}`); players[id]={...sPD,isLocal:true,mesh:null}; iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z; const vY=iPosY+(CONFIG?.PLAYER_HEIGHT||1.8); if(controls?.getObject()){controls.getObject().position.set(iPosX,vY,iPosZ);controls.getObject().rotation.set(0,sPD.rotationY||0,0);console.log(`[Game] Set controls pos/rot.`);} velocityY=0; isOnGround=true; if(UIManager){UIManager.updateHealthBar(sPD.health);UIManager.updateInfo(`Playing as ${players[id].name}`);UIManager.clearError('homescreen');UIManager.clearKillMessage();}}else{if(Network._addPlayer)Network._addPlayer(sPD);}}
+        console.log("[Game] Clearing state."); for(const id in players)Network._removePlayer(id); players={}; /* No bullets to clear */ let iPosX=0,iPosY=0,iPosZ=0;
+
+        // Process player data from server
+        for(const id in data.players){
+            const sPD=data.players[id]; // Full player data from server {id, x, y, z, rotationY, health, name, phrase}
+            if(id===localPlayerId){
+                console.log(`[Game] Init local player: ${sPD.name}`);
+                // Store local player data directly in the global players object
+                players[id] = { ...sPD, isLocal: true, mesh: null }; // Mark as local, no mesh needed here
+                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z;
+
+                // Set initial camera/controls position based on server data
+                // Visual Y = server Y (feet) + player height
+                const visualY = iPosY + (CONFIG?.PLAYER_HEIGHT || 1.8);
+                if(controls?.getObject()){
+                    controls.getObject().position.set(iPosX, visualY, iPosZ);
+                    controls.getObject().rotation.set(0, sPD.rotationY || 0, 0); // Reset camera pitch, set yaw
+                    console.log(`[Game] Set controls pos(${iPosX.toFixed(1)}, ${visualY.toFixed(1)}, ${iPosZ.toFixed(1)}) rotY(${sPD.rotationY?.toFixed(2)})`);
+                }
+                // velocityY = 0; isOnGround = true; // REMOVED - No vertical physics state to reset
+
+                // Update UI
+                if(UIManager){
+                    UIManager.updateHealthBar(sPD.health);
+                    UIManager.updateInfo(`Playing as ${players[id].name}`);
+                    UIManager.clearError('homescreen');
+                    UIManager.clearKillMessage();
+                }
+            } else {
+                // Add remote players using the Network helper which creates ClientPlayer instances
+                if(Network._addPlayer) Network._addPlayer(sPD);
+            }
+        }
         console.log(`[Game] Init complete. ${Object.keys(players).length} players.`);
         if(stateMachine){console.log("[Game] Transitioning state to 'playing'..."); stateMachine.transitionTo('playing');}else{console.error("stateMachine missing!");}
     }
