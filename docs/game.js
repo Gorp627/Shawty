@@ -118,10 +118,26 @@ class Game {
              console.log(`[Game State Listener] Transition: ${data.from} -> ${data.to}`);
              if (data.to === 'homescreen') {
                  networkIsInitialized = false; initializationData = null; console.log("[Game] Reset network flags.");
-                 if (data.from === 'playing') { console.log("[Game] Cleanup after playing..."); /* No effects/bullets to clear */ for(const id in players){if(id !== localPlayerId && Network._removePlayer)Network._removePlayer(id);} players[localPlayerId]=null; delete players[localPlayerId]; localPlayerId=null; if(controls?.isLocked)controls.unlock(); }
+                 // Player list cleanup moved here for robustness
+                 if (data.from === 'playing') {
+                     console.log("[Game] Cleanup after playing state...");
+                     // Remove all remote players
+                     for(const id in players){
+                         if(id !== localPlayerId && Network._removePlayer){
+                             Network._removePlayer(id);
+                         }
+                     }
+                     // Clear local player reference
+                     if(players[localPlayerId]) {
+                         delete players[localPlayerId];
+                     }
+                     players = {}; // Reset players object
+                     localPlayerId = null;
+                     if(controls?.isLocked) controls.unlock();
+                     console.log("[Game] Player state cleared for homescreen.");
+                 }
              } else if (data.to === 'playing') {
-                 console.log("[Game] >>> Entering 'playing' state listener."); // Simplified log
-                 console.log("[Game] State transitioned to 'playing'.");
+                 console.log("[Game] >>> Entering 'playing' state listener.");
                  // No gun attachment needed now
                  if (UIManager && localPlayerId && players[localPlayerId]) UIManager.updateHealthBar(players[localPlayerId].health);
              } else if (data.to === 'loading' && data.options?.error) { console.error("Loading error:", data.options.message); if(controls?.isLocked)controls.unlock(); networkIsInitialized = false; assetsAreReady = false; initializationData = null;}
@@ -137,8 +153,6 @@ class Game {
         if(stateMachine.is('playing')){
             try{ if(updateLocalPlayer) updateLocalPlayer(dt); } catch(e){console.error("Err updateLP:",e);}
             try{ if(updateRemotePlayers) updateRemotePlayers(dt); } catch(e){console.error("Err updateRP:",e);}
-            // try{ if(updateBullets) updateBullets(dt); } catch(e){console.error("Err updateB:",e);} // REMOVED call to updateBullets
-            // Removed Effects.updateViewModel call as it's likely empty now
             try{ if(Effects?.update) Effects.update(dt); } catch(e){console.error("Err Effects.update:",e);}
         }
     }
@@ -153,26 +167,32 @@ class Game {
     startGamePlay(data) {
         console.log('[Game] startGamePlay called.');
         localPlayerId = data.id; console.log(`[Game] Local ID: ${localPlayerId}`);
-        console.log("[Game] Clearing state."); for(const id in players)Network._removePlayer(id); players={}; /* No bullets to clear */ let iPosX=0,iPosY=0,iPosZ=0;
+        console.log("[Game] Clearing state.");
+        // Clear existing players robustly before adding new ones
+        for(const id in players) { Network._removePlayer(id); }
+        players={};
+
+        let iPosX=0, iPosY=0, iPosZ=0;
 
         // Process player data from server
         for(const id in data.players){
-            const sPD=data.players[id]; // Full player data from server {id, x, y, z, rotationY, health, name, phrase}
-            if(id===localPlayerId){
+            const sPD = data.players[id]; // Full player data from server {id, x, y, z, rotationY, health, name, phrase}
+            if(id === localPlayerId){
                 console.log(`[Game] Init local player: ${sPD.name}`);
                 // Store local player data directly in the global players object
                 players[id] = { ...sPD, isLocal: true, mesh: null }; // Mark as local, no mesh needed here
-                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z;
+                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z; // Server sends feet Y (now should be 0)
 
                 // Set initial camera/controls position based on server data
-                // Visual Y = server Y (feet) + player height
+                // Camera Y = server Y (feet) + player height
                 const visualY = iPosY + (CONFIG?.PLAYER_HEIGHT || 1.8);
                 if(controls?.getObject()){
                     controls.getObject().position.set(iPosX, visualY, iPosZ);
                     controls.getObject().rotation.set(0, sPD.rotationY || 0, 0); // Reset camera pitch, set yaw
                     console.log(`[Game] Set controls pos(${iPosX.toFixed(1)}, ${visualY.toFixed(1)}, ${iPosZ.toFixed(1)}) rotY(${sPD.rotationY?.toFixed(2)})`);
+                } else {
+                    console.error("[Game] Controls object missing during local player spawn!");
                 }
-                // velocityY = 0; isOnGround = true; // REMOVED - No vertical physics state to reset
 
                 // Update UI
                 if(UIManager){
@@ -195,12 +215,29 @@ class Game {
 // --- Global Function: attemptEnterPlayingState ---
 function attemptEnterPlayingState() {
     console.log(`[Game] attemptEnterPlayingState called. networkReady=${networkIsInitialized}, assetsReady=${assetsAreReady}`);
-    if (networkIsInitialized && assetsAreReady && !stateMachine.is('playing')) {
-        console.log("[Game] Both ready! Starting game play...");
-        if (!initializationData) { console.error("InitData missing!"); stateMachine?.transitionTo('homescreen'); if(UIManager)UIManager.showError("Init Error",'homescreen'); return; }
-        if (currentGameInstance?.startGamePlay) { currentGameInstance.startGamePlay(initializationData); }
-        else { console.error("Game instance missing!"); stateMachine?.transitionTo('homescreen'); if(UIManager)UIManager.showError("Startup Error",'homescreen'); }
-    } else { if(!networkIsInitialized)console.log("Waiting for network init..."); if(!assetsAreReady)console.log("Waiting for assets..."); if(stateMachine?.is('playing'))console.log("Already playing."); }
+    if (networkIsInitialized && assetsAreReady && stateMachine.is('joining') && !stateMachine.is('playing')) {
+        // If we are connected, assets are ready, and we were in the 'joining' state, try sending details.
+        console.log("[Game] Network/Assets ready in 'joining' state. Sending join details...");
+        Network.sendJoinDetails(); // Server will reply with 'initialize' which triggers startGamePlay
+    } else if (networkIsInitialized && assetsAreReady && stateMachine.is('playing')) {
+        // Already playing, do nothing.
+        console.log("[Game] Already in 'playing' state.");
+    } else if (networkIsInitialized && !assetsAreReady) {
+        console.log("[Game] Network ready, waiting for assets...");
+        // If joining state, show asset loading message
+        if(stateMachine.is('joining') && UIManager?.joinButton) {
+             UIManager.joinButton.disabled = true; UIManager.joinButton.textContent = "Loading Assets...";
+        }
+    } else if (!networkIsInitialized && assetsAreReady) {
+        console.log("[Game] Assets ready, waiting for network...");
+        // If joining state, show connecting message
+         if(stateMachine.is('joining') && UIManager?.joinButton) {
+             UIManager.joinButton.disabled = true; UIManager.joinButton.textContent = "Connecting...";
+         }
+    } else {
+        // Handle other states or conditions if necessary
+        console.log(`[Game] Conditions not met for state change: Net=${networkIsInitialized}, Assets=${assetsAreReady}, State=${stateMachine.currentState}`);
+    }
 }
 window.attemptEnterPlayingState = attemptEnterPlayingState;
 
