@@ -1,60 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. Refactored</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <!-- UI Screens -->
-    <div id="loadingScreen" class="screen visible"><p>Loading...</p></div>
-    <div id="homeScreen" class="screen">
-        <h1>Shawty.</h1>
-        <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
-        <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
-        <div class="phrase-container">
-             <span>You just got </span>
-             <input type="text" id="playerPhraseInput" placeholder="..............." maxlength="20">
-        </div>
-        <button id="joinButton">Join Game</button>
-        <p id="homeScreenError" class="error-message"></p>
-    </div>
+<!-- docs/index.html -->
+<!-- ... head and body ... -->
+<!-- Libraries -->
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- In-Game UI -->
-    <div id="gameUI">
-        <div id="crosshair"></div>
-        <div id="info"></div>
-        <div id="healthBarContainer">
-            <div id="healthBarFill"></div>
-            <div id="healthText"></div>
-        </div>
-        <div id="killMessage"></div>
-    </div>
-
-    <!-- Game Canvas -->
-    <canvas id="gameCanvas"></canvas>
-
-    <!-- Libraries -->
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
-
-    <!-- Core & Game Logic - ORDER MATTERS -->
-    <script src="config.js"></script>
-    <script src="utils.js"></script>
-    <script src="stateMachine.js"></script>
-    <script src="loadManager.js"></script>
-    <script src="entities.js"></script>
-    <script src="uiManager.js"></script>
-    <script src="input.js"></script>
-    <script src="effects.js"></script>
-    <script src="network.js"></script>
-    <script src="gameLogic.js"></script> <!-- <<< MUST EXIST -->
-    <script src="game.js"></script>
-
+<!-- === Your Split Game Code - CORRECT ORDER === -->
+<script src="config.js"></script>
+<script src="utils.js"></script>
+<script src="stateMachine.js"></script>
+<script src="loadManager.js"></script>
+<script src="entities.js"></script>     <!-- Defines Player/Bullet classes -->
+<script src="uiManager.js"></script>
+<script src="input.js"></script>
+<script src="effects.js"></script>
+<script src="network.js"></script>
+<script src="gameLogic.js"></script>    <!-- Defines updatePlayer, shoot etc. -->
+<script src="game.js"></script>        <!-- Calls init/animate, uses everything -->
+<!-- ========================================== -->
 </body>
 </html>
