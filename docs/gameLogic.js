@@ -42,40 +42,12 @@ function spawnBullet(d) { if (typeof Bullet !== 'undefined') { bullets.push(new 
 function updateBullets(dT) {
     for (let i = bullets.length - 1; i >= 0; i--) {
         const bullet = bullets[i];
-        const isActive = bullet.update(dT);
+        const isActive = bullet.update(dT); // Update position and check lifetime
         if (!isActive) { bullet.remove(); bullets.splice(i, 1); continue; }
         const hitPlayerId = bullet.checkCollision(); // Check player collision
-        if (hitPlayerId) {
-             if (bullet.ownerId === localPlayerId) { if(typeof Network!=='undefined') Network.sendHit(hitPlayerId, CONFIG.BULLET_DAMAGE); }
-             bullet.remove(); bullets.splice(i, 1);
-        }
+        if (hitPlayerId) { if (bullet.ownerId === localPlayerId) { if(typeof Network!=='undefined') Network.sendHit(hitPlayerId, CONFIG.BULLET_DAMAGE); } bullet.remove(); bullets.splice(i, 1); }
          // TODO: Check map collision here
-         // const didHitMap = checkMapCollision(bullet.mesh.position);
-         // if (didHitMap) { createImpact(bullet.mesh.position); bullet.remove(); bullets.splice(i, 1); }
     }
 }
-
-// TODO: Implement map collision checking
-// function checkMapCollision(position) {
-//    if (!mapMesh) return false;
-//    // Raycast down, or check against collision geometry
-//    return false;
-// }
-
-// TODO: Implement health pack collision check
-// function checkHealthPackCollision() {
-//      if (!localPlayerId || !players[localPlayerId] || !activeHealthPacks) return;
-//      const playerPos = controls.getObject().position;
-//      for (const packId in activeHealthPacks) {
-//           const pack = activeHealthPacks[packId];
-//           const distSq = playerPos.distanceToSquared(pack.position);
-//           if (distSq < CONFIG.HEALTH_PACK_COLLECT_RADIUS_SQ) {
-//                console.log(`Client requesting collect HP ${packId}`);
-//                if (typeof Network !== 'undefined') Network.sendCollectHealthPack(packId);
-//                // Optimistic removal? Or wait for server confirmation?
-//                // pack.remove(); delete activeHealthPacks[packId];
-//           }
-//      }
-// }
 
 console.log("gameLogic.js loaded");
