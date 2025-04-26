@@ -6,6 +6,7 @@ const CONFIG = {
     SOUND_PATH_GUNSHOT: 'assets/maps/gunshot.wav',
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
     GUN_MODEL_PATH: 'assets/maps/gun2.glb',
+    // HEALTH_PACK_MODEL_PATH: 'assets/models/health_pack.glb', // Removed
 
     PLAYER_HEIGHT: 1.8, PLAYER_RADIUS: 0.4,
     MOVEMENT_SPEED: 6.0, MOVEMENT_SPEED_SPRINTING: 9.5,
@@ -23,6 +24,8 @@ const CONFIG = {
     MUZZLE_FLASH_DURATION: 60, MUZZLE_FLASH_SCALE: 0.2,
     BULLET_IMPACT_DURATION: 300, BULLET_IMPACT_PARTICLES: 5,
 
+    // Health Pack Config Removed
+
     CLIENT_UPDATE_INTERVAL: 1000 / 20,
     SERVER_BROADCAST_INTERVAL: 1000 / 15
 };
@@ -33,14 +36,14 @@ let players = {}; let bullets = []; let keys = {};
 let localPlayerId = null; let localPlayerName = 'Anonymous'; let localPlayerPhrase = '...';
 let lastDashTime = 0;
 
-// Three.js essentials
+// Three.js essentials needed globally - INITIALIZED in game.js now
 let scene, camera, renderer, controls, clock, loader, dracoLoader;
 
-// UI Element Refs
+// UI Element Refs - Assigned in UIManager.initialize
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
 
-// Asset Refs
+// Asset Refs - Assigned by LoadManager
 let mapMesh = null, playerModel = null, gunModel = null, gunViewModel = null, gunshotSound;
 
 // Physics State
@@ -49,4 +52,4 @@ let velocityY = 0; let isOnGround = false;
 // Recoil State
 let currentRecoilOffset = new THREE.Vector3(0, 0, 0);
 
-console.log("config.js loaded");
+console.log("config.js loaded"); // Keep this log
