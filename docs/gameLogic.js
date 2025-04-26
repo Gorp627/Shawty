@@ -15,6 +15,7 @@ function updateLocalPlayer(deltaTime) {
     const localPlayerData = localPlayerId ? players[localPlayerId] : null;
     const isAlive = localPlayerData && localPlayerData.health > 0;
     if (!isPlaying || !isLocked || !localPlayerData || !isAlive) {
+        // console.log(`UpdateLocalPlayer skipped: P${isPlaying} L${isLocked} D${!!localPlayerData} A${isAlive}`); // Debug skip reason
         return; // Skip update if conditions not met
     }
 
@@ -62,6 +63,7 @@ function updateLocalPlayer(deltaTime) {
             if (distanceXZ < collisionRadius * 2) {
                 controlsObject.position.x = previousPosition.x;
                 controlsObject.position.z = previousPosition.z;
+                // Optional: Add a small push-back force here instead of just stopping
                 break; // Stop checking after one collision
             }
         }
@@ -93,7 +95,8 @@ function updateLocalPlayer(deltaTime) {
         // Note: Small multipliers added (.1) to make kick less extreme. Adjust as needed.
         // A negative sign is used for pitch because positive recoil Y should kick camera UP (negative X rotation)
         camera.rotation.x -= currentRecoilOffset.y * 0.1;
-        // camera.rotation.y -= currentRecoilOffset.x * 0.1; // Direct Y rotation interferes with PointerLockControls; handle differently if needed.
+        // Applying yaw (Y rotation) directly can interfere with PointerLockControls; omit for now
+        // controlsObject.rotation.y -= currentRecoilOffset.x * 0.1;
     }
     // Ensure the recoil recovery logic still runs
     if (Effects?.updateViewModel) Effects.updateViewModel(deltaTime);
@@ -104,7 +107,7 @@ function updateLocalPlayer(deltaTime) {
     const logicalPosition = controlsObject.position.clone();
     logicalPosition.y -= CONFIG.PLAYER_HEIGHT;
 
-    // Get current Y rotation (Yaw) from camera controls object
+    // Get current Y rotation (Yaw) from camera controls object's quaternion
     const currentRotation = new THREE.Euler().setFromQuaternion(controlsObject.quaternion, 'YXZ');
     const currentRotationY = currentRotation.y;
 
@@ -182,6 +185,7 @@ function shoot() {
 function spawnBullet(data) {
     // Add a small delay? Removed for now for simplicity.
     if (typeof Bullet !== 'undefined') {
+        // Ensure bullet isn't spawned if the shooter isn't known locally (edge case)
         if (players[data.shooterId] || data.shooterId === localPlayerId) {
              bullets.push(new Bullet(data));
         } else {
@@ -197,30 +201,43 @@ function updateBullets(deltaTime) {
     // Iterate backwards for safe removal during loop
     for (let i = bullets.length - 1; i >= 0; i--) {
         const bullet = bullets[i];
-        if (!bullet || !bullet.update) { // Safety check
+        if (!bullet || !bullet.update) { // Add safety check for bullet object
              console.warn("Invalid bullet object in array at index", i);
-             bullets.splice(i, 1); continue;
+             bullets.splice(i, 1); // Remove invalid entry
+             continue;
         }
-        const isActive = bullet.update(deltaTime);
+        const isActive = bullet.update(deltaTime); // Update position, check lifetime/bounds
 
         if (!isActive) {
-            bullet.remove?.(); bullets.splice(i, 1); continue;
+            bullet.remove?.(); // Use optional chaining for remove method
+            bullets.splice(i, 1); // Remove from array
+            continue; // Skip to next bullet
         }
 
-        const hitPlayerId = bullet.checkCollision?.();
+        // --- Collision Check: Bullet vs Players ---
+        const hitPlayerId = bullet.checkCollision?.(); // Use optional chaining
+
         if (hitPlayerId) {
+            // console.log(`Bullet ${bullet.id} hit player ${hitPlayerId}`); // Less verbose
+            // If the local player's bullet hit someone, tell the server
             if (bullet.ownerId === localPlayerId) {
-                if(Network) Network.sendHit(hitPlayerId, CONFIG.BULLET_DAMAGE);
+                if(Network) Network.sendHit(hitPlayerId, CONFIG.BULLET_DAMAGE); // Check Network exists
             }
-            bullet.remove?.(); bullets.splice(i, 1); continue;
+            // Remove the bullet visually and logically regardless of owner
+            bullet.remove?.();
+            bullets.splice(i, 1);
+            continue; // Stop processing this bullet after hit
         }
-        // TODO: Map Collision
+
+         // --- TODO: Collision Check: Bullet vs Map ---
+         // Implement map collision detection here if needed
     }
 }
 
 /** Updates the interpolation for remote players' visual representations. */
 function updateRemotePlayers(deltaTime) {
     for (const id in players) {
+        // Only update remote players that are instances of ClientPlayer
         if (id !== localPlayerId && players[id] instanceof ClientPlayer) { // Check type
             players[id].interpolate(deltaTime);
         }
