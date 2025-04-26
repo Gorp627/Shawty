@@ -3,7 +3,7 @@
 const CONFIG = {
     SERVER_URL: 'https://gametest-psxl.onrender.com',
     MAP_PATH: 'assets/maps/map.glb',
-    // SOUND_PATH_GUNSHOT: 'assets/maps/gunshot.wav', // REMOVED - No longer needed
+    // SOUND_PATH_GUNSHOT: 'assets/maps/gunshot.wav', // REMOVED - Check loadManager if errors persist
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
 
     PLAYER_HEIGHT: 1.8, PLAYER_RADIUS: 0.4,
