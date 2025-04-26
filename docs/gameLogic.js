@@ -1,99 +1,96 @@
 // docs/gameLogic.js
 
 // Depends on: config.js, stateMachine.js, entities.js, input.js, network.js, uiManager.js
-// Accesses globals: scene, camera, controls, clock, players, velocityY, isOnGround, localPlayerId, CONFIG, THREE, ClientPlayer, Network, Input, UIManager, stateMachine, mapMesh (Expected global)
+// Accesses globals: scene, camera, controls, clock, players, velocityY, isOnGround, localPlayerId, CONFIG, THREE, ClientPlayer, Network, Input, UIManager, stateMachine, mapMesh
 
-// Create a reusable Raycaster instance for ground checks
-const groundRaycaster = new THREE.Raycaster();
-const downwardVector = new THREE.Vector3(0, -1, 0); // Reusable vector for down direction
-const rayOriginOffset = 0.1; // How far above the theoretical feet position to start the ray
-const groundCheckDistance = (CONFIG?.PLAYER_HEIGHT || 1.8) + rayOriginOffset + 0.3; // Increased buffer slightly
+// Raycaster for the new ground check method
+const multiGroundRaycaster = new THREE.Raycaster();
+const multiDownwardVector = new THREE.Vector3(0, -1, 0);
+const multiGroundCheckDistance = 0.2; // How far below the points to check - VERY SHORT
 
 /**
  * Updates the local player's state, movement, and network synchronization.
+ * Uses MULTIPLE short raycasts from player base for ground check.
  * @param {number} deltaTime Time since last frame.
  */
 function updateLocalPlayer(deltaTime) {
-    // --- Guard Clause: Ensure active play state and locked controls ---
+    // --- Guard Clause ---
     const isPlaying = stateMachine.is('playing');
-    const isLocked = controls?.isLocked; // Crucial: Only update physics/movement when locked
+    const isLocked = controls?.isLocked;
     const localPlayerData = localPlayerId ? players[localPlayerId] : null;
     const isAlive = localPlayerData && localPlayerData.health > 0;
-
-    // ** IMPORTANT: Stop processing if controls are not locked **
     if (!isPlaying || !isLocked || !localPlayerData || !isAlive) {
-        // Reset vertical velocity when unlocked to prevent accumulating speed and sudden drop on re-lock.
-        if (!isLocked) velocityY = 0;
+        if (!isLocked) velocityY = 0; // Reset velocity if unlocked to prevent drop
         return;
     }
 
     // --- Get References ---
-    const controlsObject = controls.getObject(); // Camera / Player Rig
-    const playerState = localPlayerData; // Local data cache
-
-    // --- Store Previous Position for Collision Revert ---
+    const controlsObject = controls.getObject();
+    const playerState = localPlayerData;
     const previousPosition = controlsObject.position.clone();
-
-    // --- Vertical Physics & Ground Check ---
-    let appliedGravity = true; // Assume gravity will be applied
-    let onValidGround = false; // Start assuming not on ground
     const playerHeight = CONFIG.PLAYER_HEIGHT || 1.8;
+    const playerRadius = CONFIG.PLAYER_RADIUS || 0.4;
 
-    // 1. Check if mapMesh is ready for raycasting
+    // --- Vertical Physics & Multi-Ray Ground Check ---
+    let appliedGravity = true;
+    let onValidGround = false;
+    let highestGroundY = -Infinity; // Track the highest ground point found under the player
+
+    // 1. Check Ground using Multiple Raycasts (if map is ready)
     const isMapReady = mapMesh && mapMesh instanceof THREE.Object3D && mapMesh.children.length > 0 && mapMesh.parent === scene;
     if (isMapReady) {
-        // Set raycaster origin slightly above player's feet position.
-        const rayOrigin = controlsObject.position.clone();
-        rayOrigin.y -= (playerHeight - rayOriginOffset);
+        const playerBaseY = controlsObject.position.y - playerHeight; // Y position of player's feet
+        const currentX = controlsObject.position.x;
+        const currentZ = controlsObject.position.z;
 
-        groundRaycaster.set(rayOrigin, downwardVector);
-        groundRaycaster.far = groundCheckDistance;
+        // Define points around the player base to cast from (slightly above the base)
+        const rayOrigins = [
+            new THREE.Vector3(currentX, playerBaseY + 0.1, currentZ), // Center slightly up
+            new THREE.Vector3(currentX + playerRadius * 0.5, playerBaseY + 0.1, currentZ), // Right
+            new THREE.Vector3(currentX - playerRadius * 0.5, playerBaseY + 0.1, currentZ), // Left
+            new THREE.Vector3(currentX, playerBaseY + 0.1, currentZ + playerRadius * 0.5), // Forward
+            new THREE.Vector3(currentX, playerBaseY + 0.1, currentZ - playerRadius * 0.5)  // Back
+        ];
 
-        try {
-            const intersects = groundRaycaster.intersectObject(mapMesh, true); // Recursive check
-            // console.log("Intersects:", intersects.length > 0 ? intersects[0].distance : 'None'); // Debug intersections
+        let foundHit = false;
+        for (const origin of rayOrigins) {
+             multiGroundRaycaster.set(origin, multiDownwardVector);
+             multiGroundRaycaster.far = multiGroundCheckDistance; // Short check distance
 
-            if (intersects.length > 0) {
-                let closestDistance = Infinity;
-                let groundPointY = -Infinity;
-                let foundHitBelow = false;
-
-                for (const intersect of intersects) {
-                    // Find closest hit strictly below the ray origin
-                    if (intersect.point && intersect.distance < closestDistance && intersect.point.y < rayOrigin.y) {
-                        closestDistance = intersect.distance;
-                        groundPointY = intersect.point.y;
-                        foundHitBelow = true;
-                    }
-                }
-
-                // Log intersection results
-                // console.log(`Raycast Hits: ${intersects.length}, Found Below: ${foundHitBelow}, Closest Dist: ${closestDistance.toFixed(2)}, Ground Y: ${groundPointY.toFixed(2)}`);
-
-                // Check if the closest valid hit is within tolerance
-                if (foundHitBelow && closestDistance < groundCheckDistance - 0.1) { // Use slight buffer
-                     onValidGround = true;
-                     const actualGroundY = groundPointY;
-                     const playerFeetY = controlsObject.position.y - playerHeight; // Where the player's feet currently are
-
-                     // Snap to ground if currently at or below ground level
-                     if (playerFeetY <= actualGroundY + 0.05) { // Increased tolerance slightly for snapping
-                         // console.log(`Snapping to ground. Current Base Y: ${playerFeetY.toFixed(2)}, Ground Y: ${actualGroundY.toFixed(2)}`);
-                         controlsObject.position.y = actualGroundY + playerHeight; // Snap player base to ground level
-                         if (velocityY < 0) velocityY = 0; // Stop downward momentum on landing
-                         appliedGravity = false; // Ground provides support, counteracting gravity
-                     } else {
-                         // console.log(`Above ground. Current Base Y: ${playerFeetY.toFixed(2)}, Ground Y: ${actualGroundY.toFixed(2)}`);
+             try {
+                 const intersects = multiGroundRaycaster.intersectObject(mapMesh, true);
+                 if (intersects.length > 0) {
+                     // Find the closest hit for *this specific ray*
+                     let closestHitDist = Infinity;
+                     let hitPointY = -Infinity;
+                     for(const hit of intersects) {
+                         if (hit.distance < closestHitDist) {
+                             closestHitDist = hit.distance;
+                             hitPointY = hit.point.y;
+                         }
                      }
-                }
-                 // Else: No intersection close enough below was found
-            } else {
-                 // console.log("Raycast hit nothing within range.");
+                     // If a hit was found by this ray within the short distance
+                     if (closestHitDist < multiGroundCheckDistance) {
+                         foundHit = true; // Mark that at least one ray hit ground
+                         highestGroundY = Math.max(highestGroundY, hitPointY); // Keep track of the highest ground point found
+                     }
+                 }
+             } catch (e) { console.error("Raycast error:", e); foundHit = false; break; } // Stop checking on error
+        } // End loop through ray origins
+
+        // Determine if on ground based on hits
+        if (foundHit) {
+            onValidGround = true;
+            // Snap player UP to the highest detected ground level to prevent sinking
+            if (playerBaseY <= highestGroundY + 0.05) { // If feet are at or slightly below highest point
+                controlsObject.position.y = highestGroundY + playerHeight; // Set base exactly on highest ground
+                if (velocityY < 0) velocityY = 0; // Reset downward velocity
+                appliedGravity = false; // Ground supports player
             }
-        } catch(e) { console.error("Raycast error:", e); onValidGround = false; }
-    } else {
-        // console.warn("Ground check skipped: mapMesh not ready or invalid."); // Can be spammy
-        onValidGround = false; // Cannot be on valid ground if map isn't ready
+        }
+
+    } else { // Map not ready
+        onValidGround = false;
     }
 
     // 2. Apply Gravity if airborne
@@ -101,32 +98,23 @@ function updateLocalPlayer(deltaTime) {
         velocityY -= CONFIG.GRAVITY * deltaTime;
     }
 
-    // 3. Apply resulting vertical velocity to CONTROLS OBJECT (camera rig) position
+    // 3. Apply resulting vertical velocity
     controlsObject.position.y += velocityY * deltaTime;
 
     // 4. Update global ground state flag
-    isOnGround = onValidGround; // Set global flag AFTER calculations for this frame
+    isOnGround = onValidGround;
 
-
-    // --- Horizontal Movement (Based on Input & Camera Direction) ---
+    // --- Horizontal Movement (Based on Input & Camera Direction - Inverted A/D) ---
     const moveSpeed = Input.keys['ShiftLeft'] ? CONFIG.MOVEMENT_SPEED_SPRINTING : CONFIG.MOVEMENT_SPEED;
     const deltaSpeed = moveSpeed * deltaTime;
     const forward = new THREE.Vector3(); const right = new THREE.Vector3();
     camera.getWorldDirection(forward); forward.y=0; forward.normalize();
     right.crossVectors(camera.up, forward).normalize();
     let moveDirection = new THREE.Vector3(0,0,0);
-
-    // *** Apply INVERTED A/D ***
-    if (Input.keys['KeyW']) { moveDirection.add(forward); }
-    if (Input.keys['KeyS']) { moveDirection.sub(forward); }
-    if (Input.keys['KeyA']) { moveDirection.add(right); } // A moves Right
-    if (Input.keys['KeyD']) { moveDirection.sub(right); } // D moves Left
-
-    if (moveDirection.lengthSq() > 0) {
-        moveDirection.normalize();
-        // TODO: Implement horizontal collision detection (e.g., raycast sideways, spherecast, or simple revert)
-        controlsObject.position.addScaledVector(moveDirection, deltaSpeed);
-    }
+    if(Input.keys['KeyW']){moveDirection.add(forward);} if(Input.keys['KeyS']){moveDirection.sub(forward);}
+    if(Input.keys['KeyA']){moveDirection.add(right);} // Inverted A = Right
+    if(Input.keys['KeyD']){moveDirection.sub(right);} // Inverted D = Left
+    if(moveDirection.lengthSq()>0){moveDirection.normalize(); controlsObject.position.addScaledVector(moveDirection, deltaSpeed);}
 
     // --- Dash Movement ---
     if (Input.isDashing) { controlsObject.position.addScaledVector(Input.dashDirection, CONFIG.DASH_FORCE * deltaTime); }
@@ -146,11 +134,8 @@ function updateLocalPlayer(deltaTime) {
     }
 
 
-    // --- Recoil/View Model Update REMOVED ---
-
-
     // --- Send Network Updates ---
-    const logicalPosition = controlsObject.position.clone(); logicalPosition.y -= CONFIG.PLAYER_HEIGHT;
+    const logicalPosition = controlsObject.position.clone(); logicalPosition.y -= playerHeight; // Use calculated height
     const currentRotation = new THREE.Euler().setFromQuaternion(controlsObject.quaternion, 'YXZ');
     const currentRotationY = currentRotation.y; const lastSentState = playerState;
     const posThrSq = CONFIG.PLAYER_MOVE_THRESHOLD_SQ || 0.0001; const rotThr = 0.01;
@@ -176,4 +161,4 @@ function updateRemotePlayers(deltaTime) {
     }
 }
 
-console.log("gameLogic.js loaded (Simplified - No Shooting, Raycast Ground Refined)");
+console.log("gameLogic.js loaded (Simplified - No Shooting, Multi-Raycast Ground)");
