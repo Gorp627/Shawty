@@ -2,7 +2,7 @@
 
 // --- Global Flags and Data for State Synchronization ---
 let networkIsInitialized = false; // Flag: Server sent initialize data
-let assetsAreReady = false;       // Flag: LoadManager confirmed required assets are loaded
+let assetsAreReady = false;       // Flag: LoadManager confirmed required assets are loaded via 'ready' event
 let initializationData = null;  // To store data from server's 'initialize' event
 var currentGameInstance = null; // To hold the Game instance
 
@@ -18,9 +18,9 @@ class Game {
     // --- Start Method ---
     start() {
         console.log("[Game] Starting...");
-        // Reset flags
+        // Reset synchronization flags on start
         networkIsInitialized = false;
-        assetsAreReady = false;
+        assetsAreReady = false; // Reset asset flag initially, LoadManager 'ready' event sets it true
         initializationData = null;
 
         if (!this.initializeCoreComponents()) { return; }
@@ -30,8 +30,8 @@ class Game {
         console.log("[Game] Binding LoadManager listeners...");
         if (typeof loadManager !== 'undefined') {
             loadManager.on('ready', () => {
-                console.log("[Game] LoadManager 'ready' event received. All required assets loaded.");
-                assetsAreReady = true; // Set the flag
+                console.log("[Game] LoadManager 'ready' event received. All required assets loaded successfully.");
+                assetsAreReady = true; // Set the flag: assets are confirmed ready by LM
 
                 // Assets are ready. Decide next step based on network status and current state.
                 if (networkIsInitialized) {
@@ -51,15 +51,16 @@ class Game {
                      console.log("[Game] Assets ready, Network not initialized, state is not 'loading'. No state change needed from here.");
                  }
             });
+            // Listener for LoadManager errors
             loadManager.on('error', (data) => {
                 console.error("[Game] LoadManager 'error' event received.");
                 assetsAreReady = false; // Ensure flag is false on error
-                if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:`FATAL: Asset Error!<br/>${data.message||''}`,error:true});
+                if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:`FATAL: Asset Error!<br/>${data.message||'Check console.'}`,error:true});
             });
             console.log("[Game] LoadManager listeners attached.");
         } else {
             console.error("LoadManager missing!");
-             if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:`FATAL: LoadManager Missing!`,error:true});
+            if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:`FATAL: LoadManager Missing!`,error:true});
             return; // Cannot proceed without LoadManager
         }
 
@@ -210,40 +211,49 @@ class Game {
                  // Reset network flag only when entering homescreen
                  networkIsInitialized = false;
                  initializationData = null;
-                 // ** DO NOT RESET assetsAreReady here **
+                 // ** DO NOT RESET assetsAreReady here - assets stay loaded! **
                  console.log("[Game] Reset network flags on entering homescreen.");
 
-                 if (data.from === 'playing') { // Specific cleanup from playing
+                 if (data.from === 'playing') { // Specific cleanup when stopping play
                      console.log("[Game] Cleaning up after playing state...");
-                     if(Effects) Effects.removeGunViewModel();
+                     if(Effects) Effects.removeGunViewModel(); // Remove gun view model
+                     // Clear bullets
                      bullets.forEach(b => b.remove()); bullets = [];
-                     for (const id in players) { if(Network._removePlayer) Network._removePlayer(id); } players = {}; localPlayerId = null;
-                     if (controls?.isLocked) controls.unlock();
+                     // Clear remote players (local player cleared on next join)
+                     for (const id in players) { if(id !== localPlayerId && Network._removePlayer) Network._removePlayer(id); }
+                     // players = {}; // Keep local player data? Maybe not necessary.
+                     localPlayerId = null; // Reset local ID
+                     if (controls?.isLocked) controls.unlock(); // Ensure cursor is unlocked
                  }
 
              } else if (data.to === 'playing') {
                  // *** ADDED LOGGING HERE ***
-                 console.log(`[Game] >>> Entering 'playing' state listener. Checking window.gunModel: ${window.gunModel ? 'Object' : window.gunModel}`);
+                 // Check readiness using the LoadManager helper *at the moment of transition*
+                 const isGunModelAssetReady = loadManager?.isAssetReady('gunModel');
+                 console.log(`[Game] >>> Entering 'playing' state listener. loadManager.isAssetReady('gunModel') = ${isGunModelAssetReady}`);
 
                  console.log("[Game] State transitioned to 'playing'. Attaching gun.");
                  if (Effects) {
-                     const gunModelReady = !!(window.gunModel && window.gunModel !== 'error'); // Check window.gunModel directly
-                     const cameraReady = !!camera;
-                     const configReady = !!CONFIG;
-                     // *** ADDED LOGGING HERE ***
-                     console.log(`[Game] >>> Playing State Prerequisites: gun=${gunModelReady}, cam=${cameraReady}, cfg=${configReady}`);
-
-                     if (gunModelReady && cameraReady && configReady) {
+                     // Use the check we just made
+                     if (isGunModelAssetReady && camera && CONFIG) {
+                         console.log("[Game] Prerequisites seem met based on LoadManager check. Calling attachGunViewModel...");
                          Effects.attachGunViewModel();
                      } else {
-                         console.error(`!!! Entered 'playing' but gun prerequisites not met!`);
+                         // Log details if failed
+                         console.error(`!!! Entered 'playing' but prerequisites check failed! gunAssetReady=${isGunModelAssetReady}, cam=${!!camera}, cfg=${!!CONFIG}`);
                      }
                  } else { console.error("Effects module missing!"); }
-                 if (UIManager && players[localPlayerId]) UIManager.updateHealthBar(players[localPlayerId].health);
+
+                 // Update UI health bar for local player
+                 if (UIManager && localPlayerId && players[localPlayerId]) {
+                     UIManager.updateHealthBar(players[localPlayerId].health);
+                 }
 
              } else if (data.to === 'loading' && data.options?.error) {
                  console.error("Transitioned to loading state WITH ERROR:", data.options.message);
                  if (controls?.isLocked) controls.unlock();
+                 // Maybe reset flags here too?
+                 networkIsInitialized = false; assetsAreReady = false; initializationData = null;
              }
         });
         console.log("[Game] Other State Listeners Bound");
@@ -263,7 +273,6 @@ class Game {
                 UIManager.showError("Join button broken!", 'homescreen');
             }
         }
-
         // Window resize listener
         window.addEventListener('resize', this.handleResize.bind(this));
         console.log("[Game] Global Listeners added.");
@@ -312,9 +321,9 @@ class Game {
     // --- Start Game Play Method ---
     startGamePlay(data) {
         // *** ADDED LOGGING HERE ***
-        console.log(`[Game] >>> startGamePlay executing. Checking window.gunModel: ${window.gunModel ? 'Object' : window.gunModel}`);
+        console.log(`[Game] >>> startGamePlay executing. Checking loadManager.isAssetReady('gunModel'): ${loadManager?.isAssetReady('gunModel')}`);
 
-        console.log('[Game] startGamePlay called with init data.');
+        console.log('[Game] startGamePlay called.');
 
         localPlayerId = data.id;
         console.log(`[Game] Local player ID set to: ${localPlayerId}`);
@@ -326,25 +335,30 @@ class Game {
 
         let initialPosX = 0, initialPosY = 0, initialPosZ = 0;
 
+        // Populate the players object with data from the server
         for (const id in data.players) {
             const serverPlayerData = data.players[id];
             if (id === localPlayerId) {
                 console.log(`[Game] Initializing local player data for ${serverPlayerData.name}`);
-                players[id] = { ...serverPlayerData, isLocal: true, mesh: null };
+                players[id] = { ...serverPlayerData, isLocal: true, mesh: null }; // Local player uses camera controls, no mesh needed here
                 initialPosX = serverPlayerData.x; initialPosY = serverPlayerData.y; initialPosZ = serverPlayerData.z;
-                const visualY = initialPosY + (CONFIG?.PLAYER_HEIGHT || 1.8);
+                const visualY = initialPosY + (CONFIG?.PLAYER_HEIGHT || 1.8); // Camera Y position
                 if (controls?.getObject()) {
                      controls.getObject().position.set(initialPosX, visualY, initialPosZ);
-                     controls.getObject().rotation.set(0, serverPlayerData.rotationY || 0, 0);
+                     controls.getObject().rotation.set(0, serverPlayerData.rotationY || 0, 0); // Set initial camera Y rotation
+                     console.log(`[Game] Set initial controls position to (${initialPosX.toFixed(2)}, ${visualY.toFixed(2)}, ${initialPosZ.toFixed(2)}) rotY: ${(serverPlayerData.rotationY || 0).toFixed(2)}`);
                 } else { console.error("!!! Controls object missing during startGamePlay!"); }
+                // Reset physics state
                 velocityY = 0; isOnGround = true;
+                // Update UI
                 if (typeof UIManager !== 'undefined') {
                     UIManager.updateHealthBar(serverPlayerData.health);
-                    UIManager.updateInfo(`Playing as ${players[id].name}`);
+                    UIManager.updateInfo(`Playing as ${players[id].name}`); // Use name from server data
                     UIManager.clearError('homescreen'); UIManager.clearKillMessage();
                 }
             } else {
-                 if(Network._addPlayer) Network._addPlayer(serverPlayerData); // Use Network's function
+                // Add remote players using the Network utility function which creates ClientPlayer instances
+                 if(Network._addPlayer) Network._addPlayer(serverPlayerData);
                  else console.error("Network._addPlayer missing!");
             }
         }
@@ -363,7 +377,7 @@ class Game {
 // --- Global Function: attemptEnterPlayingState ---
 function attemptEnterPlayingState() {
     // *** ADDED LOGGING HERE ***
-    console.log(`[Game] >>> attemptEnterPlayingState executing. Checking window.gunModel: ${window.gunModel ? 'Object' : window.gunModel}`);
+    console.log(`[Game] >>> attemptEnterPlayingState executing. Checking loadManager.isAssetReady('gunModel'): ${loadManager?.isAssetReady('gunModel')}`);
 
     console.log(`[Game] attemptEnterPlayingState called. networkReady=${networkIsInitialized}, assetsReady=${assetsAreReady}`);
     if (networkIsInitialized && assetsAreReady && typeof stateMachine !== 'undefined' && !stateMachine.is('playing')) {
@@ -374,6 +388,7 @@ function attemptEnterPlayingState() {
              if (UIManager) UIManager.showError("Initialization Error", 'homescreen');
              return;
         }
+        // Call the actual setup function using the stored game instance
         if (currentGameInstance && typeof currentGameInstance.startGamePlay === 'function') {
              currentGameInstance.startGamePlay(initializationData);
         } else {
@@ -389,6 +404,7 @@ function attemptEnterPlayingState() {
          if (stateMachine?.is('playing')) console.log("[Game] Already in playing state.");
     }
 }
+// Make it globally accessible
 window.attemptEnterPlayingState = attemptEnterPlayingState;
 
 
@@ -397,9 +413,9 @@ function runGame() {
     console.log("--- runGame() triggered ---");
     try {
         const gameInstance = new Game();
-        window.currentGameInstance = gameInstance; // Store instance globally
+        window.currentGameInstance = gameInstance; // Store instance globally for access
         gameInstance.start();
-        window.onresize = () => gameInstance.handleResize();
+        window.onresize = () => gameInstance.handleResize(); // Use instance method for resize
     } catch (e) {
         console.error("!!! Error creating Game instance:", e);
         document.body.innerHTML = "<p style='color:red; font-size: 1.5em; text-align: center;'>GAME INITIALIZATION FAILED. Check Console.</p>";
@@ -407,10 +423,10 @@ function runGame() {
 }
 
 // --- DOM Ready Execution ---
-if (document.readyState === 'loading') {
+if (document.readyState === 'loading') { // Loading hasn't finished yet
     document.addEventListener('DOMContentLoaded', runGame);
     console.log("DOM not ready, scheduling runGame on DOMContentLoaded.");
-} else {
+} else { // `DOMContentLoaded` has already fired
     console.log("DOM ready, running runGame immediately.");
     runGame();
 }
