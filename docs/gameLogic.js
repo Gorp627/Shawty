@@ -12,10 +12,8 @@ function updatePlayer(deltaTime) {
     // Use Input.keys for movement checks
     if(Input.keys['KeyW']){controls.moveForward(dS);} if(Input.keys['KeyS']){controls.moveForward(-dS);}
     if(Input.keys['KeyA']){controls.moveRight(-dS);} if(Input.keys['KeyD']){controls.moveRight(dS);}
-    // Dash Movement (apply impulse based on dash direction)
-    if (Input.isDashing) {
-        o.position.addScaledVector(Input.dashDirection, CONFIG.DASH_FORCE * deltaTime);
-    }
+    // Dash Movement
+    if (Input.isDashing) { o.position.addScaledVector(Input.dashDirection, CONFIG.DASH_FORCE * deltaTime); }
     const cPos=o.position; for(const id in players){if(id!==localPlayerId&&players[id].mesh&&players[id].mesh.visible){const oM=players[id].mesh; const dXZ=new THREE.Vector2(cPos.x-oM.position.x,cPos.z-oM.position.z).length(); if(dXZ<CONFIG.PLAYER_COLLISION_RADIUS*2){o.position.x=pPos.x; o.position.z=pPos.z; o.position.y=cPos.y; break;}}}
     let gY=0; // TODO: Map Collision
     if(o.position.y<gY+PLAYER_HEIGHT){o.position.y=gY+PLAYER_HEIGHT;if(velocityY<0)velocityY=0;isOnGround=true;}else{isOnGround=false;}
