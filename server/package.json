@@ -1,7 +1,7 @@
 {
-  "name": "web-shooter-server",
+  "name": "shawty-server",
   "version": "1.0.0",
-  "description": "Multiplayer Web Shooter Server",
+  "description": "WebSocket server for Shawty FPS game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,10 +10,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",   
-    "socket.io": "^4.7.5" 
+    "express": "^4.19.2",    Specify express version (check npmjs.com for latest stable if needed)
+    "socket.io": "^4.7.5"  Specify socket.io version (check npmjs.com for latest stable if needed)
   },
   "engines": {
-     "node": ">=18.0.0" 
+    "node": ">=18.0.0"   Tell Render which Node version to use (use a current LTS version)
   }
 }
