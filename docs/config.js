@@ -3,9 +3,9 @@
 const CONFIG = {
     SERVER_URL: 'https://gametest-psxl.onrender.com',
     MAP_PATH: 'assets/maps/map.glb',
-    SOUND_PATH_GUNSHOT: 'assets/maps/gunshot.wav', // Ensure this path is correct
+    SOUND_PATH_GUNSHOT: 'assets/maps/gunshot.wav', // Verify this path is correct relative to index.html
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
-    GUN_MODEL_PATH: 'assets/maps/gun2.glb', // Ensure this path is correct
+    GUN_MODEL_PATH: 'assets/maps/gun2.glb',
 
     PLAYER_HEIGHT: 1.8, PLAYER_RADIUS: 0.4,
     MOVEMENT_SPEED: 6.0, MOVEMENT_SPEED_SPRINTING: 9.5,
@@ -14,18 +14,11 @@ const CONFIG = {
     GRAVITY: 25.0, JUMP_FORCE: 8.5, VOID_Y_LEVEL: -40,
     PLAYER_COLLISION_RADIUS: 0.4, KILL_MESSAGE_DURATION: 3500,
 
-    // --- DEBUG VALUES (Adjust these first) ---
-    GUN_SCALE: 0.1, // Start small but visible
-    GUN_POS_OFFSET: new THREE.Vector3(0, -0.2, -0.5), // Centered H, slightly down, close to camera
-    MUZZLE_LOCAL_OFFSET: new THREE.Vector3(0, 0, -1.0), // 1 unit forward from gun origin (adjust Y if needed)
-    // --- END DEBUG VALUES ---
-
-    // --- ORIGINAL VALUES (Restore after debugging) ---
-    // GUN_SCALE: 0.5,
-    // GUN_POS_OFFSET: new THREE.Vector3(0.35, -0.35, -0.6),
-    // MUZZLE_LOCAL_OFFSET: new THREE.Vector3(0, 0.05, -1.0),
-    // --- END ORIGINAL VALUES ---
-
+    // --- Gun Visuals - START DEBUGGING HERE ---
+    GUN_SCALE: 0.5, // Try increasing this (e.g., 1.0, 2.0) temporarily if still invisible
+    GUN_POS_OFFSET: new THREE.Vector3(0.35, -0.35, -0.6), // Adjust Z (-0.5? -0.4?), then Y (-0.3?), then X (0?)
+    MUZZLE_LOCAL_OFFSET: new THREE.Vector3(0, 0.05, -1.0), // Relative to GUN's origin. Z=-1 is forward if gun faces -Z
+    // --- END Gun Visuals ---
 
     RECOIL_AMOUNT: new THREE.Vector3(0.01, 0.025, 0.1),
     RECOIL_SIDE_AMOUNT: 0.02, // Currently unused
@@ -36,25 +29,25 @@ const CONFIG = {
     CLIENT_UPDATE_INTERVAL: 1000 / 20,
     SERVER_BROADCAST_INTERVAL: 1000 / 15,
 
-    PLAYER_DEFAULT_HEALTH: 100, // Added default health for client fallback if needed
-    PLAYER_MOVE_THRESHOLD_SQ: 0.0001 // Minimum squared distance to trigger network update
+    PLAYER_DEFAULT_HEALTH: 100,
+    PLAYER_MOVE_THRESHOLD_SQ: 0.0001
 };
 // Object.freeze(CONFIG); // Freeze after debugging is done
 
-// Global Game Variables - Declared here, assigned elsewhere
+// Global Game Variables
 let players = {}; let bullets = []; let keys = {};
 let localPlayerId = null; let localPlayerName = 'Anonymous'; let localPlayerPhrase = '...';
 let lastDashTime = 0;
 
-// Three.js essentials needed globally - Declared here, INITIALIZED in game.js
+// Three.js essentials
 let scene, camera, renderer, controls, clock, loader, dracoLoader;
 
-// UI Element Refs - Declared here, assigned in UIManager.initialize
+// UI Element Refs
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
 
-// Asset Refs - Declared here, assigned by LoadManager
-let mapMesh = null, playerModel = null, gunModel = null, gunViewModel = null, gunshotSound;
+// Asset Refs
+let mapMesh = null, playerModel = null, gunModel = null, gunViewModel = null, gunshotSound; // gunshotSound should hold the Audio object
 
 // Physics State
 let velocityY = 0; let isOnGround = false;
@@ -62,4 +55,4 @@ let velocityY = 0; let isOnGround = false;
 // Recoil State
 let currentRecoilOffset = new THREE.Vector3(0, 0, 0);
 
-console.log("config.js loaded and executed"); // Confirm this script runs
+console.log("config.js loaded and executed");
