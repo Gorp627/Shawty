@@ -78,7 +78,15 @@ class Player {
         scheduleRespawn(this.id);
     }
 
-    respawn() { this.health=CONFIG.PLAYER_DEFAULT_HEALTH;this.x=randomFloat(-10,10);this.y=5;this.z=randomFloat(-10,10);this.rotationY=0;this.needsUpdate=true;console.log(`${this.name} respawned.`); } // Respawn slightly above ground
+    respawn() {
+        this.health = CONFIG.PLAYER_DEFAULT_HEALTH;
+        this.x = randomFloat(-10, 10);
+        this.y = 0; // <<< CHANGED FROM 5 to 0 (Spawn feet at ground level)
+        this.z = randomFloat(-10, 10);
+        this.rotationY = 0;
+        this.needsUpdate = true;
+        console.log(`${this.name} respawned at y=${this.y}.`);
+    }
     getNetworkData() { return {id:this.id,x:this.x,y:this.y,z:this.z,r:this.rotationY,h:this.health};} // Lean data for frequent updates
     getFullData() { return {id:this.id,x:this.x,y:this.y,z:this.z,rotationY:this.rotationY,health:this.health,name:this.name,phrase:this.phrase};} // Full data for init/join/respawn
 }
@@ -101,8 +109,19 @@ io.on('connection', function(socket) {
 // --- Game Loop (Server Side) ---
 let lastBroadcastTime = 0; function serverGameLoop() { let stateUpdate={players:{}};let uGen=false; for(const id in players){const player = players[id];if(player.needsUpdate){stateUpdate.players[id]=player.getNetworkData();player.needsUpdate=false;uGen=true;}} if(uGen){io.emit('gameStateUpdate',stateUpdate);lastBroadcastTime=Date.now();} } const gameLoopIntervalId=setInterval(serverGameLoop,CONFIG.SERVER_BROADCAST_INTERVAL);
 // --- HTTP Server ---
-app.get('/',function(req,res){const p=path.join(__dirname,'..','docs','index.html');res.sendFile(p,function(err){if(err){console.error("Error sending index.html:",err);res.status(500).send('Server Error');} else { /* Sent OK */ } });});
-// Serve static files from docs (for assets etc.)
+// Serve index.html from the docs folder relative to server.js location
+app.get('/', function(req, res) {
+    const p = path.join(__dirname, '..', 'docs', 'index.html'); // Assumes server is in 'server/' and docs is '../docs/'
+    res.sendFile(p, function(err) {
+        if (err) {
+            console.error("Error sending index.html:", err);
+            res.status(500).send('Server Error or index.html not found');
+        } else {
+            // console.log("Sent index.html"); // Optional success log
+        }
+    });
+});
+// Serve static files (CSS, JS, assets) from docs folder
 app.use(express.static(path.join(__dirname, '..', 'docs')));
 // --- Start Server ---
 server.listen(PORT,function(){console.log(`Server listening *:${PORT}`);});
