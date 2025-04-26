@@ -1,5 +1,7 @@
 // docs/input.js
 
+// Manages keyboard and mouse state globally
+
 const Input = {
     keys: {}, mouseButtons: {}, controls: null, lastDashTime: 0, isDashing: false, dashDirection: new THREE.Vector3(),
 
@@ -15,6 +17,7 @@ const Input = {
 
     handleKeyDown: function(event) {
         this.keys[event.code] = true;
+        // Use global CONFIG object for constants
         if (event.code==='ShiftLeft' && !event.repeat && !this.isDashing && (Date.now()-this.lastDashTime>CONFIG.DASH_COOLDOWN*1000) && stateMachine.is('playing')) { this.startDash(); }
         if (event.code==='Space' && !event.repeat) { event.preventDefault(); if (typeof isOnGround !== 'undefined' && isOnGround && stateMachine.is('playing')) { velocityY = CONFIG.JUMP_FORCE; isOnGround = false; }}
     },
@@ -22,7 +25,7 @@ const Input = {
     handleMouseDown: function(event) {
          this.mouseButtons[event.button] = true;
          if (stateMachine.is('playing') && !this.controls?.isLocked) { this.controls?.lock(); }
-         else if (stateMachine.is('playing') && this.controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); }
+         else if (stateMachine.is('playing') && this.controls?.isLocked && event.button === 0) { if(typeof shoot === 'function') shoot(); } // Call global shoot
     },
     handleMouseUp: function(event) { this.mouseButtons[event.button] = false; },
     startDash: function() {
@@ -32,7 +35,7 @@ const Input = {
          if(iDir.lengthSq()===0){iDir.z=-1;} iDir.normalize();
          if(this.controls?.getObject()) { this.dashDirection.copy(iDir).applyQuaternion(this.controls.getObject().quaternion); }
          // Apply dash force in gameLogic.js based on Input.isDashing and Input.dashDirection
-         setTimeout(() => { this.isDashing = false; console.log("Dash end."); }, CONFIG.DASH_DURATION * 1000);
+         setTimeout(() => { this.isDashing = false; /* console.log("Dash end."); */ }, CONFIG.DASH_DURATION * 1000);
     }
 };
 window.Input = Input; // Export globally
