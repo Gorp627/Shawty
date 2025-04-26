@@ -13,7 +13,7 @@ const loadManager = {
 
     startLoading: function() {
         console.log("[LoadManager] Start Loading All Assets...");
-        if (!loader) {
+        if (!loader) { // Check global GLTFLoader instance
              console.error("[LoadManager] GLTF Loader (global 'loader') not initialized before startLoading!");
              this.trigger('error',{m:'GFX Loader Fail'});
              if (typeof stateMachine !== 'undefined') {
@@ -21,6 +21,19 @@ const loadManager = {
              }
              return;
         }
+         // Verify DracoLoader is attached (it should be if game.js ran correctly)
+         if (!loader.dracoLoader) {
+             console.error("[LoadManager] !!! DracoLoader is NOT attached to the GLTFLoader instance!");
+             // Consider this a fatal error for compressed assets
+              this.trigger('error',{m:'Draco Loader Missing'});
+             if (typeof stateMachine !== 'undefined') {
+                stateMachine.transitionTo('loading', {message: 'FATAL: Draco Loader Missing!', error: true});
+             }
+             return;
+         } else {
+             console.log("[LoadManager] Verified DracoLoader is attached to GLTFLoader.");
+         }
+
 
         let assetsToLoadCount = 0;
         for (const key in this.assets) {
@@ -50,36 +63,50 @@ const loadManager = {
                 manager.trigger('progress', {key:key, progress:Math.round(xhr.loaded/xhr.total*100)});
             }
         };
-        const onError = function(err){
-             console.error(`[LoadManager] Error loading ${key}:`, err);
-             manager._assetLoadedCallback(key, false, err);
-        };
+
+        // --- Success Callback ---
         const onSuccess = function(loadedAsset){
              const loadTime = Date.now() - loadStartTime;
-             console.log(`[LoadManager] Successfully loaded ${key} in ${loadTime}ms.`);
+             console.log(`[LoadManager] Successfully loaded network request for ${key} in ${loadTime}ms.`);
+             // Pass to the internal callback for processing and assignment
              manager._assetLoadedCallback(key, true, loadedAsset);
         };
 
+        // --- Explicit Error Callback ---
+        const onError = function(error){
+             console.error(`[LoadManager] !!! Loading FAILED for ${key}. Path: ${asset.path}`);
+             // Log the detailed error object provided by the loader
+             console.error(`[LoadManager] >>> Error details for ${key}:`, error);
+             // Pass error to internal callback
+             manager._assetLoadedCallback(key, false, error);
+        };
+
+
+        // --- Asset Type Specific Loading ---
         if (asset.type === 'audio') {
             try {
                  const audio = new Audio(asset.path);
                  audio.preload = 'auto';
                  const audioLoaded = () => {
-                    audio.removeEventListener('canplaythrough', audioLoaded);
-                    audio.removeEventListener('error', audioError);
-                    onSuccess(audio);
+                    audio.removeEventListener('canplaythrough', audioLoaded); audio.removeEventListener('error', audioError);
+                    onSuccess(audio); // Call general success handler
                  };
                  const audioError = (e) => {
-                    audio.removeEventListener('canplaythrough', audioLoaded);
-                    audio.removeEventListener('error', audioError);
-                    onError(e);
+                    audio.removeEventListener('canplaythrough', audioLoaded); audio.removeEventListener('error', audioError);
+                    onError(e); // Call general error handler
                  };
                  audio.addEventListener('canplaythrough', audioLoaded);
                  audio.addEventListener('error', audioError);
                  audio.load();
             } catch (e) { onError(e); }
-        } else {
-            if (!loader) { onError("GLTF Loader missing at load time"); return; }
+        } else { // Assume GLTF/GLB
+            if (!loader) { // Should not happen due to check in startLoading, but safety first
+                 onError("GLTF Loader missing at load time");
+                 return;
+            }
+            console.log(`[LoadManager] Calling GLTFLoader.load for ${key}`);
+            // Use the global GLTFLoader instance initialized in game.js
+            // Pass our explicit onError and onSuccess callbacks
             loader.load(asset.path, onSuccess, onProg, onError);
         }
     },
@@ -90,30 +117,35 @@ const loadManager = {
              return;
         }
 
+        // Update asset state ONLY based on the success flag from the callback
         this.assets[assetKey].state = success ? 'loaded' : 'error';
-        console.log(`[LoadManager] Callback for ${assetKey}: success=${success}. New state: ${this.assets[assetKey].state}`);
+        console.log(`[LoadManager] _assetLoadedCallback for ${assetKey}: success=${success}. New state: ${this.assets[assetKey].state}`);
 
         // --- Assign Global Variable ---
         try {
             if (success) {
+                // Handle successful load
                 if (assetKey === 'gunshotSound') {
                     console.log(`[LoadManager] Assigning window.gunshotSound...`);
                     window.gunshotSound = loadedAssetOrError;
-                    console.log(`[LoadManager] window.gunshotSound assigned:`, window.gunshotSound);
-                } else {
-                    const sceneObject = loadedAssetOrError?.scene;
-                    // ** More detailed logging specifically for gunModel **
-                    if (assetKey === 'gunModel') {
-                         console.log(`[LoadManager] >>> Processing gunModel callback. Success: ${success}`);
-                         console.log(`[LoadManager] >>> gunModel raw loaded data:`, loadedAssetOrError);
-                         console.log(`[LoadManager] >>> gunModel extracted scene:`, sceneObject);
-                    }
-                    console.log(`[LoadManager] Attempting assignment: window.${assetKey} = sceneObject`);
-                    if (sceneObject) {
-                        window[assetKey] = sceneObject;
-                        // ** Log immediately after assignment **
-                        console.log(`[LoadManager] Value of window.${assetKey} IMMEDIATELY after assignment:`, window[assetKey]);
+                    console.log(`[LoadManager] window.gunshotSound assigned.`);
+                } else { // GLTF model/map
+                    const gltfData = loadedAssetOrError; // Rename for clarity
+                    const sceneObject = gltfData?.scene;
+                    const sceneObjectType = Object.prototype.toString.call(sceneObject);
 
+                    console.log(`[LoadManager] Processing successful GLTF load for ${assetKey}.`);
+                    console.log(`[LoadManager] >>> Full loaded GLTF data for ${assetKey}:`, gltfData); // Log the whole object
+                    console.log(`[LoadManager] >>> Extracted scene object for ${assetKey}:`, sceneObject);
+                    console.log(`[LoadManager] >>> Type of scene object: ${sceneObjectType}`);
+
+                    // Check if the extracted scene is a valid THREE.Object3D (or Group)
+                    if (sceneObject && sceneObject instanceof THREE.Object3D) {
+                        console.log(`[LoadManager] Assigning window.${assetKey} = sceneObject`);
+                        window[assetKey] = sceneObject;
+                        console.log(`[LoadManager] Value of window.${assetKey} after assignment:`, window[assetKey]);
+
+                        // Post-Load Processing
                         if (assetKey === 'map' && typeof scene !== 'undefined') {
                             scene.add(window[assetKey]);
                             console.log(`[LoadManager] Added map to the main scene.`);
@@ -127,83 +159,78 @@ const loadManager = {
                             console.log(`[LoadManager] Traversed ${assetKey} for shadow properties.`);
                         }
                     } else {
-                         console.error(`[LoadManager] !!! GLTF loaded successfully but scene object is missing for ${assetKey}!`);
-                         this.assets[assetKey].state = 'error';
-                         window[assetKey] = 'error';
-                         console.log(`[LoadManager] Assigned window.${assetKey} = 'error' due to missing scene.`);
+                         // This case means loading seemed successful, but the scene graph wasn't extracted correctly or is invalid
+                         console.error(`[LoadManager] !!! GLTF loaded for ${assetKey} but 'scene' is missing or not a valid THREE.Object3D! Type: ${sceneObjectType}`);
+                         this.assets[assetKey].state = 'error'; // Mark as error
+                         window[assetKey] = 'error'; // Assign error string
                     }
                 }
-            } else {
-                 console.error(`[LoadManager] !!! Asset ${assetKey} failed to load. Error:`, loadedAssetOrError);
-                 window[assetKey] = 'error';
-                 console.log(`[LoadManager] Assigned window.${assetKey} = 'error'`);
+            } else { // Handle load failure reported by the loader's onError callback
+                 console.error(`[LoadManager] !!! Asset ${assetKey} processing failed load. Error object received:`, loadedAssetOrError);
+                 window[assetKey] = 'error'; // Assign string 'error'
+                 console.log(`[LoadManager] Assigned window.${assetKey} = 'error' due to load failure.`);
             }
         } catch (e) {
+             // Catch errors during the assignment/processing itself
              console.error(`[LoadManager] !!! Error during assignment/processing for ${assetKey}:`, e);
-             this.assets[assetKey].state = 'error';
+             this.assets[assetKey].state = 'error'; // Mark as error if processing fails
              window[assetKey] = 'error';
         }
 
-        this.trigger('assetLoaded', {key: assetKey, success: success && this.assets[assetKey].state !== 'error'});
 
-        // --- Check completion with a tiny delay (WORKAROUND/DIAGNOSTIC) ---
-        // This helps if the global assignment takes a micro-tick to propagate
-        // Remove this setTimeout wrapper if it doesn't help or causes other issues.
-        console.log(`[LoadManager] Scheduling checkCompletion after processing ${assetKey}`);
-        setTimeout(() => {
-             console.log(`[LoadManager] Running delayed checkCompletion after ${assetKey}`);
-             this.checkCompletion();
-        }, 10); // Wait 10 milliseconds - increase if needed for testing, but keep small.
+        // Trigger event listeners for this specific asset
+        this.trigger('assetLoaded', {key: assetKey, success: this.assets[assetKey].state === 'loaded'});
+
+        // Check overall completion status AFTER this asset has been processed
+        // Remove the setTimeout diagnostic wrapper
+        this.checkCompletion();
 
     }, // End _assetLoadedCallback
 
     checkCompletion: function() {
         let allRequiredDone = true;
         let anyError = false;
-        // Don't log every checkCompletion call unless debugging timing heavily
-        // console.log("[LoadManager] checkCompletion called. Checking required assets:", this.requiredForGame);
+        // console.log("[LoadManager] checkCompletion called..."); // Less verbose logging
 
         for (const key of this.requiredForGame) {
             const assetInfo = this.assets[key];
             const assetState = assetInfo?.state || 'missing';
             const globalVar = window[key];
 
-            // console.log(`[LoadManager] Checking asset: ${key} | State: ${assetState} | GlobalVar exists: ${!!globalVar} | GlobalVar is 'error': ${globalVar === 'error'}`);
-
             if (assetState === 'pending' || assetState === 'loading') {
                 allRequiredDone = false;
-                break; // Exit loop early if any asset is not finished loading/errored
+                break;
             }
             if (assetState === 'error' || globalVar === 'error') {
                 anyError = true;
             }
-            if (assetState === 'loaded' && !globalVar) {
-                 console.error(`[LoadManager] CRITICAL! Asset ${key} state is 'loaded' but global variable window.${key} is missing!`);
+            // Check again: if loaded state but missing global, it's an error
+            if (assetState === 'loaded' && (!globalVar || globalVar === 'error')) {
+                 console.error(`[LoadManager] Asset ${key} state 'loaded' but global var missing or error! Global:`, globalVar);
                  anyError = true;
             }
         }
 
-        // Only proceed if all assets are done (loaded or error)
-        if (!allRequiredDone) {
-            // console.log("[LoadManager] Still loading required assets...");
-            return;
-        }
+        if (!allRequiredDone) return; // Still loading...
 
-        // --- All required assets have finished attempting to load ---
-        console.log(`[LoadManager] FINAL checkCompletion status: allRequiredDone=${allRequiredDone}, anyError=${anyError}`);
+        // --- All finished ---
+        console.log(`[LoadManager] FINAL checkCompletion status: allRequiredDone=true, anyError=${anyError}`);
 
         if (anyError) {
             console.error("[LoadManager] One or more required assets failed to load or process.");
             this.trigger('error', {m:'One or more required assets failed.'});
-            if (typeof stateMachine !== 'undefined' && stateMachine.is('loading')) {
-                 stateMachine.transitionTo('loading', {message:"FATAL: Asset Load Error!", error:true});
-            } else if (typeof stateMachine !== 'undefined' && stateMachine.is('joining')) {
-                 // If error happens while joining, revert to homescreen with error
-                 stateMachine.transitionTo('homescreen', { playerCount: UIManager?.playerCountSpan?.textContent ?? '?' });
-                 if (typeof UIManager !== 'undefined') UIManager.showError("Asset Load Error!", 'homescreen');
+            if (typeof stateMachine !== 'undefined') {
+                const currentState = stateMachine.currentState;
+                if (currentState === 'loading' || currentState === 'joining') {
+                     stateMachine.transitionTo('loading', {message:"FATAL: Asset Load Error!", error:true});
+                }
+                 // If already on homescreen, maybe show error there?
+                 else if (currentState === 'homescreen' && typeof UIManager !== 'undefined') {
+                     UIManager.showError("Asset loading failed.", 'homescreen');
+                 }
             }
         } else {
-            // SUCCESS: All required assets loaded without error
+            // SUCCESS
             console.log("[LoadManager] All required assets READY.");
             this.trigger('ready');
 
@@ -220,10 +247,8 @@ const loadManager = {
                  } else if (currentState === 'joining') {
                       console.log("[LoadManager] Assets ready while Joining state active. Ensuring join details are sent...");
                       if(typeof Network !== 'undefined') Network.sendJoinDetails();
-                 } else {
-                      console.log("[LoadManager] Assets ready & Socket connected, but state is not Loading/Joining. No automatic transition needed.");
                  }
-            } else {
+            } else { // Not connected
                  console.log("[LoadManager] Assets ready, but waiting for socket connection.");
                  if (currentState === 'loading') {
                      if(typeof UIManager !== 'undefined') UIManager.showLoading("Connecting to server...");
