@@ -5,7 +5,7 @@
 // Manages its own gunViewModel internally
 
 const Effects = {
-    gunViewModel: null, // Internal reference, not global
+    gunViewModel: null, // Internal reference, managed solely by Effects
     muzzleFlash: null,
     flashDuration: CONFIG?.MUZZLE_FLASH_DURATION || 50, // Use optional chaining and default
     flashIntensity: 3, // Adjust intensity as needed
@@ -13,7 +13,7 @@ const Effects = {
     flashActive: false,
     flashTimeout: null,
 
-    initialize: function(sceneRef) { // Needs scene passed in
+    initialize: function(sceneRef) {
         if (!sceneRef) { console.error("[Effects] Scene reference is needed for initialization!"); return; }
         if (typeof THREE === 'undefined') { console.error("THREE library not loaded before Effects initialization!"); return; }
 
@@ -37,7 +37,7 @@ const Effects = {
 
 
         if (soundData && soundData instanceof Audio) {
-            console.log(`[Effects] Playing sound: ${assetKey}`);
+            // console.log(`[Effects] Playing sound: ${assetKey}`); // Less verbose success log
             try {
                  // Clone node to allow overlapping plays
                  soundData.cloneNode().play().catch(e => {
@@ -45,7 +45,8 @@ const Effects = {
                       if (e.name === 'NotAllowedError' || e.name === 'NotSupportedError') {
                          console.warn(`[Effects] Sound playback prevented for ${assetKey}: ${e.message}`);
                       } else {
-                          // console.warn(`[Effects] Sound play() promise rejected for ${assetKey}: ${e.message}`); // Less verbose
+                          // Log other promise rejections, but they might be benign (e.g., interrupting previous play)
+                          // console.warn(`[Effects] Sound play() promise rejected for ${assetKey}: ${e.message}`);
                       }
                  });
             } catch (e) {
@@ -58,29 +59,29 @@ const Effects = {
 
     // --- Muzzle Flash ---
     triggerMuzzleFlash: function() {
-        // Now depends on internal gunViewModel
-        if (!this.muzzleFlash || !this.gunViewModel || !camera || !CONFIG || !scene) return;
-        if (this.gunViewModel.parent !== camera) { // Still need parent check
-            console.warn("[Effects] Muzzle flash cannot trigger: Gun view model not child of camera.");
+        // *** Use getMuzzleWorldPosition helper ***
+        const muzzleWorldPos = this.getMuzzleWorldPosition(); // Check internal view model status
+
+        if (!this.muzzleFlash || !muzzleWorldPos || !scene) {
+            // Avoid spamming if gun isn't ready when shoot is called early
+            // console.warn("[Effects] Cannot trigger muzzle flash (muzzle pos calc failed or no light/scene).");
             return;
         }
+
         if (this.flashTimeout) clearTimeout(this.flashTimeout);
         try {
-            // Ensure muzzle offset exists in config
-            const muzzleOffset = CONFIG.MUZZLE_LOCAL_OFFSET ? CONFIG.MUZZLE_LOCAL_OFFSET.clone() : new THREE.Vector3(0,0,-1); // Default offset
-            const worldMuzzlePosition = this.gunViewModel.localToWorld(muzzleOffset); // Use internal view model
-            this.muzzleFlash.position.copy(worldMuzzlePosition);
+            this.muzzleFlash.position.copy(muzzleWorldPos); // Position flash at muzzle
             this.muzzleFlash.intensity = this.flashIntensity; this.flashActive = true;
-            if (this.muzzleFlash.parent !== scene) scene.add(this.muzzleFlash);
-            const duration = CONFIG.MUZZLE_FLASH_DURATION || 50; // Get duration from config or default
+            if (this.muzzleFlash.parent !== scene) { scene.add(this.muzzleFlash); } // Add only if not present
+            const duration = CONFIG.MUZZLE_FLASH_DURATION || 50;
             this.flashTimeout = setTimeout(() => {
                  this.muzzleFlash.intensity = 0; this.flashActive = false;
-                 if (scene && this.muzzleFlash.parent === scene) scene.remove(this.muzzleFlash);
+                 if (scene && this.muzzleFlash.parent === scene) { scene.remove(this.muzzleFlash); } // Remove when done
                  this.flashTimeout = null;
             }, duration);
         } catch (e) {
             console.error("[Effects] Muzzle flash error:", e);
-            // Cleanup on error
+             // Cleanup on error
             this.muzzleFlash.intensity = 0;
             if (scene && this.muzzleFlash.parent === scene) scene.remove(this.muzzleFlash);
             if (this.flashTimeout) clearTimeout(this.flashTimeout); this.flashTimeout = null;
@@ -94,32 +95,33 @@ const Effects = {
              const particleCount = CONFIG?.BULLET_IMPACT_PARTICLES || 5;
              for (let i = 0; i < particleCount; i++) { createImpactParticle(position); }
          } else {
-             console.warn("[Effects] createImpactParticle utility function not found.");
+             // console.warn("[Effects] createImpactParticle utility function not found."); // Less verbose
          }
      },
 
     // --- Update ---
     update: function(deltaTime) {
-        // Placeholder for future particle/effect updates
+        // Placeholder for future particle/effect updates (e.g., particle physics)
     },
 
-    // --- ViewModel Update ---
+    // --- ViewModel Update (Recoil recovery, position) ---
     updateViewModel: function(deltaTime) {
          // Use internal gunViewModel
          if(!this.gunViewModel || !camera || !CONFIG || !currentRecoilOffset) return; // Check required globals/internals
          const recoverSpeed = CONFIG.RECOIL_RECOVER_SPEED || 10; // Use config or default
-         currentRecoilOffset.lerp(new THREE.Vector3(0, 0, 0), deltaTime * recoverSpeed);
+         currentRecoilOffset.lerp(new THREE.Vector3(0, 0, 0), deltaTime * recoverSpeed); // Interpolate recoil back to zero
          const baseOffset = CONFIG.GUN_POS_OFFSET ? CONFIG.GUN_POS_OFFSET.clone() : new THREE.Vector3(0, 0, 0); // Use config or default
+         // Calculate final position = base offset + current recoil
          const finalPosition = baseOffset.add(currentRecoilOffset);
          // Apply position to the container group
          this.gunViewModel.position.copy(finalPosition);
-         // Rotation handled by parent (camera)
+         // Rotation is handled by parent (camera), but initial rotation is set in attach
     },
 
     // --- ViewModel Attachment ---
     attachGunViewModel: function() {
          console.log("[Effects] Attempting to attach gun view model...");
-         // Get data directly from loadManager
+         // Get gun model data directly from loadManager
          const gunModelData = loadManager?.getAssetData('gunModel'); // Use getter
          const cameraIsReady = !!(camera);
          const configIsReady = !!(CONFIG);
@@ -145,35 +147,33 @@ const Effects = {
 
          try {
              // Use config values with defaults
-             const gunScale = CONFIG.GUN_SCALE || 0.5; // Use default if not in config
+             const gunScale = CONFIG.GUN_SCALE || 0.5; // Default scale
              const gunOffset = CONFIG.GUN_POS_OFFSET ? CONFIG.GUN_POS_OFFSET.clone() : new THREE.Vector3(0.35, -0.35, -0.6); // Default offset
 
              console.log("[Effects] Cloning gun model data. Using Offset:", gunOffset.toArray(), "Scale:", gunScale);
 
              const clonedGunScene = gunModelData.clone(); // Clone the whole scene/group
 
-             // *** NEW: Center Geometry (Optional but often helpful) ***
-             // Calculate bounding box of the cloned model
+             // *** REMOVED Geometry Centering for simplicity - rely on offset/scale/rotation only ***
+             // If gun is still hard to position, consider uncommenting this block:
+             /*
              const box = new THREE.Box3().setFromObject(clonedGunScene);
              const center = box.getCenter(new THREE.Vector3());
-             // Offset the children so the center of the bounding box is at the object's origin (0,0,0)
-             clonedGunScene.children.forEach((child) => {
-                 child.position.sub(center);
-             });
-             console.log("[Effects] Centered gun geometry around origin based on bounding box center:", center.toArray());
-             // Now, the `gunOffset` will position this centered model relative to the camera.
-
+             clonedGunScene.children.forEach((child) => { child.position.sub(center); });
+             console.log("[Effects] Centered gun geometry around origin (center:", center.toArray(), ")");
+             */
 
              // Create a new group to act as the actual view model container
              this.gunViewModel = new THREE.Group(); // This becomes the object managed by Effects
-             this.gunViewModel.add(clonedGunScene); // Add the (now possibly centered) clone to the container group
+             this.gunViewModel.name = "GunViewModelContainer"; // Name for debugging
+             this.gunViewModel.add(clonedGunScene); // Add the original clone to the container group
 
-             // Apply scale and offset to the *container* group
+             // Apply scale, position (offset), rotation to the *container* group
              this.gunViewModel.scale.set(gunScale, gunScale, gunScale);
              this.gunViewModel.position.copy(gunOffset);
-
-             // Apply rotation to the *container* group
-             this.gunViewModel.rotation.set(0, Math.PI, 0); // Rotate container 180 degrees on Y
+             // Standard Y rotation for FPS view models (adjust if model exported differently)
+             // Try (0,0,0) if gun appears backwards or sideways
+             this.gunViewModel.rotation.set(0, Math.PI, 0);
 
              // Reset recoil state associated with the view model
              if (typeof currentRecoilOffset !== 'undefined') {
@@ -183,16 +183,6 @@ const Effects = {
              // Add the container group to the camera
              camera.add(this.gunViewModel);
              console.log("[Effects] Gun view model container attached successfully to camera.");
-
-             // --- Force Visibility Test (Temporary - Uncomment for debugging visibility) ---
-             /*
-             console.warn("--- FORCING GUN VISIBILITY TEST ---");
-             this.gunViewModel.position.set(0, 0, -0.5); // Directly in front
-             this.gunViewModel.scale.set(1, 1, 1); // Large scale
-             this.gunViewModel.rotation.set(0, 0, 0); // No rotation
-             */
-             // --- End Force Visibility Test ---
-
 
          } catch (e) {
              console.error("[Effects] Error attaching gun view model:", e);
@@ -206,9 +196,8 @@ const Effects = {
          if (this.gunViewModel && camera && this.gunViewModel.parent === camera) {
              try {
                  camera.remove(this.gunViewModel); // Remove the container group
-                 // Optional: Dispose nested objects if necessary
-                 // Need to properly traverse the clonedGunScene *within* this.gunViewModel if doing deep disposal
-                 // e.g., this.gunViewModel.traverse(obj => { /* dispose geometry/material */ });
+                 // Consider recursive disposal of clonedGunScene children if memory becomes an issue
+                 // this.gunViewModel.traverse(obj => { /* ... dispose geometry/material ... */ });
                  this.gunViewModel = null; // Clear the internal reference
                  console.log("[Effects] Gun view model removed from camera.");
              } catch (e) {
@@ -235,20 +224,24 @@ const Effects = {
 
      // --- Helper to get muzzle position ---
      getMuzzleWorldPosition: function() {
+        // *** ADDED LOGGING ***
+        // console.log(`[Effects] getMuzzleWorldPosition called. this.gunViewModel exists: ${!!this.gunViewModel}, parent is camera: ${this.gunViewModel?.parent === camera}`);
+
         // Use internal view model (the container group)
         if (this.gunViewModel && this.gunViewModel.parent === camera && CONFIG?.MUZZLE_LOCAL_OFFSET) {
              try {
-                // Calculate world position FROM THE CONTAINER GROUP using the offset
-                // The offset is relative to the container's origin, which should align with the centered gun model
-                return this.gunViewModel.localToWorld(CONFIG.MUZZLE_LOCAL_OFFSET.clone());
+                 const localOffset = CONFIG.MUZZLE_LOCAL_OFFSET.clone();
+                 // console.log(`[Effects] Calculating world position from local offset:`, localOffset.toArray());
+                 const worldPos = this.gunViewModel.localToWorld(localOffset); // Calculate world pos from container
+                 // console.log(`[Effects] Calculated muzzle world position:`, worldPos.toArray()); // Less verbose
+                 return worldPos;
              } catch(e) {
-                 console.error("[Effects] Error getting muzzle world position:", e);
+                 console.error("[Effects] Error in localToWorld for muzzle:", e);
                  return null; // Return null on error
              }
         }
-        // Return null if view model not ready/attached or config missing
-        // console.warn("[Effects] getMuzzleWorldPosition prerequisites not met."); // Can be spammy
-        return null;
+        // console.warn("[Effects] getMuzzleWorldPosition returning null (prerequisites failed)."); // Less verbose
+        return null; // Return null if view model not ready/attached or config missing
      }
 
 };
