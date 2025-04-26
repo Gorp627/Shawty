@@ -26,18 +26,22 @@ class Game {
         console.log("[Game] Binding LoadManager listeners...");
         if (typeof loadManager !== 'undefined') {
             loadManager.on('ready', () => {
-                console.log("[Game] LoadManager 'ready' event received.");
-                // Logic to transition state is now primarily handled within LoadManager.checkCompletion itself
-                // It checks Network.isConnected() internally before transitioning to homescreen.
-                // This listener might still be useful for other 'ready' actions if needed later.
-                 if (typeof Network !== 'undefined' && Network.isConnected()) {
-                     // Assets became ready AFTER socket was already connected
-                     console.log("[Game] Assets ready and socket already connected. LoadManager should handle transition.");
-                 } else if (typeof stateMachine !== 'undefined' && stateMachine.is('loading')) {
-                    // Assets ready, but socket not yet connected. Stay in loading.
-                    console.log("[Game] Assets ready, waiting for socket connection...");
-                    // UIManager.showLoading("Connecting..."); // Ensure loading message reflects this
-                 }
+                console.log("[Game] LoadManager 'ready' event received. All required assets loaded.");
+                // Assets are ready. If we are in 'joining' state AND socket is connected, send details.
+                // Network.sendJoinDetails might be called here or within Network.attemptJoinGame or socket 'connect' handler
+                // based on exact timing. Let's ensure it's called if conditions are met now.
+                if (typeof stateMachine !== 'undefined' && stateMachine.is('joining') && Network.isConnected()){
+                    console.log("[Game] Assets ready while joining and connected, ensuring join details are sent.");
+                    Network.sendJoinDetails(); // Ensure details sent if assets finish loading *while* joining
+                } else if (typeof stateMachine !== 'undefined' && stateMachine.is('loading') && Network.isConnected()){
+                    // If assets finish while loading and socket is connected, transition to homescreen
+                     console.log("[Game] Assets ready and socket connected. Transitioning to homescreen.");
+                     if (typeof UIManager !== 'undefined') {
+                        stateMachine.transitionTo('homescreen', { playerCount: UIManager.playerCountSpan?.textContent ?? '?' });
+                     } else {
+                         stateMachine.transitionTo('homescreen');
+                     }
+                }
             });
             loadManager.on('error', (data) => {
                 console.error("[Game] LoadManager 'error' event received.");
@@ -108,21 +112,21 @@ class Game {
              this.controls.addEventListener('lock', function () { console.log('[Controls] Locked'); });
              this.controls.addEventListener('unlock', function () {
                  console.log('[Controls] Unlocked');
-                 // If we unlock while playing, go back to the homescreen
-                 if (typeof stateMachine !== 'undefined' && stateMachine.is('playing')) {
-                      const currentCount = UIManager?.playerCountSpan?.textContent ?? '?';
-                      stateMachine.transitionTo('homescreen', {playerCount: currentCount});
-                 }
+                 // ** FIX: Do NOT automatically transition state on unlock **
+                 // If we unlock while playing, the player might just be pausing briefly.
+                 // Let UI handle pause menus or going back to main menu explicitly.
+                 // if (typeof stateMachine !== 'undefined' && stateMachine.is('playing')) {
+                 //      const currentCount = UIManager?.playerCountSpan?.textContent ?? '?';
+                 //      stateMachine.transitionTo('homescreen', {playerCount: currentCount});
+                 // }
              });
              controls = this.controls; // Assign global
 
              // --- Loaders (CRITICAL: Initialize here!) ---
              dracoLoader = new THREE.DRACOLoader(); // Assign global
-             // Path depends on where you host the draco decoder files relative to your HTML
-             // Often it's '/node_modules/three/examples/js/libs/draco/' or similar CDN path
              dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); // Use CDN path
-             dracoLoader.setDecoderConfig({ type: 'js' }); // Use JS decoder
-             dracoLoader.preload(); // Preload decoder module
+             dracoLoader.setDecoderConfig({ type: 'js' });
+             dracoLoader.preload();
 
              loader = new THREE.GLTFLoader(); // Assign global
              loader.setDRACOLoader(dracoLoader); // Link DRACOLoader to GLTFLoader
@@ -130,25 +134,21 @@ class Game {
 
 
              // --- Lighting ---
-             const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); // Soft ambient light
+             const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
              scene.add(ambientLight);
-             const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Brighter directional light
-             directionalLight.position.set(15, 20, 10); // Position the light
-             directionalLight.castShadow = true; // Allow shadow casting
-             // Configure shadow properties (optional but recommended)
-             directionalLight.shadow.mapSize.width = 1024; // default 512
-             directionalLight.shadow.mapSize.height = 1024; // default 512
-             // directionalLight.shadow.camera.near = 0.5; // default 0.5
-             // directionalLight.shadow.camera.far = 50; // default 500
+             const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+             directionalLight.position.set(15, 20, 10);
+             directionalLight.castShadow = true;
+             directionalLight.shadow.mapSize.width = 1024;
+             directionalLight.shadow.mapSize.height = 1024;
              scene.add(directionalLight);
-             scene.add(directionalLight.target); // Target for the light often follows the scene origin or a specific object
+             scene.add(directionalLight.target);
 
              console.log("[Game] Core Components OK.");
              return true; // Success
 
          } catch(e) {
              console.error("!!! Core Component Initialization Error:", e);
-             // Try to use UIManager, otherwise fallback to alert
              if(typeof UIManager !=='undefined' && UIManager.showError) {
                  UIManager.showError("FATAL: Graphics Initialization Error!", 'loading');
              } else {
@@ -161,10 +161,8 @@ class Game {
 
     initializeManagers() {
          console.log("[Game] Init Managers...");
-         // Check if manager scripts have loaded and exposed their objects
          if(typeof UIManager ==='undefined'||typeof Input ==='undefined'||typeof stateMachine ==='undefined'||typeof loadManager ==='undefined'||typeof Network ==='undefined'||typeof Effects ==='undefined') {
               console.error("!!! One or more required managers are undefined! Check script load order and execution.");
-              // Attempt to show error via UIManager if it exists, otherwise basic message
               if (typeof UIManager !=='undefined' && UIManager.showError){
                   UIManager.showError("FATAL: Manager Script Load Error!", 'loading');
               } else {
@@ -174,17 +172,14 @@ class Game {
          }
 
          try {
-             // Initialize managers that have an init method
              if (!UIManager.initialize()) throw new Error("UIManager failed initialization");
-             Input.init(this.controls); // Pass controls reference to Input manager
-             Effects.initialize(this.scene); // Pass scene reference to Effects manager
-             // stateMachine, loadManager, Network are objects/modules initialized differently or don't need an explicit init call here
+             Input.init(this.controls);
+             Effects.initialize(this.scene);
              console.log("[Game] Managers Initialized.");
              return true; // Success
          }
          catch (e) {
              console.error("!!! Manager Initialization Error:", e);
-             // Use UIManager if available
              if(typeof UIManager !=='undefined' && UIManager.showError) {
                 UIManager.showError("FATAL: Game Setup Error!", 'loading');
              } else {
@@ -202,27 +197,33 @@ class Game {
             console.error("UIManager or bindStateListeners missing");
         }
 
-        // Add specific game logic tied to state transitions
         stateMachine.on('transition', (data) => {
              console.log(`[Game State Listener] Transition: ${data.from} -> ${data.to}`);
              if (data.to === 'homescreen' && data.from === 'playing') {
-                 // Clean up when leaving the playing state (e.g., player unlocked controls)
+                 // Clean up when leaving the playing state
                  if (typeof Effects !== 'undefined') Effects.removeGunViewModel();
-                 bullets.forEach(b => b.remove()); // Remove existing bullet meshes
-                 bullets = []; // Clear bullet array
-                 if(players[localPlayerId]) players[localPlayerId].health = 0; // Ensure local player is marked dead UI wise if needed
-                 // Optionally clear other game elements
+                 bullets.forEach(b => b.remove());
+                 bullets = [];
+                 if(players[localPlayerId]) players[localPlayerId].health = 0; // Reset local health conceptual value
+                 // Ensure controls are unlocked if they were locked
+                 if (controls?.isLocked) controls.unlock();
+
              } else if (data.to === 'playing') {
                  // Setup when entering the playing state
                  if (typeof UIManager !== 'undefined' && players[localPlayerId]) {
-                     UIManager.updateHealthBar(players[localPlayerId].health); // Update health bar immediately
+                     UIManager.updateHealthBar(players[localPlayerId].health);
                  }
-                 if (typeof Effects !== 'undefined') {
-                     Effects.attachGunViewModel(); // Attach the gun view model
+                 // ** FIX: Check prerequisites before attaching gun **
+                 console.log("[Game] Attempting to attach gun view model on state transition to 'playing'.");
+                 console.log(`[Game] Prerequisites check: gunModel=${!!gunModel}, camera=${!!camera}, CONFIG=${!!CONFIG}`);
+                 if (typeof Effects !== 'undefined' && gunModel && gunModel !== 'error' && camera && typeof CONFIG !== 'undefined') {
+                     Effects.attachGunViewModel(); // Attach the gun view model ONLY if ready
+                 } else {
+                     console.warn("[Game] Could not attach gun view model immediately: Prerequisites not met.");
+                     // Potential fallback: Try attaching later if gunModel loads late? Needs careful handling.
                  }
              } else if (data.to === 'loading' && data.options?.error) {
                  console.error("Transitioned to loading state WITH ERROR:", data.options.message);
-                 // Potentially lock controls if they were locked
                  if (controls?.isLocked) controls.unlock();
              }
         });
@@ -231,57 +232,66 @@ class Game {
 
     addEventListeners() {
         console.log("[Game] Add global listeners...");
-        // Ensure UI elements and Network function exist before adding listener
         if (UIManager && UIManager.joinButton && typeof Network !== 'undefined' && typeof Network.attemptJoinGame === 'function') {
              UIManager.joinButton.addEventListener('click', Network.attemptJoinGame);
              console.log("[Game] 'click' listener added to joinButton.");
         } else {
             console.error("!!! Could not add joinButton listener: UIManager or Network missing/invalid!");
-            // Maybe display an error to the user if UIManager is available
             if (UIManager && UIManager.showError) {
                 UIManager.showError("Join button broken!", 'homescreen');
             }
         }
-
-        // Window resize listener
         window.addEventListener('resize', this.handleResize.bind(this));
         console.log("[Game] Global Listeners added.");
     }
 
     update(deltaTime) {
-        // Only run game logic updates when in the 'playing' state
         if (stateMachine.is('playing')) {
-            // Make sure update functions exist before calling
             if (typeof updateLocalPlayer === 'function' && localPlayerId && players[localPlayerId]) {
-                updateLocalPlayer(deltaTime);
+                 // Wrap in try-catch to prevent one error from crashing the loop
+                 try {
+                    updateLocalPlayer(deltaTime);
+                 } catch (e) {
+                     console.error("Error during updateLocalPlayer:", e);
+                     // Optional: Transition to an error state?
+                     // stateMachine.transitionTo('error', { message: "Player update failed" });
+                 }
             }
             if (typeof updateRemotePlayers === 'function') {
-                updateRemotePlayers(deltaTime);
+                try {
+                    updateRemotePlayers(deltaTime);
+                } catch (e) {
+                    console.error("Error during updateRemotePlayers:", e);
+                }
             }
             if (typeof updateBullets === 'function') {
-                updateBullets(deltaTime);
+                try {
+                    updateBullets(deltaTime);
+                } catch (e) {
+                    console.error("Error during updateBullets:", e);
+                }
             }
             if (typeof Effects !== 'undefined' && typeof Effects.update === 'function') {
-                Effects.update(deltaTime); // For particle systems or other time-based effects
+                try {
+                    Effects.update(deltaTime);
+                } catch (e) {
+                    console.error("Error during Effects.update:", e);
+                }
             }
         }
-        // Add other state-specific updates here if needed (e.g., animations on homescreen)
     }
 
     animate() {
-        requestAnimationFrame(()=>this.animate()); // Loop the animation
-        const deltaTime = this.clock ? this.clock.getDelta() : 0.016; // Get time delta, provide fallback
+        requestAnimationFrame(()=>this.animate());
+        const deltaTime = this.clock ? this.clock.getDelta() : 0.016;
 
         this.update(deltaTime); // Run game logic updates
 
-        // Render the scene if components are ready
         if(this.renderer && this.scene && this.camera) {
             try {
                 this.renderer.render(this.scene, this.camera);
             } catch (e) {
                 console.error("!!! Render error:", e);
-                // Optionally stop the loop or show a critical error message
-                // For now, just log it.
             }
         }
     }
@@ -294,7 +304,6 @@ class Game {
         if(this.renderer) {
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         }
-        // console.log("Handled resize"); // Optional: Log resize events
     }
 
 } // End Game Class
@@ -305,8 +314,7 @@ function runGame() {
     console.log("--- runGame() triggered ---");
     try {
         const gameInstance = new Game();
-        gameInstance.start(); // Start the game initialization and loop
-        // Re-assign resize handler to the instance method AFTER instance creation
+        gameInstance.start();
         window.onresize = () => gameInstance.handleResize();
     } catch (e) {
         console.error("!!! Error creating Game instance:", e);
@@ -315,11 +323,10 @@ function runGame() {
 }
 
 // --- DOM Ready Execution ---
-// Ensures HTML is parsed before scripts try to access elements
-if (document.readyState === 'loading') { // Loading hasn't finished yet
+if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', runGame);
     console.log("DOM not ready, scheduling runGame on DOMContentLoaded.");
-} else { // `DOMContentLoaded` has already fired
+} else {
     console.log("DOM ready, running runGame immediately.");
     runGame();
 }
