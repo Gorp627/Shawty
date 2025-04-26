@@ -1,33 +1,9 @@
 // docs/network.js
 
 const Network = {
-    init: function() { this.setupSocketIO(); console.log("[Network] Initialized."); },
-    isConnected: function() { return socket?.connected || false; },
-
-    setupSocketIO: function() {
-        if (typeof CONFIG === 'undefined' || !CONFIG.SERVER_URL) { console.error("! Network Config missing!"); return; }
-        console.log(`Connect: ${CONFIG.SERVER_URL}`);
-        socket = io(CONFIG.SERVER_URL,{transports:['websocket'],autoConnect:true});
-
-        // --- Socket Event Listeners ---
-        socket.on('connect', function(){console.log('Socket OK! ID:',socket.id); if(typeof checkAssetsReady === 'function') checkAssetsReady();});
-        socket.on('disconnect', function(reason){console.warn('Disconnected:',reason); if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('homescreen',{playerCount:0}); if(typeof infoDiv !== 'undefined' && infoDiv) infoDiv.textContent='Disconnected'; for(const id in players) if(typeof removePlayerMesh === 'function') removePlayerMesh(id); players={}; bullets=[];});
-        socket.on('connect_error', function(err){console.error('Connect Err:',err.message); if(typeof loadManager!=='undefined'){mapLoadState='error'; playerModelLoadState='error'; gunModelLoadState='error'; assetsReady=false;} if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading',{message:`Connect Fail!<br/>${err.message}`,error:true});});
-        socket.on('playerCountUpdate', function(count){ const pCSElement = document.getElementById('playerCount'); if(pCSElement) pCSElement.textContent = count; else console.warn("playerCountSpan missing!");});
-        socket.on('initialize', function(data){ Network.handleInitialize(data); });
-        socket.on('playerJoined', function(d){ Network.handlePlayerJoined(d); });
-        socket.on('playerLeft', function(id){ Network.handlePlayerLeft(id); });
-        socket.on('gameStateUpdate', function(d){ Network.handleGameStateUpdate(d); });
-        socket.on('shotFired', function(d){ Network.handleShotFired(d); });
-        socket.on('healthUpdate', function(d){ Network.handleHealthUpdate(d); });
-        socket.on('playerDied', function(d){ Network.handlePlayerDied(d); });
-        socket.on('playerRespawned', function(d){ Network.handlePlayerRespawned(d); });
-        socket.onAny(function(eventName, ...args) { if (eventName !== 'gameStateUpdate' && eventName !== 'playerMoved') console.log(`DEBUG Event: ${eventName}`); });
-        socket.on('ping', function(data){ console.log(">>> NET: Received 'ping'", data); });
-
-        console.log("Socket listeners attached inside Network.setupSocketIO.");
-    }, // End setupSocketIO
-
+    init: function() { /* ... Same ... */ },
+    isConnected: function() { /* ... Same ... */ },
+    setupSocketIO: function() { /* ... Same ... */ },
 
     // --- Handlers for Server Events ---
     handleGameStateUpdate: function(state) { /* ... Same ... */ },
@@ -43,57 +19,63 @@ const Network = {
      // --- Actions Sent To Server ---
      attemptJoinGame: function() {
          console.log("--- attemptJoinGame called ---");
-         // Ensure global element refs are set (should be by core.js->init)
-         if (!playerNameInput || !playerPhraseInput || !homeScreenError) { console.error("! UI elements missing for attemptJoinGame!"); return; }
 
-         localPlayerName = playerNameInput.value.trim() || 'Anonymous';
-         localPlayerPhrase = playerPhraseInput.value.trim() || '...';
-         if (!localPlayerName){homeScreenError.textContent='Enter name';return;} if(localPlayerPhrase.length>20){homeScreenError.textContent='Phrase too long';return;} homeScreenError.textContent='';
+         // *** Get element references INSIDE the function call ***
+         const pNameInput = document.getElementById('playerNameInput');
+         const pPhraseInput = document.getElementById('playerPhraseInput');
+         const hsError = document.getElementById('homeScreenError');
 
-         // *** CHECK ASSET STATUS DIRECTLY VIA LoadManager ***
+         // Check if elements were found THIS time
+         if (!pNameInput || !pPhraseInput || !hsError) {
+             console.error("!!! UI input/error elements missing when trying to join!");
+             // Optionally display a general error or try reloading?
+             alert("UI Error - please refresh.");
+             return;
+         }
+         // *** -------------------------------------------- ***
+
+         localPlayerName = pNameInput.value.trim() || 'Anonymous'; // Use local vars
+         localPlayerPhrase = pPhraseInput.value.trim() || '...';   // Use local vars
+
+         if (!localPlayerName){hsError.textContent='Enter name';return;}
+         if (localPlayerPhrase.length>20){hsError.textContent='Phrase too long';return;}
+         hsError.textContent=''; // Use local var
+
+         // Check asset status directly via LoadManager
          let currentAssetsReady = false;
          let criticalAssetError = false;
          if (typeof loadManager !== 'undefined') {
-            const mapOk = loadManager.assets.map?.state === 'loaded';
-            const pModelOk = loadManager.assets.playerModel?.state === 'loaded';
-            const gModelOk = loadManager.assets.gunModel?.state === 'loaded'; // Check gun too
-            currentAssetsReady = mapOk && pModelOk && gModelOk; // Require all defined assets
-
-            criticalAssetError = loadManager.assets.map?.state === 'error' ||
-                                 loadManager.assets.playerModel?.state === 'error' ||
-                                 loadManager.assets.gunModel?.state === 'error';
-            console.log(`Attempting Join | Current Asset States: Map=${loadManager.assets.map?.state}, PModel=${loadManager.assets.playerModel?.state}, GModel=${loadManager.assets.gunModel?.state}`);
+             const mapOk = loadManager.assets.map?.state === 'loaded';
+             const pModelOk = loadManager.assets.playerModel?.state === 'loaded';
+             const gModelOk = loadManager.assets.gunModel?.state === 'loaded';
+             currentAssetsReady = mapOk && pModelOk && gModelOk;
+             criticalAssetError = loadManager.assets.map?.state === 'error' ||
+                                  loadManager.assets.playerModel?.state === 'error' ||
+                                  loadManager.assets.gunModel?.state === 'error';
+             console.log(`Attempting Join as "${localPlayerName}" | Assets Check: ${currentAssetsReady}, Critical Error: ${criticalAssetError}`);
          } else {
-            console.error("LoadManager not available to check asset status!");
-            criticalAssetError = true; // Assume failure if manager missing
-         }
-         // ***************************************************
-
-         if (criticalAssetError) {
-            console.error("Cannot join because critical assets failed to load earlier.");
-            homeScreenError.textContent = 'Asset error. Cannot join.';
-            return; // Stop if assets definitively failed previously
+             console.error("LoadManager not available!");
+             criticalAssetError = true;
          }
 
-         console.log(`Joining as "${localPlayerName}" | Assets Check Passed: ${currentAssetsReady}`);
+         if (criticalAssetError) { hsError.textContent = 'Asset error. Cannot join.'; return; }
+
          if(typeof stateMachine!=='undefined') stateMachine.transitionTo('joining',{waitingForAssets:!currentAssetsReady}); else console.error("stateMachine missing!");
 
-         if(currentAssetsReady){ // Use the locally checked status
-             Network.sendJoinDetails(); // Assets were already ready
+         if(currentAssetsReady){
+             Network.sendJoinDetails(); // Assets ready
          } else {
-             console.log("Waiting for assets..."); // checkAssetsReady will call sendJoinDetails later via event
+             console.log("Wait assets..."); // Assets not ready
          }
      }, // End attemptJoinGame
 
-     sendJoinDetails: function() { /* ... Same as Response #73 ... */ },
-     sendPlayerUpdate: function(updateData) { /* ... Same as Response #73 ... */ },
-     sendShoot: function(shootData) { /* ... Same as Response #73 ... */ },
-     sendHit: function(targetId, damage) { /* ... Same as Response #73 ... */ },
-     sendVoidDeath: function() { /* ... Same as Response #73 ... */ }
+     sendJoinDetails: function() { /* ... Same logic using global localPlayerName/Phrase, ensures hsError/playerCountSpan exist ... */ },
+     sendPlayerUpdate: function(updateData) { /* ... Same ... */ },
+     sendShoot: function(shootData) { /* ... Same ... */ },
+     sendHit: function(targetId, damage) { /* ... Same ... */ },
+     sendVoidDeath: function() { /* ... Same ... */ }
 
 }; // End Network object
 
-// Export Network object to global scope
-window.Network = Network;
-
+window.Network = Network; // Export globally
 console.log("network.js loaded");
