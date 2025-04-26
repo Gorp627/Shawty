@@ -15,8 +15,17 @@ const loadManager = {
     // Helper to check if an asset is fully loaded and processed
     isAssetReady: function(key) {
         const asset = this.assets[key];
-        // Check if asset exists, state is 'loaded', and data is present and not the error string
-        return !!(asset && asset.state === 'loaded' && asset.data && asset.data !== 'error');
+        if (!asset) return false; // Asset not defined in config
+        const isLoadedState = asset.state === 'loaded';
+        const hasValidData = !!(asset.data && asset.data !== 'error');
+
+        // *** ADDED LOGGING INSIDE isAssetReady ***
+        if (key === 'gunModel') { // Log specifically for gunModel check
+             const dataType = asset.data === 'error' ? "'error'" : (asset.data ? `[${asset.data.constructor?.name || typeof asset.data}]` : String(asset.data));
+             console.log(`[LoadManager] isAssetReady check for 'gunModel': State='${asset.state}', Data=${dataType} -> Result=${isLoadedState && hasValidData}`);
+        }
+
+        return isLoadedState && hasValidData;
     },
 
     // Helper to retrieve loaded asset data
@@ -24,7 +33,7 @@ const loadManager = {
         if (this.isAssetReady(key)) {
             return this.assets[key].data;
         }
-        console.warn(`[LoadManager] Attempted to getAssetData for non-ready asset: ${key}`);
+        // console.warn(`[LoadManager] Attempted to getAssetData for non-ready asset: ${key}`); // Less verbose
         return null; // Return null if not ready
     },
 
@@ -93,7 +102,7 @@ const loadManager = {
         if (asset.type === 'audio') {
             try {
                 const audio = new Audio(); // Create audio element
-                console.log(`[LoadManager] Created Audio object for ${key}`);
+                // console.log(`[LoadManager] Created Audio object for ${key}`); // Less verbose
 
                 // Define event handlers scoped to this load attempt
                 const audioLoaded = () => {
@@ -118,9 +127,9 @@ const loadManager = {
 
                 audio.src = asset.path; // Set the source path
                 audio.preload = 'auto'; // Hint to browser
-                console.log(`[LoadManager] Set src for ${key} to ${asset.path}. Calling load()...`);
+                // console.log(`[LoadManager] Set src for ${key} to ${asset.path}. Calling load()...`); // Less verbose
                 audio.load(); // Explicitly call load to start fetching
-                console.log(`[LoadManager] audio.load() called for ${key}. Waiting for events...`);
+                // console.log(`[LoadManager] audio.load() called for ${key}. Waiting for events...`); // Less verbose
 
             } catch (e) {
                  console.error(`[LoadManager] Error creating/loading Audio for ${key}`, e);
@@ -131,7 +140,7 @@ const loadManager = {
                  onError("GLTF Loader missing at load time");
                  return;
             }
-            console.log(`[LoadManager] Calling GLTFLoader.load for ${key}`);
+            // console.log(`[LoadManager] Calling GLTFLoader.load for ${key}`); // Less verbose
             // Use the global GLTFLoader instance initialized in game.js
             loader.load(asset.path, onSuccess, onProg, onError);
         }
@@ -157,13 +166,13 @@ const loadManager = {
                 // Handle successful load based on type
                 if (assetKey === 'gunshotSound') {
                     // ** Critical check for Audio instance **
-                    console.log(`[LoadManager] Processing successful callback for gunshotSound. Received:`, loadedAssetOrError);
+                    // console.log(`[LoadManager] Processing successful callback for gunshotSound. Received:`, loadedAssetOrError); // Less verbose
                     if (loadedAssetOrError instanceof Audio) {
-                        console.log(`[LoadManager] Storing Audio data for ${assetKey}`);
+                        // console.log(`[LoadManager] Storing Audio data for ${assetKey}`); // Less verbose
                         assetEntry.data = loadedAssetOrError; // Store the Audio object directly
                         // ** Crucial: Verify assignment immediately **
                         if (assetEntry.data instanceof Audio) {
-                             console.log("[LoadManager] >>> gunshotSound data verified as Audio object after assignment.");
+                             // console.log("[LoadManager] >>> gunshotSound data verified as Audio object after assignment."); // Less verbose
                         } else {
                              console.error("[LoadManager] !!! Assignment of gunshotSound data failed verification!");
                              assetEntry.state = 'error'; // Correct state if assignment failed
@@ -177,7 +186,7 @@ const loadManager = {
                     const sceneObject = gltfData?.scene;
                     // Check if the extracted scene is a valid THREE.Object3D (includes Group)
                     if (sceneObject && sceneObject instanceof THREE.Object3D) {
-                        console.log(`[LoadManager] Storing THREE.Object3D data for ${assetKey}`);
+                        // console.log(`[LoadManager] Storing THREE.Object3D data for ${assetKey}`); // Less verbose
                         assetEntry.data = sceneObject; // Store the scene graph
 
                         // --- Post-Load Processing (Shadows, Adding to Scene) ---
@@ -192,7 +201,7 @@ const loadManager = {
                                     child.receiveShadow = true; // All model parts receive shadows
                                 }
                             });
-                            console.log(`[LoadManager] Traversed ${assetKey} for shadow properties.`);
+                            // console.log(`[LoadManager] Traversed ${assetKey} for shadow properties.`); // Less verbose
                         }
                     } else {
                         console.error(`[LoadManager] !!! GLTF loaded for ${assetKey} but 'scene' is missing or not a valid THREE.Object3D!`);
