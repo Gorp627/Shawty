@@ -36,59 +36,73 @@ function updateLocalPlayer(deltaTime) {
     let appliedGravity = true; // Assume gravity will be applied
     let onValidGround = false; // Start assuming not on ground
 
-    if (mapMesh && mapMesh.children.length > 0) { // Check if mapMesh is loaded and has children to intersect
-        // Set ray origin slightly above the player's feet position
+    // Only perform raycast if mapMesh exists and is a valid Object3D with children
+    if (mapMesh && mapMesh instanceof THREE.Object3D && mapMesh.children.length > 0) {
+        // Set ray origin slightly *above* the player's feet position
         const rayOrigin = controlsObject.position.clone();
-        rayOrigin.y -= (CONFIG.PLAYER_HEIGHT - rayOriginOffset); // Adjust Y to be near feet
+        rayOrigin.y -= (CONFIG.PLAYER_HEIGHT - rayOriginOffset);
 
         groundRaycaster.set(rayOrigin, downwardVector);
-        groundRaycaster.far = groundCheckDistance; // Set max distance
+        groundRaycaster.far = groundCheckDistance; // Set max distance based on player height + buffer
 
-        // Intersect with the map mesh (recursive check)
-        const intersects = groundRaycaster.intersectObject(mapMesh, true);
+        try { // Add try-catch around intersectObject as it can fail with complex meshes
+            const intersects = groundRaycaster.intersectObject(mapMesh, true); // Check recursively
 
-        if (intersects.length > 0) {
-            // Find the closest valid intersection point below the ray origin
-            let closestDistance = Infinity;
-            let groundPointY = -Infinity;
+            if (intersects.length > 0) {
+                // Find the closest intersection point strictly below the ray origin
+                let closestDistance = Infinity;
+                let groundPointY = -Infinity; // Initialize to negative infinity
 
-            for (const intersect of intersects) {
-                if (intersect.point.y < rayOrigin.y && intersect.distance < closestDistance) {
-                    closestDistance = intersect.distance;
-                    groundPointY = intersect.point.y;
+                for (const intersect of intersects) {
+                    // Ensure the intersection is valid and below the origin
+                    if (intersect.point && intersect.distance < closestDistance && intersect.point.y < rayOrigin.y) {
+                        closestDistance = intersect.distance;
+                        groundPointY = intersect.point.y;
+                    }
                 }
-            }
 
-            // If a valid ground point was found close enough
-            if (closestDistance < groundCheckDistance - 0.1) { // Use a slightly smaller check distance here to avoid floating
-                 actualGroundY = groundPointY;
-                 onValidGround = true;
+                // If a valid ground point was found close enough
+                if (closestDistance < groundCheckDistance - 0.1) { // Use slightly smaller check distance to avoid floating
+                     const actualGroundY = groundPointY; // The Y coordinate of the ground below
+                     onValidGround = true;
 
-                 // If player is penetrating or exactly on the detected ground
-                 const playerFeetY = controlsObject.position.y - CONFIG.PLAYER_HEIGHT;
-                 if (playerFeetY <= actualGroundY + 0.01) { // Allow tiny tolerance
-                     controlsObject.position.y = actualGroundY + CONFIG.PLAYER_HEIGHT; // Snap player feet to ground
-                     if (velocityY < 0) velocityY = 0; // Reset downward velocity if landing
-                     appliedGravity = false; // Gravity is countered by ground force
-                 }
+                     // Calculate where player's feet currently are (bottom of the capsule/height)
+                     const playerFeetY = controlsObject.position.y - CONFIG.PLAYER_HEIGHT;
+
+                     // If player's feet are at or below the detected ground (+ a tiny tolerance)
+                     if (playerFeetY <= actualGroundY + 0.01) {
+                         controlsObject.position.y = actualGroundY + CONFIG.PLAYER_HEIGHT; // Snap player base to ground level
+                         if (velocityY < 0) velocityY = 0; // Reset downward velocity upon landing
+                         appliedGravity = false; // Ground provides support, counteracting gravity
+                     }
+                     // Else: Player is above ground (jumping/falling), let gravity apply
+                }
+                 // Else: No intersection close enough below was found
             }
+             // Else: Ray didn't hit anything within the distance
+
+        } catch(intersectError) {
+             console.error("Error during map intersection:", intersectError);
+             onValidGround = false; // Assume not on valid ground if intersection fails
         }
+
     } else {
-         // Fallback or warning if map mesh isn't ready for raycasting
-         // console.warn("Ground check skipped: mapMesh not ready."); // Can be spammy
-         // Simple ground check could be put here if needed, but may allow walking on air
-         onValidGround = false;
+         // Fallback or warning if map mesh isn't ready
+         // console.warn("Ground check skipped: mapMesh not ready or invalid."); // Can be spammy
+         onValidGround = false; // Cannot be on valid ground if map isn't ready
+         // Let player fall if map isn't loaded/valid.
     }
 
     // Apply Gravity if not snapped to ground
     if (appliedGravity) {
          velocityY -= CONFIG.GRAVITY * deltaTime;
     }
-    // Apply vertical velocity (gravity or jump arc)
+    // Apply resultant vertical velocity
     controlsObject.position.y += velocityY * deltaTime;
 
     // Update global isOnGround flag based on raycast result
     isOnGround = onValidGround;
+
 
     // --- Horizontal Movement (Based on Input & Camera Direction) ---
     const forward = new THREE.Vector3(); const right = new THREE.Vector3();
@@ -104,7 +118,7 @@ function updateLocalPlayer(deltaTime) {
 
     if (moveDirection.lengthSq() > 0) {
         moveDirection.normalize();
-        // TODO: Implement horizontal collision check with map/obstacles before applying movement
+        // TODO: Implement horizontal collision detection before applying move
         controlsObject.position.addScaledVector(moveDirection, deltaSpeed);
     }
 
@@ -125,7 +139,10 @@ function updateLocalPlayer(deltaTime) {
     }
 
 
-    // --- Network Updates ---
+    // --- Recoil/View Model Update REMOVED ---
+
+
+    // --- Send Network Updates ---
     const logicalPosition = controlsObject.position.clone(); logicalPosition.y -= CONFIG.PLAYER_HEIGHT;
     const currentRotation = new THREE.Euler().setFromQuaternion(controlsObject.quaternion, 'YXZ');
     const currentRotationY = currentRotation.y; const lastSentState = playerState;
