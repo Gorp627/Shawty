@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shawty. Refactored</title>
-    <link rel="stylesheet" href="style.css"> <!-- Will use updated styles -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- UI Screens -->
-    <div id="loadingScreen"><p>Loading...</p></div>
-    <div id="homeScreen">
+    <div id="loadingScreen" class="screen visible"><p>Loading...</p></div> <!-- Start loading visible -->
+    <div id="homeScreen" class="screen">
         <h1>Shawty.</h1>
         <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
         <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
@@ -35,7 +35,7 @@
     <!-- Game Canvas -->
     <canvas id="gameCanvas"></canvas>
 
-    <!-- Libraries -->
+    <!-- Libraries (Order matters less here) -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
@@ -43,17 +43,17 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- Core & Game Logic -->
-    <script src="config.js"></script>
-    <script src="stateMachine.js"></script> <!-- NEW -->
-    <script src="utils.js"></script>      <!-- NEW -->
-    <script src="loadManager.js"></script> <!-- NEW -->
-    <script src="entities.js"></script>    <!-- NEW (Players, Bullets, HealthPacks) -->
-    <script src="network.js"></script>    <!-- Modified -->
-    <script src="input.js"></script>      <!-- NEW -->
-    <script src="uiManager.js"></script>  <!-- NEW -->
-    <script src="effects.js"></script>    <!-- NEW -->
-    <script src="game.js"></script>       <!-- NEW (Main game loop/init) -->
+    <!-- Core & Game Logic - ORDER MATTERS -->
+    <script src="config.js"></script>       <!-- Global constants/variables -->
+    <script src="utils.js"></script>        <!-- Helper functions -->
+    <script src="stateMachine.js"></script> <!-- Game state management -->
+    <script src="loadManager.js"></script>  <!-- Asset loading controller -->
+    <script src="entities.js"></script>     <!-- Player, Bullet classes -->
+    <script src="uiManager.js"></script>    <!-- UI DOM manipulation -->
+    <script src="input.js"></script>       <!-- Keyboard/mouse input handling -->
+    <script src="effects.js"></script>      <!-- Muzzle flash, impacts -->
+    <script src="network.js"></script>     <!-- Socket.IO communication -->
+    <script src="game.js"></script>        <!-- Main init, update, animate -->
 
 </body>
 </html>
