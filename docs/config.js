@@ -5,54 +5,66 @@ const CONFIG = {
     MAP_PATH: 'assets/maps/map.glb',
     SOUND_PATH_GUNSHOT: 'assets/maps/gunshot.wav', // Verify this path is correct relative to index.html
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
-    GUN_MODEL_PATH: 'assets/maps/gun2.glb',
+    GUN_MODEL_PATH: 'assets/maps/gun2.glb', // Verify this path is correct
 
     PLAYER_HEIGHT: 1.8, PLAYER_RADIUS: 0.4,
     MOVEMENT_SPEED: 6.0, MOVEMENT_SPEED_SPRINTING: 9.5,
     DASH_FORCE: 25.0, DASH_DURATION: 0.15, DASH_COOLDOWN: 0.8,
-    BULLET_SPEED: 75, BULLET_DAMAGE: 18, BULLET_LIFETIME: 2500, // ms
+    BULLET_SPEED: 50, // Slowed down slightly for visibility debugging
+    BULLET_DAMAGE: 18, BULLET_LIFETIME: 4000, // Increased lifetime for visibility debugging (ms)
     GRAVITY: 25.0, JUMP_FORCE: 8.5, VOID_Y_LEVEL: -40,
     PLAYER_COLLISION_RADIUS: 0.4, KILL_MESSAGE_DURATION: 3500,
 
     // --- Gun Visuals - START DEBUGGING HERE ---
-    GUN_SCALE: 0.5, // Try increasing this (e.g., 1.0, 2.0) temporarily if still invisible
-    GUN_POS_OFFSET: new THREE.Vector3(0.35, -0.35, -0.6), // Adjust Z (-0.5? -0.4?), then Y (-0.3?), then X (0?)
-    MUZZLE_LOCAL_OFFSET: new THREE.Vector3(0, 0.05, -1.0), // Relative to GUN's origin. Z=-1 is forward if gun faces -Z
-    // --- END Gun Visuals ---
+    // SYSTEMATICALLY ADJUST THESE VALUES IN config.js AND RELOAD
+    GUN_SCALE: 0.5, // Original Value - TRY LARGER FIRST (1.0, 2.0)
+    GUN_POS_OFFSET: new THREE.Vector3(0.35, -0.35, -0.6), // Original Value - TWEAK Z (-0.4?), Y (-0.2?), X (0?)
+    // --- Muzzle Offset - Relative to the GUN's Local Origin ---
+    // Adjust this AFTER the gun is visible and positioned correctly
+    MUZZLE_LOCAL_OFFSET: new THREE.Vector3(0, 0.1, -1.0), // Guess: Slightly above origin, 1 unit forward along gun's local -Z axis
+    // --- END DEBUG VALUES ---
 
-    RECOIL_AMOUNT: new THREE.Vector3(0.01, 0.025, 0.1),
-    RECOIL_SIDE_AMOUNT: 0.02, // Currently unused
-    RECOIL_RECOVER_SPEED: 22,
-    MUZZLE_FLASH_DURATION: 60, MUZZLE_FLASH_SCALE: 0.2, // Scale not currently used for light
-    BULLET_IMPACT_DURATION: 300, BULLET_IMPACT_PARTICLES: 5,
+    RECOIL_AMOUNT: new THREE.Vector3(0.01, 0.025, 0.1), // Recoil vector (x, y, z kick)
+    RECOIL_SIDE_AMOUNT: 0.02, // Sideways kick magnitude (currently unused in recoil logic)
+    RECOIL_RECOVER_SPEED: 22, // Speed at which recoil returns to normal (higher is faster)
+    MUZZLE_FLASH_DURATION: 60, // Duration of muzzle flash light (ms)
+    MUZZLE_FLASH_SCALE: 0.2, // Visual scale (if using mesh flash, not used for light)
+    BULLET_IMPACT_DURATION: 300, // How long impact particles last (ms)
+    BULLET_IMPACT_PARTICLES: 5, // Number of particles per impact
 
-    CLIENT_UPDATE_INTERVAL: 1000 / 20,
-    SERVER_BROADCAST_INTERVAL: 1000 / 15,
+    // Network update rates
+    CLIENT_UPDATE_INTERVAL: 1000 / 20, // How often client sends updates (ms)
+    SERVER_BROADCAST_INTERVAL: 1000 / 15, // How often server sends updates (ms)
 
+    // Server-side config mirrored here for reference or client-side defaults
     PLAYER_DEFAULT_HEALTH: 100,
-    PLAYER_MOVE_THRESHOLD_SQ: 0.0001
+    PLAYER_MOVE_THRESHOLD_SQ: 0.0001 // Minimum squared distance moved to trigger network update
 };
 // Object.freeze(CONFIG); // Freeze after debugging is done
 
-// Global Game Variables
-let players = {}; let bullets = []; let keys = {};
-let localPlayerId = null; let localPlayerName = 'Anonymous'; let localPlayerPhrase = '...';
-let lastDashTime = 0;
+// --- Global Game Variables ---
+// These are declared here to indicate they are global, but assigned in other modules
+let players = {}; // Populated by Network module, instances of ClientPlayer
+let bullets = []; // Populated by gameLogic/Network, instances of Bullet
+let keys = {}; // Managed by Input module
 
-// Three.js essentials
-let scene, camera, renderer, controls, clock, loader, dracoLoader;
+let localPlayerId = null; // Assigned by Network module on 'initialize'
+let localPlayerName = 'Anonymous'; // Set before joining
+let localPlayerPhrase = '...'; // Set before joining
+let lastDashTime = 0; // Managed by Input module
 
-// UI Element Refs
+// Three.js essentials needed globally
+let scene, camera, renderer, controls, clock, loader, dracoLoader; // Assigned in game.js
+
+// UI Element Refs - Declared here, assigned in UIManager.initialize
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
-let killMessageTimeout = null;
+let killMessageTimeout = null; // Managed by UIManager
 
-// Asset Refs
-let mapMesh = null, playerModel = null, gunModel = null, gunViewModel = null, gunshotSound; // gunshotSound should hold the Audio object
+// Physics State (primarily for local player)
+let velocityY = 0; // Vertical velocity for jumping/gravity
+let isOnGround = false; // Ground contact flag
 
-// Physics State
-let velocityY = 0; let isOnGround = false;
+// Recoil State (for view model)
+let currentRecoilOffset = new THREE.Vector3(0, 0, 0); // Offset applied to gunViewModel
 
-// Recoil State
-let currentRecoilOffset = new THREE.Vector3(0, 0, 0);
-
-console.log("config.js loaded and executed");
+console.log("config.js loaded and executed"); // Confirm this script runs
