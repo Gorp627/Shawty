@@ -30,6 +30,7 @@ const Effects = {
              // console.warn("[Effects] Cannot trigger muzzle flash: Prerequisites missing."); // Less verbose
              return;
         }
+        // Ensure gunViewModel is properly attached to the camera for localToWorld to work correctly
         if (gunViewModel.parent !== camera) {
              console.warn("[Effects] Cannot trigger muzzle flash: Gun view model not attached to camera.");
              return;
