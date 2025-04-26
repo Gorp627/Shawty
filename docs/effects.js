@@ -28,7 +28,7 @@ const Effects = {
         if (!loadManager) { console.error("[Effects] LoadManager missing, cannot play sound."); return; }
         // Use the getter, which checks readiness internally
         const soundData = loadManager.getAssetData(assetKey);
-        // console.log(`[Effects] Attempting sound '${assetKey}'. Data:`, soundData); // Less verbose
+        // console.log(`[Effects] Attempt sound '${assetKey}'. Data:`, soundData); // Less verbose
         if (soundData instanceof Audio) {
             try {
                 soundData.cloneNode().play().catch(e => {
@@ -40,7 +40,7 @@ const Effects = {
             }
             catch (e) { console.error(`[Effects] Error playing sound ${assetKey}:`, e); }
         } else {
-            console.warn(`[Effects] Sound asset data invalid for ${assetKey}.`);
+            console.warn(`[Effects] Sound data invalid for ${assetKey}.`);
         }
     },
 
