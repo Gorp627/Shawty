@@ -39,15 +39,11 @@ const Input = {
             }
         }
 
-        // Handle Jump (Space) - Requires isOnGround, velocityY, CONFIG, stateMachine
-        if (event.code === 'Space' && !event.repeat && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
-            event.preventDefault(); // Prevent default space bar action (e.g., scrolling)
-            if (typeof isOnGround !== 'undefined' && isOnGround && stateMachine.is('playing')) {
-                // Only allow jump if on the ground and in playing state
-                velocityY = CONFIG.JUMP_FORCE || 8.5; // Apply jump force from config or default
-                isOnGround = false; // Player is no longer on the ground
-            }
-        }
+        // Handle Jump (Space) - REMOVED
+        // if (event.code === 'Space' && !event.repeat && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
+        //     event.preventDefault(); // Prevent default space bar action (e.g., scrolling)
+        //     // Jump logic removed - requires isOnGround, velocityY
+        // }
     },
 
     // Handle key release
@@ -67,12 +63,7 @@ const Input = {
         }
         // --- REMOVED SHOOTING LOGIC ---
         // else if (stateMachine.is('playing') && this.controls?.isLocked && event.button === 0) {
-        //     // Left mouse button (0) clicked while playing and locked
-        //     if(typeof shoot === 'function') {
-        //          shoot(); // Call the global shoot function (defined in gameLogic.js)
-        //     } else {
-        //          console.error("shoot function is not defined!");
-        //     }
+        //     // Shooting logic removed
         // }
     },
 
@@ -88,25 +79,36 @@ const Input = {
          this.isDashing = true;
          this.lastDashTime = Date.now();
 
-         // Calculate initial dash direction based on current movement keys
+         // Calculate initial dash direction based on current movement keys (relative to camera)
          let inputDirection = new THREE.Vector3();
          if(this.keys['KeyW']){ inputDirection.z = -1; }
          if(this.keys['KeyS']){ inputDirection.z = 1; }
-         if(this.keys['KeyA']){ inputDirection.x = -1; }
+         if(this.keys['KeyA']){ inputDirection.x = -1; } // Corrected A/D relative to camera view
          if(this.keys['KeyD']){ inputDirection.x = 1; }
 
-         // If no movement keys pressed, dash forward by default
-         if(inputDirection.lengthSq() === 0){ inputDirection.z = -1; }
-
-         inputDirection.normalize(); // Ensure consistent magnitude
-
-         // Apply camera's rotation to the input direction to get world-space dash direction
-         if(this.controls.getObject()) {
-             this.dashDirection.copy(inputDirection).applyQuaternion(this.controls.getObject().quaternion);
+         // If no movement keys pressed, dash in the direction the camera is facing
+         if(inputDirection.lengthSq() === 0){
+             if (this.controls.getObject()) {
+                 // Get camera forward direction, ignore Y component for pure forward dash
+                 this.controls.getObject().getWorldDirection(this.dashDirection);
+                 // Optional: Uncomment below if you want forward dash strictly on XZ plane
+                 // this.dashDirection.y = 0;
+                 // this.dashDirection.normalize();
+             } else {
+                 this.dashDirection.set(0, 0, -1); // Fallback: forward in Z
+             }
          } else {
-             this.dashDirection.copy(inputDirection); // Fallback if controls object is missing
+             inputDirection.normalize(); // Ensure consistent magnitude for diagonal input
+             // Apply camera's rotation to the input direction to get world-space dash direction
+             if(this.controls.getObject()) {
+                 this.dashDirection.copy(inputDirection).applyQuaternion(this.controls.getObject().quaternion);
+             } else {
+                 this.dashDirection.copy(inputDirection); // Fallback if controls object is missing
+             }
          }
 
+         // Ensure dash direction is normalized (might not be needed if derived from normalized vectors)
+         this.dashDirection.normalize();
 
          // Set timeout to end the dash after duration
          const duration = (CONFIG.DASH_DURATION || 0.15) * 1000; // Get duration in ms
@@ -118,4 +120,4 @@ const Input = {
 };
 // Make Input globally accessible
 window.Input = Input;
-console.log("input.js loaded");
+console.log("input.js loaded (Jump Removed)");
