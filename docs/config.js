@@ -3,7 +3,7 @@
 const CONFIG = {
     SERVER_URL: 'https://gametest-psxl.onrender.com',
     MAP_PATH: 'assets/maps/map.glb',
-    SOUND_PATH_GUNSHOT: '/assets/maps/gunshot.wav', // Ensure this path is correct
+    SOUND_PATH_GUNSHOT: 'assets/maps/gunshot.wav', // Ensure this path is correct
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
     GUN_MODEL_PATH: 'assets/maps/gun2.glb', // Ensure this path is correct
 
