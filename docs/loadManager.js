@@ -59,7 +59,6 @@ const loadManager = {
         const onError = (err) => { console.error(`[LoadManager] !!! FAILED ${key}. Path: ${assetPath}`, err); manager._assetLoadedCallback(key, false, err); };
 
         // --- REMOVED AUDIO LOADING LOGIC ---
-        // if (asset.type === 'audio') { ... }
 
         // Assume GLTF
         if (!loader) { onError("GLTF Loader missing"); return; }
@@ -75,7 +74,6 @@ const loadManager = {
         try {
             if (success) {
                 // --- REMOVED gunshotSound case ---
-                // if (assetKey === 'gunshotSound') { ... }
 
                 // GLTF Processing remains
                 const sceneObject = loadedAssetOrError?.scene;
@@ -86,12 +84,26 @@ const loadManager = {
                     if (assetKey === 'map') {
                         window.mapMesh = sceneObject; // Assign to global mapMesh
                         console.log("[LoadManager] Assigned map data to global 'mapMesh'.");
-                        if (scene) scene.add(window.mapMesh); // Add global mapMesh to scene
+                        if (scene) {
+                            scene.add(window.mapMesh); // Add global mapMesh to scene
+                            console.log("[LoadManager] Added mapMesh to the scene.");
+                            // Optional: Traverse map for shadows/collisions setup if needed
+                            window.mapMesh.traverse(child => {
+                                if (child.isMesh) {
+                                    child.receiveShadow = true;
+                                    // If you need collision meshes later, assign userData here
+                                    // child.userData.isCollidable = true;
+                                }
+                            });
+                        } else {
+                             console.error("[LoadManager] Scene not available when map loaded!");
+                        }
                     }
                     // *** END GLOBAL ASSIGNMENT ***
                     else if (assetKey === 'playerModel') {
                         // playerModel stored internally, set shadows
                         assetEntry.data.traverse(c => { if (c.isMesh) { c.castShadow=true; c.receiveShadow=true; } });
+                        console.log("[LoadManager] Processed playerModel for shadows.");
                     }
                 } else { console.error(`[LM] !!! GLTF ${assetKey} success but scene invalid!`); assetEntry.state = 'error'; }
 
@@ -129,4 +141,4 @@ const loadManager = {
     trigger: function(evName, data={}) { if(this.eventListeners[evName]){ this.eventListeners[evName].forEach(cb=>{try{cb(data);}catch(e){console.error(`Listener Error ${evName}:`,e)}});} }
 };
 window.loadManager = loadManager;
-console.log("loadManager.js loaded");
+console.log("loadManager.js loaded (Gunshot Sound Removed)");
