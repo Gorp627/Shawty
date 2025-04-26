@@ -10,10 +10,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.19.2",    Specify express version (check npmjs.com for latest stable if needed)
-    "socket.io": "^4.7.5"  Specify socket.io version (check npmjs.com for latest stable if needed)
+    "express": "^4.19.2", 
+    "socket.io": "^4.7.5" 
   },
   "engines": {
-    "node": ">=18.0.0"   Tell Render which Node version to use (use a current LTS version)
+    "node": ">=18.0.0"
   }
 }
