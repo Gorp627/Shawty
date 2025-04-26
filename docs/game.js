@@ -8,80 +8,75 @@ var currentGameInstance = null; // To hold the Game instance
 
 class Game {
     // ... constructor ...
-    constructor() {
-        this.scene = null; this.camera = null; this.renderer = null; this.controls = null; this.clock = null;
-        this.players = players; this.bullets = bullets; this.keys = keys;
-        this.frameCount = 0; this.debugLogFrequency = 180;
-        console.log("[Game] Instance created.");
-    }
+    constructor() { this.scene = null; this.camera = null; this.renderer = null; this.controls = null; this.clock = null; this.players = players; this.bullets = bullets; this.keys = keys; this.frameCount = 0; this.debugLogFrequency = 180; console.log("[Game] Instance created."); }
 
     start() {
         console.log("[Game] Starting...");
-        networkIsInitialized = false; assetsAreReady = false; initializationData = null; // Reset flags
+        // Only reset network flags here. Asset flag managed by LoadManager.
+        networkIsInitialized = false;
+        initializationData = null;
+        assetsAreReady = false; // Also reset asset flag initially
+
         if (!this.initializeCoreComponents()) { return; }
         if (!this.initializeManagers()) { return; }
 
         // Bind LoadManager Listener
         console.log("[Game] Binding LoadManager listeners...");
-        if (typeof loadManager !== 'undefined') {
+        if (loadManager) {
             loadManager.on('ready', () => {
-                console.log("[Game] LoadManager 'ready' event received. All required assets loaded.");
+                console.log("[Game] LoadManager 'ready'. Assets loaded.");
                 assetsAreReady = true; // Set the flag
 
-                // Assets are ready. Decide next step based on network status and current state.
+                // Decide next step
                 if (networkIsInitialized) {
-                     // Network was already initialized before assets finished. Try entering play state.
-                     console.log("[Game] Assets ready, Network was already initialized. Attempting to enter playing state.");
+                     console.log("[Game] Assets ready, Network already init. Attempting play state.");
                      window.attemptEnterPlayingState();
                  } else if (stateMachine.is('loading')) {
-                     // Assets ready, network not ready, and we are in loading state. Go to homescreen.
-                     console.log("[Game] Assets ready, Network not initialized. Transitioning to Homescreen.");
-                      if (typeof UIManager !== 'undefined') {
-                         stateMachine.transitionTo('homescreen', { playerCount: UIManager.playerCountSpan?.textContent ?? '?' });
-                     } else {
-                         stateMachine.transitionTo('homescreen');
-                     }
+                     console.log("[Game] Assets ready, Network not init. Transitioning to Homescreen.");
+                      if (UIManager) { stateMachine.transitionTo('homescreen', { playerCount: UIManager.playerCountSpan?.textContent ?? '?' }); }
+                      else { stateMachine.transitionTo('homescreen'); }
                  } else {
-                     // Assets ready, network not ready, but not in loading state (e.g., already on homescreen). Do nothing here.
-                     console.log("[Game] Assets ready, Network not initialized, state is not 'loading'. No state change needed from here.");
+                     console.log("[Game] Assets ready, Network not init, state not 'loading'. No state change needed.");
                  }
             });
-            // ... (onError listener remains the same) ...
             loadManager.on('error', (data) => { console.error("[Game] LoadManager 'error'."); assetsAreReady = false; if(stateMachine) stateMachine.transitionTo('loading',{message:`FATAL: Asset Error!`,error:true}); });
-
             console.log("[Game] LoadManager listeners attached.");
-        } else { /* ... error handling ... */ }
+        } else { console.error("LoadManager missing!"); if(stateMachine) stateMachine.transitionTo('loading',{message:`FATAL: LoadManager Missing!`,error:true}); return; }
 
         this.bindOtherStateTransitions();
         if(stateMachine) stateMachine.transitionTo('loading'); else console.error("stateMachine missing!");
 
         // Init Network
-        if(Network?.init) Network.init();
-        else { /* ... error handling ... */ }
+        if(Network?.init) Network.init(); else { console.error("Network missing!"); if(stateMachine) stateMachine.transitionTo('loading',{message:`FATAL: Network Module Failed!`,error:true}); return; }
 
         // Start loading assets
-        if(loadManager?.startLoading) loadManager.startLoading();
-        else { /* ... error handling ... */ }
+        if(loadManager?.startLoading) loadManager.startLoading(); else { console.error("LoadManager missing!"); }
 
         this.addEventListeners();
         this.animate();
-        console.log("[Game] Started successfully setup.");
+        console.log("[Game] Started setup.");
     }
 
     // --- initializeCoreComponents (No changes) ---
-    initializeCoreComponents() { console.log("[Game] Init Core Components..."); try { this.scene = new THREE.Scene(); scene = this.scene; this.scene.background = new THREE.Color(0x6699cc); this.scene.fog = new THREE.Fog(0x6699cc, 0, 200); this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera = this.camera; this.clock = new THREE.Clock(); clock = this.clock; const canvas = document.getElementById('gameCanvas'); if (!canvas) throw new Error("Canvas element #gameCanvas not found!"); this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); renderer = this.renderer; this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; this.controls = new THREE.PointerLockControls(this.camera, document.body); controls = this.controls; this.controls.addEventListener('lock', ()=>{console.log('[Controls] Locked');}); this.controls.addEventListener('unlock', ()=>{console.log('[Controls] Unlocked');}); dracoLoader = new THREE.DRACOLoader(); dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); dracoLoader.setDecoderConfig({ type: 'js' }); dracoLoader.preload(); loader = new THREE.GLTFLoader(); loader.setDRACOLoader(dracoLoader); console.log("[Game] Loaders Initialized (GLTF + DRACO)."); const ambL=new THREE.AmbientLight(0xffffff,0.7); scene.add(ambL); const dirL=new THREE.DirectionalLight(0xffffff,1.0); dirL.position.set(15,20,10); dirL.castShadow=true; dirL.shadow.mapSize.width=1024; dirL.shadow.mapSize.height=1024; scene.add(dirL); scene.add(dirL.target); console.log("[Game] Core Components OK."); return true; } catch(e) { console.error("!!! Core Component Init Error:", e); if(UIManager?.showError) UIManager.showError("FATAL: Graphics Init Error!", 'loading'); else alert("FATAL: Graphics Init Error!"); return false;} }
+    initializeCoreComponents() { console.log("[Game] Init Core Components..."); try { this.scene = new THREE.Scene(); scene = this.scene; this.scene.background = new THREE.Color(0x6699cc); this.scene.fog = new THREE.Fog(0x6699cc, 0, 200); this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera = this.camera; this.clock = new THREE.Clock(); clock = this.clock; const canvas = document.getElementById('gameCanvas'); if (!canvas) throw new Error("Canvas element #gameCanvas not found!"); this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); renderer = this.renderer; this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; this.controls = new THREE.PointerLockControls(this.camera, document.body); controls = this.controls; this.controls.addEventListener('lock', ()=>{console.log('[Controls] Locked');}); this.controls.addEventListener('unlock', ()=>{console.log('[Controls] Unlocked');}); dracoLoader = new THREE.DRACOLoader(); dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); dracoLoader.setDecoderConfig({ type: 'js' }); dracoLoader.preload(); loader = new THREE.GLTFLoader(); loader.setDRACOLoader(dracoLoader); console.log("[Game] Loaders Initialized."); const ambL=new THREE.AmbientLight(0xffffff,0.7); scene.add(ambL); const dirL=new THREE.DirectionalLight(0xffffff,1.0); dirL.position.set(15,20,10); dirL.castShadow=true; dirL.shadow.mapSize.width=1024; dirL.shadow.mapSize.height=1024; scene.add(dirL); scene.add(dirL.target); console.log("[Game] Core Components OK."); return true; } catch(e) { console.error("!!! Core Comp Init Error:", e); if(UIManager?.showError) UIManager.showError("FATAL: Graphics Init Error!", 'loading'); else alert("FATAL: Graphics Init Error!"); return false;} }
 
     // --- initializeManagers (No changes) ---
-    initializeManagers() { console.log("[Game] Init Managers..."); if(!UIManager||!Input||!stateMachine||!loadManager||!Network||!Effects) { console.error("!!! Manager undefined!"); if(UIManager?.showError) UIManager.showError("FATAL: Manager Load Error!", 'loading'); else document.body.innerHTML = "<p style='color:red;'>FATAL: MANAGER SCRIPT LOAD ERROR</p>"; return false; } try { if(!UIManager.initialize()) throw new Error("UIManager failed init"); Input.init(this.controls); Effects.initialize(this.scene); console.log("[Game] Managers Initialized."); return true; } catch (e) { console.error("!!! Manager Init Error:", e); if(UIManager?.showError) UIManager.showError("FATAL: Game Setup Error!", 'loading'); else alert("FATAL: Game Setup Error!"); return false; } }
+    initializeManagers() { console.log("[Game] Init Managers..."); if(!UIManager||!Input||!stateMachine||!loadManager||!Network||!Effects) { console.error("!!! Mgr undefined!"); if(UIManager?.showError) UIManager.showError("FATAL: Mgr Load Error!", 'loading'); else document.body.innerHTML = "<p style='color:red;'>FATAL: MANAGER SCRIPT LOAD ERROR</p>"; return false; } try { if(!UIManager.initialize()) throw new Error("UIManager failed init"); Input.init(this.controls); Effects.initialize(this.scene); console.log("[Game] Managers Initialized."); return true; } catch (e) { console.error("!!! Mgr Init Error:", e); if(UIManager?.showError) UIManager.showError("FATAL: Game Setup Error!", 'loading'); else alert("FATAL: Game Setup Error!"); return false; } }
 
-    // --- bindOtherStateTransitions (No major changes) ---
+    // --- bindOtherStateTransitions (MODIFIED) ---
     bindOtherStateTransitions() {
         if(UIManager?.bindStateListeners) UIManager.bindStateListeners(stateMachine);
         else console.error("UIManager or bindStateListeners missing");
 
         stateMachine.on('transition', (data) => {
              console.log(`[Game State Listener] Transition: ${data.from} -> ${data.to}`);
-             if (data.to === 'homescreen') { // Handle entering homescreen generally
+             if (data.to === 'homescreen') {
+                 // Reset network flag only when entering homescreen
+                 networkIsInitialized = false;
+                 initializationData = null;
+                 // ** DO NOT RESET assetsAreReady here **
+                 console.log("[Game] Reset network flags on entering homescreen.");
+
                  if (data.from === 'playing') { // Specific cleanup from playing
                      console.log("[Game] Cleaning up after playing state...");
                      if(Effects) Effects.removeGunViewModel();
@@ -89,17 +84,14 @@ class Game {
                      for (const id in players) { Network._removePlayer(id); } players = {}; localPlayerId = null;
                      if (controls?.isLocked) controls.unlock();
                  }
-                 // Reset flags whenever returning to homescreen
-                 networkIsInitialized = false; assetsAreReady = false; initializationData = null;
-                 console.log("[Game] Reset network/asset flags on entering homescreen.");
 
              } else if (data.to === 'playing') {
                  console.log("[Game] State transitioned to 'playing'. Attaching gun.");
                   if (Effects) {
-                     const gunModelReady = !!(gunModel && gunModel !== 'error'); // Simplified check now
+                     const gunModelReady = !!(gunModel && gunModel !== 'error');
                      if (gunModelReady && camera && CONFIG) { Effects.attachGunViewModel(); }
                      else { console.error(`!!! Entered 'playing' but gun prerequisites not met! gun=${gunModelReady}`); }
-                 } else { console.error("Effects module missing in 'playing' state transition!"); }
+                 } else { console.error("Effects module missing!"); }
                  if (UIManager && players[localPlayerId]) UIManager.updateHealthBar(players[localPlayerId].health);
 
              } else if (data.to === 'loading' && data.options?.error) {
@@ -135,5 +127,5 @@ window.attemptEnterPlayingState = attemptEnterPlayingState;
 function runGame() { console.log("--- runGame() triggered ---"); try { const gameInstance = new Game(); window.currentGameInstance = gameInstance; gameInstance.start(); window.onresize = () => gameInstance.handleResize(); } catch (e) { console.error("!!! Error creating Game instance:", e); document.body.innerHTML = "<p style='color:red;'>GAME INIT FAILED.</p>"; } }
 
 // --- DOM Ready (No changes) ---
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);console.log("DOM loading, scheduling runGame.");}else{console.log("DOM ready, running runGame.");runGame();}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);console.log("DOM loading, scheduling.");}else{console.log("DOM ready, running.");runGame();}
 console.log("game.js loaded and executed");
