@@ -1,11 +1,11 @@
 /* docs/style.css - Simplified Functional Version + Dot Crosshair */
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; background-color: #000; color: white; font-family: sans-serif; }
-.screen { position: fixed; inset: 0; display: none; flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 100; background-color: #222; transition: opacity 0.5s ease-in-out; }
-.screen.visible { display: flex; opacity: 1; }
-#loadingScreen { background-color: #1a4d2e; color: #e8f6ef; font-size: 1.5em; opacity: 1; }
+.screen { position: fixed; inset: 0; display: none; /* Start hidden by default */ flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 100; background-color: #222; transition: opacity 0.5s ease-in-out; }
+.screen.visible { display: flex; opacity: 1; } /* JS adds this class */
+#loadingScreen { background-color: #1a4d2e; color: #e8f6ef; font-size: 1.5em; opacity: 1; } /* Start visible */
 #loadingScreen.error p { color: red !important; }
-#homeScreen { background-color: #334; color: #eee; opacity: 0; }
+#homeScreen { background-color: #334; color: #eee; opacity: 0; } /* Start hidden */
 #homeScreen.visible { display: flex; opacity: 1; }
 #homeScreen h1 { font-size: 3em; margin-bottom: 20px; color: #fff; }
 #homeScreen p { font-size: 1.1em; margin-bottom: 15px; }
