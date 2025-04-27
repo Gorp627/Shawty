@@ -1,9 +1,7 @@
-// docs/game.js - Main Game Orchestrator (Manual Physics + Fallback Spawn Raycast)
+// docs/game.js - Main Game Orchestrator (Manual Physics + Spawn Retries)
 
 // --- Global Flags and Data ---
-let networkIsInitialized = false;
-let assetsAreReady = false;
-let initializationData = null;
+let networkIsInitialized = false; let assetsAreReady = false; let initializationData = null;
 var currentGameInstance = null;
 
 class Game {
@@ -17,34 +15,22 @@ class Game {
 
     // --- Start Method ---
     start() {
-        console.log("[Game] Starting...");
-        networkIsInitialized = false; assetsAreReady = false; initializationData = null;
-        this.mapMesh = null; // Reset map mesh ref
-        this.lastCallTime = performance.now();
+        console.log("[Game] Starting..."); networkIsInitialized = false; assetsAreReady = false; initializationData = null; this.mapMesh = null; this.lastCallTime = performance.now();
 
         if (!this.initializeCoreComponents()) { return; }
         if (!this.initializeManagers()) { return; }
         if (!this.initializeNetwork()) { return; }
-
-        this.bindLoadManagerListeners();
-        this.bindOtherStateTransitions();
-        this.addEventListeners();
-
+        this.bindLoadManagerListeners(); this.bindOtherStateTransitions(); this.addEventListeners();
         if(stateMachine) stateMachine.transitionTo('loading'); else console.error("stateMachine missing!");
         this.startAssetLoading();
-
-        this.animate(); // Start the main loop
-        console.log("[Game] Started successfully setup.");
+        this.animate(); console.log("[Game] Started successfully setup.");
     }
 
     // --- Initialize Core Components (Three.js ONLY) ---
     initializeCoreComponents() {
-         console.log("[Game] Init Core Components (Three.js)...");
-         try {
+         console.log("[Game] Init Core Components (Three.js)..."); try {
              this.scene = new THREE.Scene(); scene = this.scene; this.scene.background = new THREE.Color(0x6699cc); this.scene.fog = new THREE.Fog(0x6699cc, 0, 200); this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera = this.camera; this.clock = new THREE.Clock(); clock = this.clock; const canvas = document.getElementById('gameCanvas'); if (!canvas) throw new Error("#gameCanvas missing!"); this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); renderer = this.renderer; this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; this.controls = new THREE.PointerLockControls(this.camera, document.body); controls = this.controls; this.controls.addEventListener('lock', ()=>{console.log('[Controls] Locked');}); this.controls.addEventListener('unlock', ()=>{console.log('[Controls] Unlocked');}); dracoLoader = new THREE.DRACOLoader(); dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); dracoLoader.setDecoderConfig({ type: 'js' }); dracoLoader.preload(); loader = new THREE.GLTFLoader(); loader.setDRACOLoader(dracoLoader); const ambL = new THREE.AmbientLight(0xffffff, 0.7); this.scene.add(ambL); const dirL = new THREE.DirectionalLight(0xffffff, 1.0); dirL.position.set(15, 20, 10); dirL.castShadow = true; dirL.shadow.mapSize.width=1024; dirL.shadow.mapSize.height=1024; this.scene.add(dirL); this.scene.add(dirL.target); console.log("[Game] Core Components OK."); return true;
-         } catch(e) {
-             console.error("!!! Core Component Initialization Error:", e); if(typeof UIManager !== 'undefined' && UIManager?.showError) UIManager.showError("FATAL: Graphics Init Error!", 'loading'); else alert("FATAL: Graphics Init Error!"); return false;
-         }
+         } catch(e) { console.error("!!! Core Init Error:", e); UIManager?.showError(`FATAL: Graphics Init! ${e.message}`, 'loading'); return false; }
     }
 
     // --- Initialize Network ---
@@ -85,69 +71,82 @@ class Game {
         console.log("Clearing previous state...");
         for (const id in players) { if (Network?._removePlayer) Network._removePlayer(id); } players = {};
 
-        // Process players
+        // Process players (local player needs procedural spawn)
         for(const id in initData.players){
             const sPD = initData.players[id];
             if(id === localPlayerId){ // --- LOCAL PLAYER ---
                 console.log(`Init local: ${sPD.name}`);
-                let spawnX = sPD.x; let spawnY = sPD.y; let spawnZ = sPD.z; // Initial values from server
 
-                // --- Calculate Spawn Height via Raycast ---
-                const spawnCheckHeight = 100.0; // Start ray high above
-                const spawnRayOrigin = new THREE.Vector3(spawnX, spawnCheckHeight, spawnZ);
+                let currentSpawnX = sPD.x; // Start with server suggestion
+                let currentSpawnZ = sPD.z;
+                let foundGroundY = 0;    // Default ground level if all raycasts fail
+                let foundGround = false; // Flag to check if we succeeded
+                let attempts = 0;
+                const maxSpawnAttempts = 10; // Try up to 10 times to find ground
+                const spawnCheckHeight = 150.0; // Start ray high above
                 const spawnRayDir = new THREE.Vector3(0, -1, 0);
-                if (!raycaster) raycaster = new THREE.Raycaster();
-                raycaster.set(spawnRayOrigin, spawnRayDir);
-                raycaster.far = spawnCheckHeight + 50; // Look far down
+                if (!raycaster) raycaster = new THREE.Raycaster(); // Ensure raycaster exists
 
-                console.log(`Casting spawn ray at X:${spawnX.toFixed(1)}, Z:${spawnZ.toFixed(1)}`);
-                const intersects = raycaster.intersectObject(this.mapMesh, true);
+                console.log(`Attempting spawn raycast at server coords: X=${currentSpawnX.toFixed(1)}, Z=${currentSpawnZ.toFixed(1)}`);
 
-                if (intersects.length > 0) {
-                    spawnY = intersects[0].point.y; // Found ground! Use its Y.
-                    console.log(`Spawn ray HIT! Using Ground Y: ${spawnY.toFixed(2)}`);
-                } else {
-                    console.warn(`Spawn ray MISSED at X:${spawnX.toFixed(1)}, Z:${spawnZ.toFixed(1)}. Falling back to safe XZ(0,0)...`);
-                    // --- Fallback: Raycast at Center (0,0) ---
-                    spawnX = 0; spawnZ = 0; // Reset XZ to center
-                    spawnRayOrigin.set(spawnX, spawnCheckHeight, spawnZ); // Update origin
-                    raycaster.set(spawnRayOrigin, spawnRayDir); // Set raycaster again
-                    const fallbackIntersects = raycaster.intersectObject(this.mapMesh, true);
-                    if (fallbackIntersects.length > 0) {
-                        spawnY = fallbackIntersects[0].point.y; // Use center ground Y
-                        console.log(`Fallback spawn ray HIT! Using Center Ground Y: ${spawnY.toFixed(2)}`);
+                // --- Procedural Spawn Height via Raycast w/ Retries ---
+                while (!foundGround && attempts < maxSpawnAttempts) {
+                    attempts++;
+                    const spawnRayOrigin = new THREE.Vector3(currentSpawnX, spawnCheckHeight, currentSpawnZ);
+                    raycaster.set(spawnRayOrigin, spawnRayDir);
+                    raycaster.far = spawnCheckHeight + 100; // Look far down
+
+                    const intersects = raycaster.intersectObject(this.mapMesh, true); // Use instance mapMesh
+
+                    if (intersects.length > 0) {
+                        foundGroundY = intersects[0].point.y; // Found ground!
+                        foundGround = true;
+                        console.log(`Spawn ray ${attempts} HIT! Using Ground Y: ${foundGroundY.toFixed(2)} at X:${currentSpawnX.toFixed(1)}, Z:${currentSpawnZ.toFixed(1)}`);
+                        // Keep currentSpawnX and currentSpawnZ as they are valid
                     } else {
-                         console.error(`Fallback spawn ray also MISSED at (0,0)! Defaulting to Y=0.`);
-                         spawnY = 0; // Ultimate fallback
+                        console.warn(`Spawn ray ${attempts} MISSED at X:${currentSpawnX.toFixed(1)}, Z:${currentSpawnZ.toFixed(1)}.`);
+                        if (attempts < maxSpawnAttempts) {
+                             // Try new random coordinates within general bounds
+                             const boundX = CONFIG?.MAP_BOUNDS_X || 50;
+                             const boundZ = CONFIG?.MAP_BOUNDS_Z || 50;
+                             // Generate random point within a slightly smaller area than map bounds (e.g. 90%)
+                             currentSpawnX = Math.random() * (boundX * 1.8) - (boundX * 0.9);
+                             currentSpawnZ = Math.random() * (boundZ * 1.8) - (boundZ * 0.9);
+                             console.log(`Retrying spawn raycast at new random coords: X=${currentSpawnX.toFixed(1)}, Z=${currentSpawnZ.toFixed(1)}`);
+                        } else {
+                             console.error(`Max spawn attempts reached! Defaulting to Y=0 at last attempted XZ (${currentSpawnX.toFixed(1)}, ${currentSpawnZ.toFixed(1)}).`);
+                             foundGroundY = 0; // Ultimate fallback Y
+                             // Keep the last attempted XZ as the final spawn location
+                        }
                     }
-                    // --- End Fallback ---
-                }
+                } // End while attempts
                 // --- End Spawn Height Calculation ---
 
-                // Store final calculated position in the player cache
-                players[id] = { ...sPD, x: spawnX, y: spawnY, z: spawnZ, isLocal: true, mesh: null };
+                // Store final position (potentially adjusted XZ) in local cache
+                players[id] = { ...sPD, x: currentSpawnX, y: foundGroundY, z: currentSpawnZ, isLocal: true, mesh: null };
 
                 const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6;
-                const visualY = spawnY + cameraHeight; // Position camera relative to FOUND ground Y
+                const spawnBuffer = 0.1; // Add small buffer to ensure starting above ground
+                const finalVisualY = foundGroundY + cameraHeight + spawnBuffer; // Position camera relative to FOUND ground Y + buffer
 
                 if(controls?.getObject()){
-                    controls.getObject().position.set(spawnX, visualY, spawnZ); // Use final X, calculated Y, final Z
+                    controls.getObject().position.set(currentSpawnX, finalVisualY, currentSpawnZ); // Use final X, calculated Y, final Z
                     controls.getObject().rotation.set(0, sPD.rotationY || 0, 0);
-                    console.log(`Set FINAL controls pos(${spawnX.toFixed(1)}, ${visualY.toFixed(1)}, ${spawnZ.toFixed(1)})`);
+                    console.log(`Set FINAL controls pos(${currentSpawnX.toFixed(1)}, ${finalVisualY.toFixed(1)}, ${currentSpawnZ.toFixed(1)})`);
                 }
 
-                velocityY = 0; isOnGround = true; // Reset manual physics state
+                velocityY = 0; isOnGround = true; // Reset manual physics state AFTER positioning
                 console.log("Reset initial physics state.");
 
                 if(UIManager){ UIManager.updateHealthBar(sPD.health ?? 100); UIManager.updateInfo(`Playing as ${players[id].name}`); UIManager.clearError('homescreen'); UIManager.clearKillMessage(); }
 
-            } else { // --- REMOTE PLAYER --- Use server Y directly for setup
+            } else { // --- REMOTE PLAYER --- Use server coords directly for setup
                  if(Network?._addPlayer) Network._addPlayer(sPD); // Creates ClientPlayer + visual mesh
             }
         } // End for loop
 
         console.log(`Init complete. ${Object.keys(players).length} players.`);
-        if(stateMachine){ console.log("Transitioning to 'playing'..."); stateMachine.transitionTo('playing'); } else { console.error("stateMachine missing!"); }
+        if(stateMachine){ console.log("Transitioning state to 'playing'..."); stateMachine.transitionTo('playing'); } else { console.error("stateMachine missing!"); }
     }
 
     // --- Start Asset Loading ---
@@ -158,4 +157,4 @@ class Game {
 // --- Global Entry Point & DOM Ready ---
 function runGame() { console.log("--- runGame() ---"); try { const gI=new Game(); window.currentGameInstance=gI; gI.start(); window.onresize=()=>gI.handleResize(); } catch(e){console.error("!!Error creating Game:",e);document.body.innerHTML="<p>GAME INIT FAILED.</p>";}}
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Added Fallback Spawn Raycast)");
+console.log("game.js loaded (Retry Spawn Raycast)");
