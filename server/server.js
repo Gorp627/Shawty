@@ -1,4 +1,4 @@
-// server/server.js - Refactored with Player Class (No Guns/Hits, Server Void Check)
+// server/server.js - Refactored with Player Class (No Guns/Hits, Client Void Reports)
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
@@ -14,7 +14,7 @@ const CONFIG = {
     SERVER_BROADCAST_INTERVAL: 1000 / 15,
     PLAYER_MOVE_THRESHOLD_SQ: 0.0001,
     MAX_PLAYERS: 20,
-    VOID_Y_LEVEL: -40 // Y level below which players are considered fallen
+    VOID_Y_LEVEL: -40 // Y level below which players are considered fallen (server-side check removed, kept for reference)
 };
 const io = new Server(server, { cors: { origin: ["https://gorp627.github.io", "http://localhost:8080"], methods: ["GET", "POST"] } });
 const PORT = process.env.PORT || 3000;
@@ -41,54 +41,49 @@ class Player {
             this.x = data.x; this.y = data.y; this.z = data.z; this.rotationY = data.rotationY;
             this.lastUpdateTime = Date.now(); this.needsUpdate = true;
 
-            // Check for void AFTER updating position
-            if (this.y < CONFIG.VOID_Y_LEVEL) {
-                 this.handleVoidFall();
-                 return true; // Position changed, but player died
-            }
+            // NOTE: Server-side void check is REMOVED here, relying on client 'fellIntoVoid' message
+            // if (this.y < CONFIG.VOID_Y_LEVEL) { this.handleVoidFall(); return true; }
         }
         return changed;
     }
 
-    takeDamage(amount, killerInfo = {id: null, name: 'Unknown', phrase: 'eliminated'}) { // killerInfo obj expected
-        if(this.health <= 0) return false; // Already dead
+    takeDamage(amount, killerInfo = {id: null, name: 'Unknown', phrase: 'eliminated'}) {
+        if(this.health <= 0) return false;
         this.health = Math.max(0, this.health - amount);
         console.log(`${this.name} HP:${this.health} (Attacker: ${killerInfo.name || killerInfo.id || 'Unknown'})`);
-        this.needsUpdate = true; // Health changed, needs broadcast
+        this.needsUpdate = true;
         const died = this.health <= 0;
         if (died) {
             console.log(`${this.name} K.O. by ${killerInfo.name || killerInfo.id}`);
-            // Emit death event with killer details
             io.emit('playerDied', { targetId: this.id, killerId: killerInfo.id, killerName: killerInfo.name, killerPhrase: killerInfo.phrase });
             scheduleRespawn(this.id);
         } else {
-             // Just broadcast health update if not dead
              io.emit('healthUpdate', { id: this.id, health: this.health });
         }
         return died;
     }
 
-    handleVoidFall() {
-        if (this.health <= 0) return; // Already dead or handling
-        console.log(`${this.name} fell into the void.`);
-        this.health = 0;
-        this.needsUpdate = true; // Ensure health=0 is sent
-        // Emit death event - killerId is null for environment/void death
-        io.emit('playerDied', { targetId: this.id, killerId: null, killerName: null, killerPhrase: null });
-        scheduleRespawn(this.id);
-    }
+    // This specific function might not be called anymore if client handles void detection trigger
+    // handleVoidFall() {
+    //     if (this.health <= 0) return; // Already dead or handling
+    //     console.log(`${this.name} fell into the void.`);
+    //     this.health = 0;
+    //     this.needsUpdate = true; // Ensure health=0 is sent
+    //     io.emit('playerDied', { targetId: this.id, killerId: null, killerName: null, killerPhrase: null });
+    //     scheduleRespawn(this.id);
+    // }
 
     respawn() {
         this.health = CONFIG.PLAYER_DEFAULT_HEALTH;
         this.x = randomFloat(-10, 10);
-        this.y = 0; // <<< CHANGED FROM 5 to 0 (Spawn feet at ground level)
+        this.y = 0; // Spawn feet at ground level
         this.z = randomFloat(-10, 10);
         this.rotationY = 0;
         this.needsUpdate = true;
         console.log(`${this.name} respawned at y=${this.y}.`);
     }
-    getNetworkData() { return {id:this.id,x:this.x,y:this.y,z:this.z,r:this.rotationY,h:this.health};} // Lean data for frequent updates
-    getFullData() { return {id:this.id,x:this.x,y:this.y,z:this.z,rotationY:this.rotationY,health:this.health,name:this.name,phrase:this.phrase};} // Full data for init/join/respawn
+    getNetworkData() { return {id:this.id,x:this.x,y:this.y,z:this.z,r:this.rotationY,h:this.health};}
+    getFullData() { return {id:this.id,x:this.x,y:this.y,z:this.z,rotationY:this.rotationY,health:this.health,name:this.name,phrase:this.phrase};}
 }
 
 // --- Respawn Scheduling ---
@@ -99,29 +94,37 @@ function broadcastPlayerCount() { const c=Object.keys(players).length;io.emit('p
 io.on('connection', function(socket) {
     console.log(`Tentative Connect: ${socket.id}`); socket.emit('playerCountUpdate',Object.keys(players).length); socket.emit("ping",{m:`Ack ${socket.id}`});
     socket.on('setPlayerDetails',function(d){if(Object.keys(players).length>=CONFIG.MAX_PLAYERS){socket.emit('serverFull');socket.disconnect(true);return;}if(players[socket.id])return;const n=d.name?String(d.name).substring(0,16).trim():'Player';const p=d.phrase?String(d.phrase).substring(0,20).trim():'...';const fN=n===''? 'Player':n;const fP=p===''? '...':p;console.log(`Joined: ${fN} (${socket.id})`);players[socket.id]=new Player(socket.id,fN,fP);let allPData={};for(const id in players)allPData[id]=players[id].getFullData();console.log(`-> Emit init ${socket.id}`);socket.emit('initialize',{id:socket.id,players:allPData});socket.broadcast.emit('playerJoined',players[socket.id].getFullData());broadcastPlayerCount();});
-    socket.on('playerUpdate',function(d){const p=players[socket.id];if(p)p.updatePosition(d);});
-    // socket.on('shoot', ... ); // REMOVED - No shooting
-    // socket.on('hit', ... ); // REMOVED - No hitting
-    // socket.on('fellIntoVoid', ...); // REMOVED - Server detects void now
+    socket.on('playerUpdate',function(d){const p=players[socket.id];if(p)p.updatePosition(d);}); // Includes Y now
+
+    // --- Added back listener for client-reported void death ---
+    socket.on('fellIntoVoid', function() {
+        const p = players[socket.id];
+        if (p && p.health > 0) { // Check if player exists and is actually alive
+            console.log(`${p.name} reported falling into void.`);
+            p.health = 0; // Set health to 0 immediately
+            p.needsUpdate = true; // Ensure health update is sent if loop runs before death message
+            io.emit('playerDied', { targetId: socket.id, killerId: null }); // Announce death (killerId null for environment)
+            scheduleRespawn(socket.id); // Schedule the respawn
+        } else if (p && p.health <= 0) {
+            console.log(`${p.name} reported falling into void, but was already dead.`);
+        } else {
+            console.warn(`Received 'fellIntoVoid' from unknown socket ID: ${socket.id}`);
+        }
+    });
+    // --- End added listener ---
+
     socket.on('disconnect',function(r){const p=players[socket.id];if(p){console.log(`Disconnect: ${p.name}`);delete players[socket.id];if(respawnTimeouts[socket.id]){clearTimeout(respawnTimeouts[socket.id]);delete respawnTimeouts[socket.id];}io.emit('playerLeft',socket.id);broadcastPlayerCount();}else{console.log(`Unjoined ${socket.id} disconnected`);}});
 });
 
 // --- Game Loop (Server Side) ---
 let lastBroadcastTime = 0; function serverGameLoop() { let stateUpdate={players:{}};let uGen=false; for(const id in players){const player = players[id];if(player.needsUpdate){stateUpdate.players[id]=player.getNetworkData();player.needsUpdate=false;uGen=true;}} if(uGen){io.emit('gameStateUpdate',stateUpdate);lastBroadcastTime=Date.now();} } const gameLoopIntervalId=setInterval(serverGameLoop,CONFIG.SERVER_BROADCAST_INTERVAL);
 // --- HTTP Server ---
-// Serve index.html from the docs folder relative to server.js location
 app.get('/', function(req, res) {
-    const p = path.join(__dirname, '..', 'docs', 'index.html'); // Assumes server is in 'server/' and docs is '../docs/'
+    const p = path.join(__dirname, '..', 'docs', 'index.html');
     res.sendFile(p, function(err) {
-        if (err) {
-            console.error("Error sending index.html:", err);
-            res.status(500).send('Server Error or index.html not found');
-        } else {
-            // console.log("Sent index.html"); // Optional success log
-        }
+        if (err) { console.error("Error sending index.html:", err); res.status(500).send('Server Error or index.html not found'); }
     });
 });
-// Serve static files (CSS, JS, assets) from docs folder
 app.use(express.static(path.join(__dirname, '..', 'docs')));
 // --- Start Server ---
 server.listen(PORT,function(){console.log(`Server listening *:${PORT}`);});
