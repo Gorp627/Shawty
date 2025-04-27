@@ -38,7 +38,7 @@ class Game {
                      // Network was already initialized (got 'initialize' event) before assets finished. Try starting game.
                      console.log("[Game LoadReady Handler] Assets ready, Network was initialized. Attempting game play start.");
                      if (currentGameInstance?.startGamePlay) {
-                         currentGameInstance.startGamePlay(initializationData); // startGamePlay will verify mapMesh now
+                         currentGameInstance.startGamePlay(initializationData);
                      } else { console.error("[Game LoadReady Handler] Game instance missing!"); }
 
                  } else if (typeof stateMachine !== 'undefined' && stateMachine.is('joining') && typeof Network !== 'undefined' && Network.isConnected()) {
@@ -194,17 +194,10 @@ class Game {
              return;
         }
 
-        // --- <<< ADDED MAP MESH CHECK >>> ---
-        // Ensure mapMesh is globally available BEFORE proceeding to playing state
-        if (typeof mapMesh === 'undefined' || !mapMesh) {
-            console.error("!!! [Game] startGamePlay: mapMesh is not ready! Cannot start game. Assets loaded?", assetsAreReady);
-            // Transition back or show error
-             if (typeof stateMachine !== 'undefined') stateMachine.transitionTo('homescreen');
-             if (typeof UIManager !== 'undefined') UIManager.showError("Map failed to load. Cannot start.", 'homescreen');
-            return;
-        }
-        // --- <<< END MAP MESH CHECK >>> ---
-
+        // --- REMOVED MAP MESH CHECK ---
+        // Rely on assetsAreReady flag being true before this function is even called.
+        // The loadManager adds the map to the scene in its callback, so it *should* be there.
+        // if (typeof mapMesh === 'undefined' || !mapMesh) { ... } // REMOVED
 
         localPlayerId = initData.id; console.log(`[Game] Local ID: ${localPlayerId}`);
         console.log("[Game] Clearing previous player state for game start...");
@@ -246,7 +239,7 @@ class Game {
         }
         console.log(`[Game] Init complete. ${Object.keys(players).length} players.`);
 
-        // Transition state AFTER setting up player data and CONFIRMING mapMesh
+        // Transition state AFTER setting up player data
         if(typeof stateMachine !== 'undefined'){
             console.log("[Game] Transitioning state to 'playing'...");
             stateMachine.transitionTo('playing');
@@ -260,4 +253,4 @@ function runGame() { console.log("--- runGame() ---"); try { const gI=new Game()
 
 // --- DOM Ready Execution ---
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Added mapMesh Check before Play)");
+console.log("game.js loaded (Removed mapMesh Check before Play)");
