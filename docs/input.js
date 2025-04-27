@@ -7,10 +7,10 @@ const Input = {
     mouseButtons: {},
     controls: null,
     lastDashTime: 0,
-    dashDirection: new THREE.Vector3(), // Calculated when dash is activated
+    dashDirection: new THREE.Vector3(),
 
-    // Flags for gameLogic
-    dashJustActivated: false, // Set true for ONE frame when dash key pressed + ready
+    // Flags for gameLogic (set by keydown, consumed by gameLogic)
+    requestingDash: false,
 
 
     // Initialize input listeners
@@ -21,28 +21,27 @@ const Input = {
         document.addEventListener('keyup', this.handleKeyUp.bind(this));
         document.addEventListener('mousedown', this.handleMouseDown.bind(this));
         document.addEventListener('mouseup', this.handleMouseUp.bind(this));
-        this.dashJustActivated = false; // Ensure flag starts false
+        this.requestingDash = false; // Init flag
         console.log("[Input] Initialized.");
     },
 
     // Handle key press down
     handleKeyDown: function(event) {
-        if (event.target.tagName === 'INPUT') return; // Ignore inputs in text fields
+        if (event.target.tagName === 'INPUT') return;
         this.keys[event.code] = true;
 
-        // Handle Dash (ShiftLeft) - Set flag if cooldown ready
-        if (event.code === 'ShiftLeft' && !event.repeat && !this.dashJustActivated && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
-            const now = Date.now(); const cooldown = (CONFIG.DASH_COOLDOWN || 0.8) * 1000;
-            if ((now - this.lastDashTime > cooldown) && stateMachine.is('playing')) {
-                this.startDash(); // Calculates direction, resets timer, sets dashJustActivated = true
+        // Handle Dash (ShiftLeft) - Set request flag
+        if (event.code === 'ShiftLeft' && !event.repeat && !this.requestingDash) {
+            const now = Date.now(); const cooldown = CONFIG?.DASH_COOLDOWN || 0.8 * 1000;
+            if (stateMachine?.is('playing') && (now - this.lastDashTime > cooldown)) {
+                this.startDash(); // Sets direction and requestingDash flag
             }
         }
 
-        // Handle Jump (Space) - Just records the key press, logic is in gameLogic
+        // Handle Jump (Space) - Record key press, logic is purely in gameLogic now
         if (event.code === 'Space' && !event.repeat) {
             event.preventDefault();
-             // No flag needed here, gameLogic checks keys['Space'] directly now
-             console.log("Space pressed");
+            // console.log("Space pressed"); // gameLogic checks keys['Space'] + ground state
         }
     },
 
@@ -50,8 +49,7 @@ const Input = {
     handleKeyUp: function(event) {
         if (event.target.tagName === 'INPUT') return;
         this.keys[event.code] = false;
-        // Reset jump 'attempt' immediately? Not strictly needed if gameLogic checks ground state
-        // if (event.code === 'Space') { }
+        // No specific key up logic needed now for jump/dash flags
     },
 
     // Handle mouse button press down
@@ -67,28 +65,28 @@ const Input = {
         this.mouseButtons[event.button] = false;
     },
 
-    // Calculate direction, set flag for gameLogic
+    // Calculate direction, set request flag, reset cooldown timer
     startDash: function() {
          if(!this.controls) return;
-         this.lastDashTime = Date.now(); // Reset cooldown timer
+         this.lastDashTime = Date.now(); // Reset timer
 
          let inputDir = new THREE.Vector3();
+         // Use player's perception: W = Forward, S = Backward, A = Strafe Left, D = Strafe Right
          if(this.keys['KeyW']){ inputDir.z = -1; } if(this.keys['KeyS']){ inputDir.z = 1; }
-         // Corrected A/D logic matching gameLogic fix
          if(this.keys['KeyA']){ inputDir.x = -1; } if(this.keys['KeyD']){ inputDir.x = 1; }
 
-         if(inputDir.lengthSq() === 0){ // Forward dash
+         if(inputDir.lengthSq() === 0){ // Dash forward if no move keys
              if (this.controls.getObject()) { this.controls.getObject().getWorldDirection(this.dashDirection); } else { this.dashDirection.set(0, 0, -1); }
-         } else { // Movement direction dash
+         } else { // Dash in movement direction relative to camera
              inputDir.normalize(); if(this.controls.getObject()) { this.dashDirection.copy(inputDir).applyQuaternion(this.controls.getObject().quaternion); } else { this.dashDirection.copy(inputDir); }
          }
          this.dashDirection.normalize();
 
-         this.dashJustActivated = true; // Set flag for ONE frame
+         this.requestingDash = true; // Signal gameLogic to apply ONE dash impulse
          console.log("Dash Requested. Direction:", this.dashDirection);
     }
 };
 
 // Make Input globally accessible
 window.Input = Input;
-console.log("input.js loaded (Simplified Jump/Dash Flags)");
+console.log("input.js loaded (No Jump flag, Dash uses request flag)");
