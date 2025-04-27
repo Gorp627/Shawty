@@ -2,7 +2,9 @@
 
 // Depends on: config.js, stateMachine.js, entities.js, input.js, effects.js, uiManager.js, game.js
 // Accesses globals: players, localPlayerId, socket, controls, CONFIG,
-//                   stateMachine, UIManager, ClientPlayer, scene, infoDiv, currentGameInstance, assetsAreReady
+//                   stateMachine, UIManager, ClientPlayer, scene, infoDiv, currentGameInstance, assetsAreReady,
+//                   velocityY, isOnGround // Added physics state access
+
 // Calls globals:    initializationData, networkIsInitialized
 
 var socket; // Global socket variable
@@ -201,18 +203,10 @@ const Network = {
                  if (localRepresentation instanceof ClientPlayer) {
                      localRepresentation.updateData?.(serverPlayerData); // Update ClientPlayer instance
                  } else if (!localRepresentation) {
-                     // Player exists in GSU but not locally? Maybe they joined while we were loading?
-                     // Add them now, using the lean data. They might pop in.
-                     // We need more than lean data ideally (name, phrase). This is a fallback.
                      console.warn(`[Net GSU] Player ${id} found in update but not locally. Adding with lean data.`);
-                     // Need to fetch full data or wait for next 'playerJoined' ideally.
-                     // For now, let's just update if they *do* exist locally.
                  }
             }
-            // Local player health/state is NOT updated from GSU.
-            // It's updated via 'healthUpdate'/'playerDied'/'playerRespawned' events directly.
         }
-        // Optional: Could prune local players not in GSU, but riskier if packets drop.
     },
 
     handleHealthUpdate: function(data) {
@@ -220,11 +214,9 @@ const Network = {
         const player = this._getPlayer(data.id);
         if (player) {
             player.health = data.health;
-            // console.log(`[Net] Health update for ${player.name || data.id}: ${player.health}`); // Less verbose
             if (data.id === localPlayerId && typeof UIManager !== 'undefined') {
                 UIManager.updateHealthBar(player.health);
             }
-            // Could potentially update ClientPlayer health bar here too if needed visually
         }
     },
 
@@ -234,27 +226,24 @@ const Network = {
         const targetPlayer = this._getPlayer(data.targetId);
 
         if (targetPlayer) {
-            targetPlayer.health = 0; // Set health to 0 (for both local obj and ClientPlayer instance)
+            targetPlayer.health = 0; // Set health to 0
 
-            // Handle visual/UI updates based on whether it's local or remote player
             if (data.targetId === localPlayerId) {
                 // Local player died
                 if (typeof UIManager !== 'undefined') {
                     UIManager.updateHealthBar(0);
-                    // Simple message based on if killerId was explicitly null (environment/void)
-                    let message = data.killerId === null ? "Fell out." : "Eliminated."; // Simplified message
+                    let message = data.killerId === null ? "Fell out." : "Eliminated.";
                     if (data.killerName && data.killerId !== null) {
                         message = `${data.killerName} ${data.killerPhrase || 'eliminated'} ${targetPlayer.name}`;
                     }
                     UIManager.showKillMessage(message);
                 }
                 if (typeof infoDiv !== 'undefined' && infoDiv) infoDiv.textContent = `DEAD`;
-                if (typeof controls !== 'undefined' && controls?.isLocked) controls.unlock(); // Unlock controls on death
+                if (typeof controls !== 'undefined' && controls?.isLocked) controls.unlock();
 
             } else if (targetPlayer instanceof ClientPlayer) {
                 // Remote player died
                 targetPlayer.setVisible?.(false); // Hide remote player mesh
-                 // Show elimination message
                  if (typeof UIManager !== 'undefined') {
                      let message = `${targetPlayer.name || 'A player'} was eliminated.`;
                      if (data.killerName && data.killerId !== null) {
@@ -278,31 +267,35 @@ const Network = {
         // --- Separate logic: Local Player Object vs Remote ClientPlayer Instance ---
         if (playerData.id === localPlayerId) {
              console.log("[Net] Handling LOCAL player respawn.");
-             // Ensure local player object exists (should always unless error)
              if (!player) {
                  console.error("[Net] CRITICAL: Local player object missing on respawn!");
                  players[localPlayerId] = { isLocal: true }; // Recreate basic object
                  player = players[localPlayerId];
              }
-             // --- Directly update properties of the plain local player data object ---
+             // Update local player data object
              player.health = playerData.health;
              player.x = playerData.x;
              player.y = playerData.y; // Server sends feet Y (should be 0)
              player.z = playerData.z;
              player.rotationY = playerData.rotationY;
-             player.name = playerData.name; // Update name/phrase in case of change
+             player.name = playerData.name;
              player.phrase = playerData.phrase;
-             // --- END direct property updates ---
 
              // Reset local controls position using the CAMERA_Y_OFFSET
-             const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8); // Use new offset
-             const visualY = player.y + cameraOffset; // <<< CHANGED Use camera offset
+             const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8);
+             const visualY = player.y + cameraOffset;
              if (typeof controls !== 'undefined' && controls?.getObject()) {
                  controls.getObject().position.set(player.x, visualY, player.z);
                  const targetRotation = new THREE.Euler(0, player.rotationY, 0, 'YXZ');
                  controls.getObject().rotation.copy(targetRotation);
                  console.log(`[Net] Set local controls pos/rot on respawn using camera offset.`);
              }
+
+             // --- Reset Local Physics State ---
+             velocityY = 0;
+             isOnGround = true; // Assume respawn point is valid ground
+             console.log("[Net] Reset local physics state on respawn.");
+             // --- End Physics Reset ---
 
              // Update UI
              if (typeof UIManager !== 'undefined') {
@@ -313,20 +306,13 @@ const Network = {
 
         } else { // Handling a remote player
              console.log(`[Net] Handling REMOTE player respawn for ${playerData.name}.`);
-             // If player doesn't exist locally (e.g., joined while dead), add them now.
              if (!player || !(player instanceof ClientPlayer)) {
                 console.warn(`Respawn for unknown/invalid remote player ${playerData.id}, adding/replacing now.`);
-                player = this._addPlayer(playerData); // Returns the new ClientPlayer or null
-                if (!player) {
-                    console.error(`Failed to create ClientPlayer for respawn ID: ${playerData.id}`);
-                    return; // Cannot proceed if creation failed
-                }
+                player = this._addPlayer(playerData);
+                if (!player) { console.error(`Failed to create ClientPlayer for respawn ID: ${playerData.id}`); return; }
              }
 
-             // Now we definitely have a ClientPlayer instance
-             player.updateData(playerData); // Updates internal state AND calls setInterpolationTargets
-
-             // Make visible and snap position/rotation instantly
+             player.updateData(playerData);
              player.setVisible?.(true);
              if (player.mesh) { // Snap visuals instantly
                   const pH=CONFIG?.PLAYER_HEIGHT||1.8;
@@ -345,7 +331,6 @@ const Network = {
     handleServerFull: function() {
         console.warn("[Net] Server Full.");
         if(socket) socket.disconnect();
-        // Transitioning to loading with error message is clearer than just homescreen
         if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading',{message:`Server is Full!`,error:true});
     },
 
@@ -361,35 +346,29 @@ const Network = {
         if (!localPlayerName) { UIManager.showError('Please enter a name.', 'homescreen'); return; }
         UIManager.clearError('homescreen');
 
-        // Check Asset Status (should be ready if button is clickable via game.js logic)
         if (typeof assetsAreReady === 'undefined' || !assetsAreReady) {
             console.warn("[Net] Assets not ready, cannot attempt join yet.");
             UIManager.showError('Assets still loading...', 'homescreen');
-            return; // Should ideally not happen if button click logic is correct
+            return;
         }
 
-        // Transition to 'joining' state FIRST
         if (typeof stateMachine !== 'undefined') stateMachine?.transitionTo('joining');
         if (UIManager.joinButton) { UIManager.joinButton.disabled = true; UIManager.joinButton.textContent = "Joining..."; }
 
-        // Now check network connection
         if (Network.isConnected()) {
             console.log("[Net] Already connected. Sending join details...");
-            Network.sendJoinDetails(); // Assets are ready, network connected -> send details
+            Network.sendJoinDetails();
         } else {
             console.log("[Net] Not connected. Waiting for connection...");
-            // Update button text maybe
             if (UIManager.joinButton) { UIManager.joinButton.textContent = "Connecting..."; }
-            // The 'connect' event handler will trigger sendJoinDetails if state is still 'joining'
-            if (socket && !socket.active) { socket.connect(); } // Ensure connection attempt is active
+            if (socket && !socket.active) { socket.connect(); }
         }
      },
 
      sendJoinDetails: function() {
-         // Make sure we are actually supposed to be joining and are connected
          if (typeof stateMachine === 'undefined' || !stateMachine?.is('joining')) {
              console.warn("sendJoinDetails called but not in 'joining' state. Aborting.");
-             return; // Avoid sending multiple times if state changed unexpectedly
+             return;
          }
          if (!Network.isConnected()) {
              console.error("sendJoinDetails called but socket disconnected. Aborting.");
@@ -400,18 +379,24 @@ const Network = {
 
          console.log(`[Net TX] setPlayerDetails Name: ${localPlayerName}, Phrase: ${localPlayerPhrase}`);
          socket.emit('setPlayerDetails', { name: localPlayerName, phrase: localPlayerPhrase });
-         // Keep button disabled, text "Joining..." is fine.
      },
 
      sendPlayerUpdate: function(data) {
-         // Added check for being alive locally - optional optimization
          const localPlayer = this._getPlayer(localPlayerId);
          if(Network.isConnected() && stateMachine?.is('playing') && localPlayer?.health > 0) {
-             socket.emit('playerUpdate', data);
+             socket.emit('playerUpdate', data); // Includes updated Y position now
          }
     },
+
+    // --- Added back sendVoidDeath ---
+    sendVoidDeath: function() {
+        if(Network.isConnected() && stateMachine?.is('playing')){
+             console.log("[Net TX] fellIntoVoid");
+             socket.emit('fellIntoVoid');
+        }
+    }
 
 }; // End Network object
 
 window.Network = Network;
-console.log("network.js loaded (Simplified Join Logic)");
+console.log("network.js loaded (Physics Reset and Void Death Added)");
