@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. Refactored (No Guns)</title> <!-- Updated title -->
+    <title>Shawty. (Cannon-es Physics)</title> <!-- Updated title -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
         <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
         <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
         <div class="phrase-container">
-             <span>Kill phrase: </span> <!-- Clarified phrase purpose slightly -->
+             <span>Kill phrase: </span>
              <input type="text" id="playerPhraseInput" placeholder="..............." maxlength="20">
         </div>
         <button id="joinButton">Join Game</button>
@@ -23,7 +23,6 @@
 
     <!-- In-Game UI -->
     <div id="gameUI">
-        <!-- <div id="crosshair"></div> --> <!-- REMOVED -->
         <div id="info"></div> <!-- Player Name/Status -->
         <div id="healthBarContainer">
             <div id="healthBarFill"></div>
@@ -42,18 +41,22 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+    <!-- <<< ADDED Physics Engine >>> -->
+    <script src="https://unpkg.com/cannon-es@0.19.0/dist/cannon-es.js"></script>
+    <!-- <<< END ADDED Physics Engine >>> -->
+
 
     <!-- Core & Game Logic - ORDER MATTERS -->
     <script src="config.js"></script> <!-- Load config first -->
     <script src="utils.js"></script> <!-- Utilities -->
     <script src="stateMachine.js"></script> <!-- State management -->
     <script src="loadManager.js"></script> <!-- Asset loading -->
-    <script src="entities.js"></script> <!-- Player class (no Bullet) -->
+    <script src="entities.js"></script> <!-- Player class -->
     <script src="uiManager.js"></script> <!-- UI interaction -->
     <script src="input.js"></script> <!-- Keyboard/Mouse input -->
     <script src="effects.js"></script> <!-- Simplified Effects -->
     <script src="network.js"></script> <!-- Server communication -->
-    <script src="gameLogic.js"></script> <!-- Core game loop logic (no shooting) -->
+    <script src="gameLogic.js"></script> <!-- Core game loop logic -->
     <script src="game.js"></script> <!-- Main Init/Loop last -->
 
 </body>
