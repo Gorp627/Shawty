@@ -2,34 +2,31 @@
 
 // Depends on: config.js, stateMachine.js, entities.js, input.js, network.js, uiManager.js
 // Accesses globals: camera, controls, players, localPlayerId, CONFIG, THREE, ClientPlayer, Network, Input, UIManager, stateMachine,
-//                   mapMesh, velocityY, isOnGround, raycaster
+//                   velocityY, isOnGround, raycaster // Removed mapMesh from global access list
 
 // Controls movement (Horizontal + Vertical), Dash, Collision (Player/Ground), Void Check, and Network updates.
 
 /**
  * Updates the local player's physics, state, movement, dash, collision, and network sync.
  * @param {number} deltaTime Time since last frame.
+ * @param {THREE.Object3D} mapMeshParam Reference to the loaded map mesh object. <<< PARAM ADDED
  */
-function updateLocalPlayer(deltaTime) {
+function updateLocalPlayer(deltaTime, mapMeshParam) { // <<< PARAM ADDED
     // --- Guard Clause: Ensure active play state and locked controls ---
     const isPlaying = typeof stateMachine !== 'undefined' && stateMachine.is('playing');
     const isLocked = typeof controls !== 'undefined' && controls?.isLocked;
-    const localPlayerData = localPlayerId ? players[localPlayerId] : null; // This is the plain object cache
-
-    // --- REMOVED Guard Clause for mapMesh ---
-    // State machine logic now ensures map is ready before 'playing' state is entered.
-    // if (typeof mapMesh === 'undefined' || !mapMesh) { ... } // REMOVED
+    const localPlayerData = localPlayerId ? players[localPlayerId] : null;
 
     // STOP processing if not playing, not locked, or local player doesn't exist
     if (!isPlaying || !isLocked || !localPlayerData) {
         return;
     }
 
-    // Check if alive *after* basic checks, allows void check even if server hasn't confirmed death yet
+    // Check if alive *after* basic checks
     const isAlive = localPlayerData.health > 0;
 
     // --- Get References ---
-    const controlsObject = controls.getObject(); // Camera / Player Rig
+    const controlsObject = controls.getObject();
 
     // --- Store Previous Position for Revert ---
     const previousPosition = controlsObject.position.clone();
@@ -46,13 +43,14 @@ function updateLocalPlayer(deltaTime) {
     isOnGround = false; // Assume not on ground
 
     // --- 3. Ground Collision Check (Raycast) ---
-    if (mapMesh && isAlive) { // Check mapMesh *still* necessary here before using it
+    // Use the passed mapMeshParam
+    if (mapMeshParam && isAlive) { // <<< Use mapMeshParam
         const feetOffset = 0.1;
         const groundCheckDistance = feetOffset + 0.1;
         const cameraOffsetCheck = CONFIG.CAMERA_Y_OFFSET || 1.9;
         const rayOrigin = new THREE.Vector3(
             controlsObject.position.x,
-            controlsObject.position.y - cameraOffsetCheck + feetOffset, // Start slightly above logical feet
+            controlsObject.position.y - cameraOffsetCheck + feetOffset,
             controlsObject.position.z
         );
         const rayDirection = new THREE.Vector3(0, -1, 0);
@@ -61,22 +59,22 @@ function updateLocalPlayer(deltaTime) {
         raycaster.set(rayOrigin, rayDirection);
         raycaster.far = groundCheckDistance;
 
-        const intersects = raycaster.intersectObject(mapMesh, true);
+        const intersects = raycaster.intersectObject(mapMeshParam, true); // <<< Use mapMeshParam
 
         if (intersects.length > 0) {
             const distanceToGround = intersects[0].distance;
             if (distanceToGround <= feetOffset + 0.01) {
                 isOnGround = true;
                 velocityY = 0;
-                controlsObject.position.y = intersects[0].point.y + cameraOffsetCheck; // Snap to ground + camera offset
+                controlsObject.position.y = intersects[0].point.y + cameraOffsetCheck;
             }
         }
-    } else if (!mapMesh && isAlive) {
-         console.warn("updateLocalPlayer: mapMesh check failed within physics update!"); // Log if it's missing here
+    } else if (!mapMeshParam && isAlive) { // <<< Check mapMeshParam
+         console.warn("updateLocalPlayer: mapMeshParam was null or undefined during physics update!");
     }
 
 
-    // --- 4. Void Check (AFTER potential ground snap) ---
+    // --- 4. Void Check ---
     let fellIntoVoid = false;
     if (isAlive) {
         if (controlsObject.position.y < (CONFIG.VOID_Y_LEVEL || -40)) {
@@ -91,7 +89,7 @@ function updateLocalPlayer(deltaTime) {
 
         if (fellIntoVoid) {
             console.log("Player fell into void!");
-            localPlayerData.health = 0; // Update local state immediately
+            localPlayerData.health = 0;
             if(typeof UIManager !== 'undefined') UIManager.updateHealthBar(0);
             if(typeof Network !== 'undefined') Network.sendVoidDeath();
             return; // Exit update loop
@@ -154,7 +152,7 @@ function updateLocalPlayer(deltaTime) {
     }
 
 
-    // --- 8. Send Network Updates (IF state changed significantly AND alive) ---
+    // --- 8. Send Network Updates ---
     if (isAlive) {
         const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8);
         const logicalPosition = new THREE.Vector3(
@@ -191,4 +189,4 @@ function updateRemotePlayers(deltaTime) {
     }
 }
 
-console.log("gameLogic.js loaded (Physics, Ground Check, Void Check Enabled)");
+console.log("gameLogic.js loaded (Accepting mapMesh Param)");
