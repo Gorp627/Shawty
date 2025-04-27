@@ -1,9 +1,8 @@
-// docs/network.js
+// docs/network.js (Adapted for Cannon-es)
 
 // Depends on: config.js, stateMachine.js, entities.js, input.js, effects.js, uiManager.js, game.js
-// Accesses globals: players, localPlayerId, socket, controls, CONFIG,
-//                   stateMachine, UIManager, ClientPlayer, scene, infoDiv, currentGameInstance, assetsAreReady,
-//                   velocityY, isOnGround // Added physics state access
+// Accesses globals: players, localPlayerId, socket, controls, CONFIG, CANNON,
+//                   stateMachine, UIManager, ClientPlayer, scene, infoDiv, currentGameInstance, assetsAreReady, world
 
 // Calls globals:    initializationData, networkIsInitialized
 
@@ -20,19 +19,19 @@ const Network = {
     },
 
     setupSocketIO: function() {
-        if (!CONFIG?.SERVER_URL) {
-             console.error("!!! CRITICAL: CONFIG.SERVER_URL missing!");
-             if(stateMachine) stateMachine.transitionTo('loading',{message:"FATAL: Net Config Error!",error:true});
+        if (typeof CONFIG === 'undefined' || !CONFIG?.SERVER_URL) {
+             console.error("!!! CRITICAL: CONFIG or CONFIG.SERVER_URL missing!");
+             if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading',{message:"FATAL: Net Config Error!",error:true});
              return;
         }
         console.log(`[Network] Connecting to: ${CONFIG.SERVER_URL}`);
         try {
-            if(typeof io === 'undefined') throw new Error("Socket.IO missing!");
+            if(typeof io === 'undefined') throw new Error("Socket.IO library not loaded!");
             socket = io(CONFIG.SERVER_URL, { transports: ['websocket'], autoConnect: true });
             console.log("[Network] Socket initialized...");
         } catch (e) {
             console.error("!!! Socket.IO Init Error:", e);
-            if(stateMachine) stateMachine.transitionTo('loading',{message:`FATAL: Net Init Error!`,error:true});
+            if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading',{message:`FATAL: Net Init Error! ${e.message}`,error:true});
             return;
         }
 
@@ -41,14 +40,11 @@ const Network = {
             console.log('[Net] Socket Connected! ID:', socket.id);
             networkIsInitialized = true; // Set flag now connection is established
 
-            // If we were in the 'joining' state (meaning user clicked Join before connecting)
-            // AND assets are ready, send the join details now.
             if (stateMachine?.is('joining') && typeof assetsAreReady !== 'undefined' && assetsAreReady) {
                  console.log("[Net Connect Handler] State is 'joining' and assets ready. Sending join details...");
                  Network.sendJoinDetails();
             } else if (stateMachine?.is('joining') && (typeof assetsAreReady === 'undefined' || !assetsAreReady)) {
                  console.log("[Net Connect Handler] State is 'joining' but assets not ready. Waiting for assets...");
-                 // LoadManager 'ready' event will handle sending details later
                  if(typeof UIManager !== 'undefined' && UIManager.joinButton) { UIManager.joinButton.disabled = true; UIManager.joinButton.textContent = "Loading Assets..."; }
             }
         });
@@ -58,6 +54,7 @@ const Network = {
             networkIsInitialized = false; // Reset flag
             initializationData = null; // Clear stored data
             if (typeof stateMachine !== 'undefined') {
+                 // game.js transition handler now clears players and physics bodies
                  stateMachine.transitionTo('homescreen', { playerCount: 0 });
                  if (typeof UIManager !== 'undefined') {
                      UIManager.updatePlayerCount(0);
@@ -108,103 +105,143 @@ const Network = {
 
     _getPlayer: function(id) { return players[id] || null; },
 
-    _addPlayer: function(playerData) {
+    _addPlayer: function(playerData) { // Primarily creates the visual ClientPlayer
         if(typeof ClientPlayer === 'undefined'){ console.error("ClientPlayer class missing"); return null; }
         if(typeof players === 'undefined') { console.warn("players global object missing"); return null; }
-        if(playerData?.id && !players[playerData.id]){ // Check ID and if not already present
-            console.log(`[Net] Creating ClientPlayer for: ${playerData.name || 'NoName'} (${playerData.id})`);
-            players[playerData.id] = new ClientPlayer(playerData); // Create instance
+        if(playerData?.id && !players[playerData.id]){
+            console.log(`[Net] Creating ClientPlayer visual for: ${playerData.name || 'NoName'} (${playerData.id})`);
+            players[playerData.id] = new ClientPlayer(playerData); // Creates visual representation
             return players[playerData.id];
         }
-        return null; // Return null if already exists or data invalid
+        return null;
     },
 
     _removePlayer: function(playerId) {
         const player = this._getPlayer(playerId);
-        if (player) {
-            console.log(`[Net] Removing player: ${player.name || playerId}`);
-            if (player instanceof ClientPlayer) {
-                player.remove?.(); // Call ClientPlayer remove method if exists
+        const playerBody = typeof currentGameInstance !== 'undefined' ? currentGameInstance.physicsBodies[playerId] : null;
+
+        if (player || playerBody) {
+            console.log(`[Net] Removing player & body: ${player?.name || playerId}`);
+            // Remove visual mesh via ClientPlayer instance
+            if (player && player instanceof ClientPlayer) {
+                player.remove?.(); // ClientPlayer.remove handles THREE mesh cleanup
             }
-            delete players[playerId];
+            // Remove physics body from world and tracking object
+            if (playerBody && typeof world !== 'undefined' && world) {
+                 world.removeBody(playerBody);
+                 if (typeof currentGameInstance !== 'undefined' && currentGameInstance.physicsBodies) {
+                      delete currentGameInstance.physicsBodies[playerId];
+                 }
+                 console.log(`[Net] Removed physics body for ${playerId}`);
+            } else if (playerBody) {
+                 console.warn(`[Net] Found physics body for ${playerId} but no physics world to remove from!`);
+            }
+
+            // Remove player entry from global 'players' object (might already be cleared by game.js homescreen handler)
+            if (players[playerId]) {
+                 delete players[playerId];
+            }
         } else {
-            // console.warn(`[Net] Attempted to remove non-existent player: ${playerId}`);
+             // console.warn(`[Net] Attempted to remove non-existent player/body: ${playerId}`);
         }
     },
 
 
-    // Initialize: Store data, set flag, START THE GAME if assets ready
+    // Initialize: Trigger game start (which now creates physics bodies)
     handleInitialize: function(data) {
          console.log('[Net] RX initialize');
          if (!data?.id || !data.players) {
              console.error("Invalid initialize data received from server.");
-             stateMachine?.transitionTo('homescreen');
-             UIManager?.showError("Server Init Data Invalid", "homescreen");
+             if (typeof stateMachine !== 'undefined') stateMachine.transitionTo('homescreen');
+             if (typeof UIManager !== 'undefined') UIManager?.showError("Server Init Data Invalid", "homescreen");
              return;
          }
+         initializationData = data; // Store data
 
-         initializationData = data; // Store data globally
-         // networkIsInitialized = true; // Flag is already set on 'connect'
-
-         // THIS is the point where we should start the game play, IF assets are ready.
+         // Check assets and proceed (Game instance now handles physics body creation)
          if (typeof assetsAreReady !== 'undefined' && assetsAreReady) {
              console.log("[Net Initialize Handler] Assets ready. Starting game play...");
              if (typeof currentGameInstance !== 'undefined' && currentGameInstance?.startGamePlay) {
-                 currentGameInstance.startGamePlay(initializationData); // This transitions state to 'playing'
+                 currentGameInstance.startGamePlay(initializationData); // Creates physics bodies
              } else {
                   console.error("[Net Initialize Handler] Game instance missing! Cannot start game.");
-                  stateMachine?.transitionTo('homescreen');
-                  UIManager?.showError("Client Startup Error", "homescreen");
+                  if (typeof stateMachine !== 'undefined') stateMachine.transitionTo('homescreen');
+                  if (typeof UIManager !== 'undefined') UIManager?.showError("Client Startup Error", "homescreen");
              }
          } else {
-             console.log("[Net Initialize Handler] Received initialize, but assets not ready. Waiting for assets...");
-             // The loadManager 'ready' event handler will call startGamePlay later.
+             console.log("[Net Initialize Handler] Received initialize, but assets not ready.");
              if (stateMachine?.is('joining') && typeof UIManager !== 'undefined' && UIManager?.showLoading) {
-                  UIManager.showLoading("Finalizing Assets..."); // Update status message
+                  UIManager.showLoading("Finalizing Assets...");
              }
          }
     }, // End handleInitialize
 
     handlePlayerJoined: function(playerData) {
-        // Add player only if it's a remote player and not already added
-        if (playerData?.id !== localPlayerId && !this._getPlayer(playerData.id)) {
-             const name = playerData.name || 'A player'; // Use name or default
+         // Logic to add remote player (visual AND physics)
+         if (playerData?.id !== localPlayerId && !this._getPlayer(playerData.id)) {
+             const name = playerData.name || 'A player';
              console.log(`[Network] Player joined event: ${name} (${playerData.id})`);
-             this._addPlayer(playerData); // Add player representation using helper
-             // Show join message in UI
-             if (typeof UIManager !== 'undefined' && UIManager.showKillMessage) {
-                 UIManager.showKillMessage(`${name} joined the game.`);
+
+             const newPlayer = this._addPlayer(playerData); // Adds visual ClientPlayer to scene
+
+             // Create the Physics Body if visual part succeeded
+             if (newPlayer instanceof ClientPlayer && typeof world !== 'undefined' && typeof currentGameInstance !== 'undefined' && typeof CANNON !== 'undefined') {
+                  const playerMaterial = world.materials.find(m => m.name === "playerMaterial");
+                 const remoteRadius = CONFIG?.PLAYER_RADIUS || 0.4;
+                 const remoteHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
+                 const remoteShape = new CANNON.Sphere(remoteRadius);
+                 const remoteBodyCenterY = playerData.y + remoteHeight / 2.0;
+                 const remoteBody = new CANNON.Body({
+                      mass: 0, shape: remoteShape,
+                      position: new CANNON.Vec3(playerData.x, remoteBodyCenterY, playerData.z),
+                      type: CANNON.Body.KINEMATIC, // KINEMATIC for remote players
+                      material: playerMaterial
+                 });
+                 world.addBody(remoteBody);
+                 currentGameInstance.physicsBodies[playerData.id] = remoteBody; // Store body ref
+                 console.log(`[Network] Created kinematic physics body for joined player ${playerData.id}`);
+                 remoteBody.quaternion.setFromEuler(0, playerData.rotationY || 0, 0); // Set initial rotation
+
+             } else {
+                  console.error(`[Network] Cannot create physics body for joined player ${playerData.id} - world, game instance, or CANNON missing!`);
              }
-        }
+
+             if (typeof UIManager !== 'undefined' && UIManager.showKillMessage) { UIManager.showKillMessage(`${name} joined the game.`); }
+         }
     },
 
     handlePlayerLeft: function(playerId) {
         if (playerId) {
-            const pName = players[playerId]?.name || 'A player'; // Get name before removing
+            const pName = typeof players !== 'undefined' && players[playerId] ? players[playerId].name : 'A player';
             console.log(`[Network] Player left event: ${pName} (${playerId})`);
-            this._removePlayer(playerId); // Remove player using helper
-             // Show leave message in UI
+            this._removePlayer(playerId); // Calls helper to remove visual AND physics body
              if (typeof UIManager !== 'undefined' && UIManager.showKillMessage) {
-                 UIManager.showKillMessage(`${pName} left the game.`);
+                  UIManager.showKillMessage(`${pName} left the game.`);
              }
         }
     },
 
+    // Update REMOTE players' KINEMATIC physics bodies based on server state
     handleGameStateUpdate: function(state) {
-        // Basic checks
-        if(!players || !state?.players || !stateMachine?.is('playing') || !localPlayerId) return;
-        // Iterate through players in the update
-        for (const id in state.players) {
-            const serverPlayerData = state.players[id]; // Lean data {id, x, y, z, r, h}
-            const localRepresentation = this._getPlayer(id); // Get local representation (ClientPlayer or plain object)
+        if(!players || !state?.players || !stateMachine?.is('playing') || !localPlayerId || typeof currentGameInstance?.physicsBodies === 'undefined') return;
 
-            // Update only REMOTE players from GSU
-            if (id !== localPlayerId) {
-                 if (localRepresentation instanceof ClientPlayer) {
-                     localRepresentation.updateData?.(serverPlayerData); // Update ClientPlayer instance
-                 } else if (!localRepresentation) {
-                     console.warn(`[Net GSU] Player ${id} found in update but not locally. Adding with lean data.`);
+        for (const id in state.players) {
+            const serverPlayerData = state.players[id]; // Lean data {id, x, y, z, r, h} y = feet
+
+            if (id !== localPlayerId) { // Only update remote players
+                 const remoteBody = currentGameInstance.physicsBodies[id];
+                 const remotePlayer = players[id]; // ClientPlayer instance
+
+                 if (remoteBody) { // Update physics body directly
+                     const remoteHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
+                     const bodyCenterY = serverPlayerData.y + remoteHeight / 2.0;
+                     remoteBody.position.set(serverPlayerData.x, bodyCenterY, serverPlayerData.z);
+                     remoteBody.quaternion.setFromEuler(0, serverPlayerData.r || 0, 0); // Use 'r' for rotation
                  }
+                  if (remotePlayer instanceof ClientPlayer && serverPlayerData.h !== undefined) {
+                       remotePlayer.health = serverPlayerData.h;
+                  }
+
             }
         }
     },
@@ -213,7 +250,7 @@ const Network = {
         if (!data?.id || data.health === undefined) return;
         const player = this._getPlayer(data.id);
         if (player) {
-            player.health = data.health;
+            player.health = data.health; // Update the cached health value
             if (data.id === localPlayerId && typeof UIManager !== 'undefined') {
                 UIManager.updateHealthBar(player.health);
             }
@@ -221,112 +258,93 @@ const Network = {
     },
 
     handlePlayerDied: function(data) {
-        if (!data?.targetId) return;
-        console.log(`>>> [Net RX] Player Died: ${data.targetId}`);
-        const targetPlayer = this._getPlayer(data.targetId);
+         if (!data?.targetId) return;
+         console.log(`>>> [Net RX] Player Died: ${data.targetId}`);
+         const targetPlayer = this._getPlayer(data.targetId); // Plain object (local) or ClientPlayer (remote)
+         const targetBody = typeof currentGameInstance !== 'undefined' ? currentGameInstance.physicsBodies[data.targetId] : null;
 
-        if (targetPlayer) {
-            targetPlayer.health = 0; // Set health to 0
+         if (targetPlayer) targetPlayer.health = 0; // Update logical health cache
 
-            if (data.targetId === localPlayerId) {
-                // Local player died
-                if (typeof UIManager !== 'undefined') {
-                    UIManager.updateHealthBar(0);
-                    let message = data.killerId === null ? "Fell out." : "Eliminated.";
-                    if (data.killerName && data.killerId !== null) {
-                        message = `${data.killerName} ${data.killerPhrase || 'eliminated'} ${targetPlayer.name}`;
-                    }
-                    UIManager.showKillMessage(message);
-                }
-                if (typeof infoDiv !== 'undefined' && infoDiv) infoDiv.textContent = `DEAD`;
-                if (typeof controls !== 'undefined' && controls?.isLocked) controls.unlock();
-
-            } else if (targetPlayer instanceof ClientPlayer) {
-                // Remote player died
-                targetPlayer.setVisible?.(false); // Hide remote player mesh
-                 if (typeof UIManager !== 'undefined') {
-                     let message = `${targetPlayer.name || 'A player'} was eliminated.`;
-                     if (data.killerName && data.killerId !== null) {
-                         message = `${data.killerName} ${data.killerPhrase || 'eliminated'} ${targetPlayer.name}`;
-                     } else if (data.killerId === null) {
-                          message = `${targetPlayer.name || 'A player'} fell out.`;
-                     }
-                     UIManager.showKillMessage(message);
-                 }
-            }
-        } else {
-            console.warn(`[Net] Received playerDied for unknown target: ${data.targetId}`);
-        }
+         if (data.targetId === localPlayerId) {
+              if (typeof UIManager !== 'undefined') {
+                  UIManager.updateHealthBar(0);
+                  let message = data.killerId === null ? "Fell out." : "Eliminated.";
+                  if (data.killerName && data.killerId !== null && targetPlayer) {
+                       message = `${data.killerName} ${data.killerPhrase || 'eliminated'} ${targetPlayer.name}`;
+                   }
+                   UIManager.showKillMessage(message);
+              }
+              if (typeof infoDiv !== 'undefined') infoDiv.textContent = `DEAD`;
+              if (typeof controls !== 'undefined' && controls?.isLocked) controls.unlock();
+              if (targetBody) {
+                   // Make local body static or disable temporarily if needed?
+                   // For now, gameLogic 'isAlive' check should prevent input processing
+              }
+         } else if (targetPlayer instanceof ClientPlayer) {
+              targetPlayer.setVisible?.(false); // Hide visual mesh
+              if (typeof UIManager !== 'undefined') {
+                 let message = `${targetPlayer.name || 'A player'} was eliminated.`;
+                 if (data.killerName && data.killerId !== null) { message = `${data.killerName} ${data.killerPhrase || 'eliminated'} ${targetPlayer.name}`; }
+                 else if (data.killerId === null) { message = `${targetPlayer.name || 'A player'} fell out.`; }
+                 UIManager.showKillMessage(message);
+               }
+               // Remove remote body? Or wait for respawn to teleport it? Wait seems better.
+         }
     },
 
     handlePlayerRespawned: function(playerData) {
-        if (!playerData?.id) return; // Basic validation
+        if (!playerData?.id) return;
         console.log(`>>> [Net RX] Player Respawned: ${playerData.name} (${playerData.id})`);
-        let player = this._getPlayer(playerData.id); // Get local representation
+        let player = this._getPlayer(playerData.id); // Visual/cache representation
+        let playerBody = typeof currentGameInstance !== 'undefined' ? currentGameInstance.physicsBodies[playerData.id] : null; // Physics body
 
-        // --- Separate logic: Local Player Object vs Remote ClientPlayer Instance ---
         if (playerData.id === localPlayerId) {
              console.log("[Net] Handling LOCAL player respawn.");
-             if (!player) {
-                 console.error("[Net] CRITICAL: Local player object missing on respawn!");
-                 players[localPlayerId] = { isLocal: true }; // Recreate basic object
-                 player = players[localPlayerId];
-             }
-             // Update local player data object
-             player.health = playerData.health;
-             player.x = playerData.x;
-             player.y = playerData.y; // Server sends feet Y (should be 0)
-             player.z = playerData.z;
-             player.rotationY = playerData.rotationY;
-             player.name = playerData.name;
-             player.phrase = playerData.phrase;
+             if (!player) { console.error("[Net] Local player object missing on respawn!"); player = { isLocal: true }; players[localPlayerId] = player; }
+             if (!playerBody || typeof CANNON === 'undefined') { console.error("[Net] Local physics body or CANNON missing on respawn!"); return; }
 
-             // Reset local controls position using the CAMERA_Y_OFFSET
-             const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8);
-             const visualY = player.y + cameraOffset;
-             if (typeof controls !== 'undefined' && controls?.getObject()) {
-                 controls.getObject().position.set(player.x, visualY, player.z);
-                 const targetRotation = new THREE.Euler(0, player.rotationY, 0, 'YXZ');
-                 controls.getObject().rotation.copy(targetRotation);
-                 console.log(`[Net] Set local controls pos/rot on respawn using camera offset.`);
-             }
+             // Update local data object
+             player.health = playerData.health; player.x = playerData.x; player.y = playerData.y; player.z = playerData.z;
+             player.rotationY = playerData.rotationY; player.name = playerData.name; player.phrase = playerData.phrase;
 
-             // --- Reset Local Physics State ---
-             velocityY = 0;
-             isOnGround = true; // Assume respawn point is valid ground
-             console.log("[Net] Reset local physics state on respawn.");
-             // --- End Physics Reset ---
+             // TELEPORT Physics Body
+             const playerHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
+             const bodyCenterY = playerData.y + playerHeight / 2.0; // Calc center from feet Y
+             playerBody.position.set(playerData.x, bodyCenterY, playerData.z);
+             playerBody.quaternion.setFromEuler(0, playerData.rotationY || 0, 0);
+             playerBody.velocity.set(0, 0, 0);
+             playerBody.angularVelocity.set(0, 0, 0);
+             console.log("[Net] Teleported local physics body.");
 
-             // Update UI
              if (typeof UIManager !== 'undefined') {
-                 UIManager.updateHealthBar(player.health);
-                 UIManager.updateInfo(`Playing as ${player.name}`);
-                 UIManager.clearKillMessage();
-             }
+                  UIManager.updateHealthBar(player.health);
+                  UIManager.updateInfo(`Playing as ${player.name}`);
+                  UIManager.clearKillMessage();
+              }
 
-        } else { // Handling a remote player
+        } else { // REMOTE Player Respawn
              console.log(`[Net] Handling REMOTE player respawn for ${playerData.name}.`);
-             if (!player || !(player instanceof ClientPlayer)) {
-                console.warn(`Respawn for unknown/invalid remote player ${playerData.id}, adding/replacing now.`);
-                player = this._addPlayer(playerData);
-                if (!player) { console.error(`Failed to create ClientPlayer for respawn ID: ${playerData.id}`); return; }
+             // Recreate if missing
+             if (!player || !playerBody || !(player instanceof ClientPlayer)) {
+                console.warn(`Respawn for missing remote player ${playerData.id}, recreating...`);
+                 this._removePlayer(playerData.id);
+                 this.handlePlayerJoined(playerData); // This now creates mesh+body
+                 player = this._getPlayer(playerData.id);
+                 playerBody = currentGameInstance?.physicsBodies[playerData.id];
+                 if (!player || !playerBody || typeof CANNON === 'undefined') { console.error("Failed to recreate remote player/body on respawn!"); return; }
              }
 
-             player.updateData(playerData);
+             player.updateData(playerData); // Update health/name etc.
              player.setVisible?.(true);
-             if (player.mesh) { // Snap visuals instantly
-                  const pH=CONFIG?.PLAYER_HEIGHT||1.8;
-                  let visualY=player.y;
-                  if(player.mesh.geometry instanceof THREE.CylinderGeometry) visualY = player.y + pH/2;
-                  else visualY = player.y; // Assume model origin at feet
 
-                  player.mesh.position.set(player.x, visualY, player.z);
-                  player.mesh.rotation.y = player.rotationY;
-                  player.mesh.quaternion.setFromEuler(new THREE.Euler(0, player.rotationY, 0, 'YXZ'));
-                  console.log(`[Net] Snapped remote player ${player.id} visuals on respawn.`);
-             }
+             // TELEPORT Remote Kinematic Body
+             const remoteHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
+             const remoteBodyCenterY = playerData.y + remoteHeight / 2.0;
+             playerBody.position.set(playerData.x, remoteBodyCenterY, playerData.z);
+             playerBody.quaternion.setFromEuler(0, playerData.rotationY || 0, 0);
+             console.log("[Net] Teleported remote physics body.");
         }
-    }, // End handlePlayerRespawned
+    },
 
     handleServerFull: function() {
         console.warn("[Net] Server Full.");
@@ -336,47 +354,23 @@ const Network = {
 
 
      // --- Actions Sent To Server ---
-
      attemptJoinGame: function() {
-        console.log("--- [Net] attemptJoinGame ---");
+         console.log("--- [Net] attemptJoinGame ---");
         if (typeof UIManager === 'undefined' || !UIManager?.playerNameInput || !UIManager.playerPhraseInput) { console.error("UI Inputs missing!"); return; }
         localPlayerName = UIManager.playerNameInput.value.trim() || 'Anon';
         localPlayerPhrase = UIManager.playerPhraseInput.value.trim() || '...';
-
         if (!localPlayerName) { UIManager.showError('Please enter a name.', 'homescreen'); return; }
         UIManager.clearError('homescreen');
-
-        if (typeof assetsAreReady === 'undefined' || !assetsAreReady) {
-            console.warn("[Net] Assets not ready, cannot attempt join yet.");
-            UIManager.showError('Assets still loading...', 'homescreen');
-            return;
-        }
-
+        if (typeof assetsAreReady === 'undefined' || !assetsAreReady) { console.warn("[Net] Assets not ready."); UIManager.showError('Assets still loading...', 'homescreen'); return; }
         if (typeof stateMachine !== 'undefined') stateMachine?.transitionTo('joining');
         if (UIManager.joinButton) { UIManager.joinButton.disabled = true; UIManager.joinButton.textContent = "Joining..."; }
-
-        if (Network.isConnected()) {
-            console.log("[Net] Already connected. Sending join details...");
-            Network.sendJoinDetails();
-        } else {
-            console.log("[Net] Not connected. Waiting for connection...");
-            if (UIManager.joinButton) { UIManager.joinButton.textContent = "Connecting..."; }
-            if (socket && !socket.active) { socket.connect(); }
-        }
+        if (Network.isConnected()) { console.log("[Net] Already connected. Sending join details..."); Network.sendJoinDetails(); }
+        else { console.log("[Net] Not connected. Waiting for connection..."); if (UIManager.joinButton) { UIManager.joinButton.textContent = "Connecting..."; } if (socket && !socket.active) { socket.connect(); } }
      },
 
      sendJoinDetails: function() {
-         if (typeof stateMachine === 'undefined' || !stateMachine?.is('joining')) {
-             console.warn("sendJoinDetails called but not in 'joining' state. Aborting.");
-             return;
-         }
-         if (!Network.isConnected()) {
-             console.error("sendJoinDetails called but socket disconnected. Aborting.");
-             stateMachine?.transitionTo('homescreen', { playerCount: UIManager?.playerCountSpan?.textContent ?? '?' });
-             UIManager?.showError('Connection lost.', 'homescreen');
-             return;
-         }
-
+         if (typeof stateMachine === 'undefined' || !stateMachine?.is('joining')) { console.warn("Not joining state."); return; }
+         if (!Network.isConnected()) { console.error("Socket disconnected."); stateMachine?.transitionTo('homescreen', { playerCount: UIManager?.playerCountSpan?.textContent ?? '?' }); UIManager?.showError('Connection lost.', 'homescreen'); return; }
          console.log(`[Net TX] setPlayerDetails Name: ${localPlayerName}, Phrase: ${localPlayerPhrase}`);
          socket.emit('setPlayerDetails', { name: localPlayerName, phrase: localPlayerPhrase });
      },
@@ -388,8 +382,7 @@ const Network = {
          }
     },
 
-    // --- Added back sendVoidDeath ---
-    sendVoidDeath: function() {
+     sendVoidDeath: function() {
         if(Network.isConnected() && stateMachine?.is('playing')){
              console.log("[Net TX] fellIntoVoid");
              socket.emit('fellIntoVoid');
@@ -399,4 +392,4 @@ const Network = {
 }; // End Network object
 
 window.Network = Network;
-console.log("network.js loaded (Physics Reset and Void Death Added)");
+console.log("network.js loaded (Cannon-es Integration)");
