@@ -2,24 +2,24 @@
 
 const CONFIG = {
     SERVER_URL: 'https://gametest-psxl.onrender.com',
-    MAP_PATH: 'assets/maps/the first map!.glb', // <<< UPDATED MAP PATH
+    MAP_PATH: 'assets/maps/the first map!.glb', // Ensure this matches
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
 
     PLAYER_HEIGHT: 1.8,
     PLAYER_RADIUS: 0.4,
-    CAMERA_Y_OFFSET: 1.6, // Camera height relative to FEET (Y=0) in manual physics
+    CAMERA_Y_OFFSET: 1.6,
     MOVEMENT_SPEED: 7.0,
     MOVEMENT_SPEED_SPRINTING: 10.5,
-    DASH_FORCE: 25.0,       // Speed added during dash
-    DASH_DURATION: 0.15,    // Duration dash speed is applied
+    DASH_FORCE: 25.0,
+    DASH_DURATION: 0.15,
     DASH_COOLDOWN: 0.8,
 
     // --- Physics Config (Manual) ---
     GRAVITY: 25.0,
     JUMP_FORCE: 9.0,
-    VOID_Y_LEVEL: -20,      // <<< Raised slightly as safety margin for spawn
-    MAP_BOUNDS_X: 50.0,     // <<< ADJUST these based on "the first map!" size
-    MAP_BOUNDS_Z: 50.0,     // <<< ADJUST these based on "the first map!" size
+    VOID_Y_LEVEL: -50,      // <<< LOWERED FURTHER >>>
+    MAP_BOUNDS_X: 50.0,     // ADJUST these based on "the first map!" size
+    MAP_BOUNDS_Z: 50.0,     // ADJUST these based on "the first map!" size
     // --- End Physics ---
 
     KILL_MESSAGE_DURATION: 3500,
@@ -38,11 +38,11 @@ let scene, camera, renderer, controls, clock, loader, dracoLoader;
 
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
-let mapMesh = null; // Visual map mesh - USED FOR RAYCAST
+let mapMesh = null;
 
 // --- Manual Physics State ---
 let velocityY = 0;
 let isOnGround = false;
-let raycaster = new THREE.Raycaster(); // Raycaster for ground check
+let raycaster = new THREE.Raycaster();
 
-console.log("config.js loaded (Reverted to Manual Physics, New Map)");
+console.log("config.js loaded (Manual Physics, Lower Void)");
