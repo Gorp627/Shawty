@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. (Manual Physics)</title> <!-- Updated title -->
+    <title>Shawty. (Rapier Physics Retry)</title> <!-- Updated title -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -41,7 +41,10 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
-    <!-- <<< REMOVED Physics Engine Script >>> -->
+
+    <!-- <<< Rapier Physics Engine Init >>> -->
+    <script type="module" src="rapier_init.js"></script>
+    <!-- <<< END Rapier >>> -->
 
     <!-- Core & Game Logic - ORDER MATTERS -->
     <script src="config.js"></script> <!-- Load config first -->
