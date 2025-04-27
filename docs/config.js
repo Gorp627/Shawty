@@ -2,12 +2,12 @@
 
 const CONFIG = {
     SERVER_URL: 'https://gametest-psxl.onrender.com',
-    MAP_PATH: 'assets/maps/the first map!.glb', // Ensure this matches
+    MAP_PATH: 'assets/maps/the first map!.glb', // Using new map
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
 
     PLAYER_HEIGHT: 1.8,
     PLAYER_RADIUS: 0.4,
-    CAMERA_Y_OFFSET: 1.6,
+    CAMERA_Y_OFFSET: 1.6, // Camera height relative to FEET (Y=0) in manual physics
     MOVEMENT_SPEED: 7.0,
     MOVEMENT_SPEED_SPRINTING: 10.5,
     DASH_FORCE: 25.0,
@@ -17,7 +17,7 @@ const CONFIG = {
     // --- Physics Config (Manual) ---
     GRAVITY: 25.0,
     JUMP_FORCE: 9.0,
-    VOID_Y_LEVEL: -50,      // <<< LOWERED FURTHER >>>
+    VOID_Y_LEVEL: -50,      // <<< LOWERED >>>
     MAP_BOUNDS_X: 50.0,     // ADJUST these based on "the first map!" size
     MAP_BOUNDS_Z: 50.0,     // ADJUST these based on "the first map!" size
     // --- End Physics ---
@@ -45,4 +45,4 @@ let velocityY = 0;
 let isOnGround = false;
 let raycaster = new THREE.Raycaster();
 
-console.log("config.js loaded (Manual Physics, Lower Void)");
+console.log("config.js loaded (Reverted to Manual Physics, Lower Void)");
