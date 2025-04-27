@@ -5,26 +5,25 @@
 
 /**
  * Updates the local player's physics BODY based on input and handles void checks.
- * @param {number} deltaTime Time since last frame.
+ * @param {number} deltaTime Time since last frame (passed but might not be used for velocity).
  * @param {CANNON.Body} playerBody Reference to the local player's physics body.
  */
 function updateLocalPlayer(deltaTime, playerBody) {
     // --- Guard Clauses ---
-    if (!playerBody) {
-        // If body doesn't exist yet or player left, do nothing.
-        // console.warn("updateLocalPlayer called without playerBody");
-        return;
-    }
-    const isPlaying = typeof stateMachine !== 'undefined' && stateMachine.is('playing');
-    const isLocked = typeof controls !== 'undefined' && controls?.isLocked;
+    if (!playerBody) { return; } // Must have physics body
+    const isPlaying = stateMachine?.is('playing');
+    const isLocked = controls?.isLocked;
     const localPlayerData = localPlayerId ? players[localPlayerId] : null;
-
-    if (!isPlaying || !isLocked || !localPlayerData) { return; }
+    if (!isPlaying || !isLocked || !localPlayerData) { return; } // Must be playing, locked, have data
 
     const isAlive = localPlayerData.health > 0;
 
-    // <<< Reset Grounded Flag - Collision handler will set it to true if contact occurs THIS FRAME >>>
-    isPlayerGrounded = false;
+    // <<< Reset Grounded Flag - Updated by collision handler between frames >>>
+    // NOTE: Collision events fire *during* world.step(). To reliably check for ground before applying jump,
+    // it's better to have the event handler set the flag, and we read it here.
+    // But we MUST reset it here or after using it, otherwise player might jump infinitely after leaving ground.
+    let _isGroundedThisFrame = isPlayerGrounded; // Read the state set by collision listener
+    isPlayerGrounded = false; // <<< IMPORTANT: Assume not grounded for NEXT frame unless collision happens
 
 
     // --- Physics Body Interaction (Only if Alive) ---
@@ -34,15 +33,14 @@ function updateLocalPlayer(deltaTime, playerBody) {
         const forward = new THREE.Vector3(), right = new THREE.Vector3();
         const moveDirectionInput = new THREE.Vector3(0, 0, 0);
 
-        if (typeof camera !== 'undefined') {
+        if (camera) {
             camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
             right.crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
-
+            // Apply Input (A/D Swapped correctly)
             if(Input.keys['KeyW']){moveDirectionInput.add(forward);}
             if(Input.keys['KeyS']){moveDirectionInput.sub(forward);}
-            // <<< SWAPPED A/D >>>
-            if(Input.keys['KeyA']){moveDirectionInput.sub(right);} // A=Left
-            if(Input.keys['KeyD']){moveDirectionInput.add(right);} // D=Right
+            if(Input.keys['KeyA']){moveDirectionInput.sub(right);} // A = Left
+            if(Input.keys['KeyD']){moveDirectionInput.add(right);} // D = Right
         } else { console.error("Camera missing!"); return; }
 
         // --- Apply Horizontal Velocity ---
@@ -52,65 +50,56 @@ function updateLocalPlayer(deltaTime, playerBody) {
             targetVelocityX = moveDirectionInput.x * moveSpeed;
             targetVelocityZ = moveDirectionInput.z * moveSpeed;
         }
-        // Preserve vertical velocity from physics engine (gravity/jump)
-        const currentVelocityY = playerBody?.velocity.y ?? 0; // Add null check
-        if (playerBody?.velocity) { // Add null check before setting
-            playerBody.velocity.set(targetVelocityX, currentVelocityY, targetVelocityZ);
-        }
+        const currentVelocityY = playerBody.velocity.y; // Keep vertical from physics
+        playerBody.velocity.set(targetVelocityX, currentVelocityY, targetVelocityZ);
 
-        // --- Handle Jump (Check flag from Input.js) ---
-        if (Input.attemptingJump) { // Check the flag set by Space keydown
-            console.log("Jump Logic: attempt=true, grounded=", isPlayerGrounded);
-            if (isPlayerGrounded) { // Double-check ground status HERE using flag
-                if (playerBody?.velocity) { // Check body exists
-                    playerBody.velocity.y = CONFIG.JUMP_VELOCITY || 8.5; // Apply jump velocity
-                    console.log("Applying jump velocity:", playerBody.velocity.y);
-                }
+
+        // --- Handle Jump ---
+        if (Input.attemptingJump) { // Check jump request flag from input
+            if (_isGroundedThisFrame) { // Check the grounded state read at start of function
+                playerBody.velocity.y = CONFIG.JUMP_VELOCITY || 8.5; // Apply jump velocity
+                console.log("Jump Applied! VelocityY:", playerBody.velocity.y);
+                _isGroundedThisFrame = false; // Prevent repeated jump from same ground contact if collision fires late
+            } else {
+                // console.log("Jump attempt ignored, not grounded this frame.");
             }
-            Input.attemptingJump = false; // Consume the jump attempt flag
+            Input.attemptingJump = false; // Consume the jump attempt flag regardless
         }
 
-        // --- Handle Dash (Check flag from Input.js) ---
+        // --- Handle Dash ---
         if (Input.requestingDashImpulse) {
-            if (playerBody?.position) { // Check body exists
-                const impulseDirection = new CANNON.Vec3(Input.dashDirection.x, Input.dashDirection.y, Input.dashDirection.z);
-                const impulseMagnitude = CONFIG.DASH_FORCE_MAGNITUDE || 1200;
-                impulseDirection.scale(impulseMagnitude, impulseDirection); // Scale direct by magnitude
-                playerBody.applyImpulse(impulseDirection, playerBody.position); // Apply at center
-                console.log("Dash Impulse Applied!");
-            }
-            Input.requestingDashImpulse = false; // Consume the flag
+            const impulseDirection = new CANNON.Vec3(Input.dashDirection.x, Input.dashDirection.y, Input.dashDirection.z);
+            const impulseMagnitude = CONFIG.DASH_FORCE_MAGNITUDE || 1200;
+            impulseDirection.scale(impulseMagnitude, impulseDirection);
+            playerBody.applyImpulse(impulseDirection, playerBody.position);
+            console.log("Dash Impulse Applied!");
+            Input.requestingDashImpulse = false; // Consume dash request
         }
 
     } else { // If Dead
-        if (playerBody?.velocity) playerBody.velocity.set(0, 0, 0); // Stop movement
-        if (playerBody?.angularVelocity) playerBody.angularVelocity.set(0, 0, 0); // Stop spinning
+        playerBody.velocity.set(0, 0, 0); playerBody.angularVelocity.set(0, 0, 0);
     }
 
 
     // --- Void Check ---
     let fellIntoVoid = false;
-    if (isAlive && playerBody?.position) { // Check body exists
+    if (isAlive && playerBody.position) { // Check if player body exists
         if (playerBody.position.y < (CONFIG.VOID_Y_LEVEL || -40)) { fellIntoVoid = true; console.log("Fell below Y level"); }
         if (!fellIntoVoid && (Math.abs(playerBody.position.x) > (CONFIG.MAP_BOUNDS_X || 50) || Math.abs(playerBody.position.z) > (CONFIG.MAP_BOUNDS_Z || 50))) { fellIntoVoid = true; console.log("Fell outside bounds"); }
         if (fellIntoVoid) {
             console.log("Player fell into void!"); localPlayerData.health = 0;
             if(UIManager) UIManager.updateHealthBar(0); if(Network) Network.sendVoidDeath();
-            // Reset physics to prevent ghost forces after death message sent
-            if (playerBody?.velocity) playerBody.velocity.set(0,0,0); if (playerBody?.angularVelocity) playerBody.angularVelocity.set(0,0,0);
+            if (playerBody.velocity) playerBody.velocity.set(0,0,0); if (playerBody.angularVelocity) playerBody.angularVelocity.set(0,0,0); // Stop body immediately
         }
     }
 
-    // --- Player Collision is handled by Cannon-es ---
+    // --- Player Collision handled by physics engine ---
 
     // --- Send Network Updates ---
-    const controlsObject = controls?.getObject(); // Get for rotation data
-    if (isAlive && playerBody?.position && controlsObject && localPlayerData) { // Check necessary objects
-         const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || 1.6;
-         const logicalPosition = new THREE.Vector3( playerBody.position.x, playerBody.position.y - playerHeight / 2.0, playerBody.position.z ); // Calculate feet Y from BODY center Y
-         // Alternatively, read controls pos after sync, subtract camera offset
-         // const logicalPosition = new THREE.Vector3(controlsObject.position.x, controlsObject.position.y - cameraOffset, controlsObject.position.z);
-
+    const controlsObject = controls?.getObject();
+    if (playerBody.position && controlsObject && localPlayerData) { // Check required objects
+         const playerHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
+         const logicalPosition = new THREE.Vector3( playerBody.position.x, playerBody.position.y - playerHeight / 2.0, playerBody.position.z ); // Calculate feet Y from body center
          const currentRotation = new THREE.Euler().setFromQuaternion(controlsObject.quaternion,'YXZ'); const currentRotationY = currentRotation.y;
          const pTSq = CONFIG.PLAYER_MOVE_THRESHOLD_SQ || 0.0001; const rTh = 0.01;
          const posChanged = logicalPosition.distanceToSquared(new THREE.Vector3(localPlayerData.x??0, localPlayerData.y??0, localPlayerData.z??0)) > pTSq;
@@ -120,14 +109,10 @@ function updateLocalPlayer(deltaTime, playerBody) {
              localPlayerData.x = logicalPosition.x; localPlayerData.y = logicalPosition.y; localPlayerData.z = logicalPosition.z; localPlayerData.rotationY = currentRotationY;
              if (Network) Network.sendPlayerUpdate({ x: localPlayerData.x, y: localPlayerData.y, z: localPlayerData.z, rotationY: localPlayerData.rotationY });
          }
-    } else if (!isAlive && (posChanged || rotChanged)) {
-        // Send one final update if dead and position changed (e.g., falling into void)
-         localPlayerData.x = logicalPosition.x; localPlayerData.y = logicalPosition.y; localPlayerData.z = logicalPosition.z; localPlayerData.rotationY = currentRotationY;
-         if (Network) Network.sendPlayerUpdate({ x: localPlayerData.x, y: localPlayerData.y, z: localPlayerData.z, rotationY: localPlayerData.rotationY });
+         // Also consider sending periodic updates even if not moved significantly? Prevents appearing frozen on other clients if packet loss occurs.
     }
-
 
 } // End updateLocalPlayer
 
 
-console.log("gameLogic.js loaded (Using Physics Body, Fixed Ground Check)");
+console.log("gameLogic.js loaded (Using Physics Body, Ground Events, A/D Corrected)");
