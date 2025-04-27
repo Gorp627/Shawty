@@ -31,86 +31,71 @@ function updateLocalPlayer(deltaTime) {
     const previousPosition = controlsObject.position.clone();
 
     // --- 1. Apply Gravity ---
-    // Only apply gravity if alive, otherwise player stays put until respawn packet
     if (isAlive) {
         velocityY -= (CONFIG.GRAVITY || 25.0) * deltaTime;
     } else {
-        velocityY = 0; // Ensure dead players don't accumulate velocity
+        velocityY = 0;
     }
 
     // --- 2. Update Vertical Position based on Velocity ---
     controlsObject.position.y += velocityY * deltaTime;
-    isOnGround = false; // Assume not on ground until proven otherwise by raycast
+    isOnGround = false; // Assume not on ground
 
     // --- 3. Ground Collision Check (Raycast) ---
-    if (mapMesh && isAlive) { // Only check ground if map exists and player is alive
-        const feetOffset = 0.1; // How far above feet to start the ray
-        const groundCheckDistance = feetOffset + 0.1; // Max distance to check for ground (feetOffset + buffer)
+    if (mapMesh && isAlive) {
+        const feetOffset = 0.1;
+        const groundCheckDistance = feetOffset + 0.1;
+        const cameraOffsetCheck = CONFIG.CAMERA_Y_OFFSET || 1.9;
         const rayOrigin = new THREE.Vector3(
             controlsObject.position.x,
-            controlsObject.position.y - (CONFIG.CAMERA_Y_OFFSET || 1.9) + feetOffset, // Start slightly above logical feet
+            controlsObject.position.y - cameraOffsetCheck + feetOffset, // Start slightly above logical feet
             controlsObject.position.z
         );
         const rayDirection = new THREE.Vector3(0, -1, 0);
 
-        if (typeof raycaster === 'undefined') { // Safety check if raycaster wasn't init globally
-            console.error("Raycaster missing!");
-            raycaster = new THREE.Raycaster();
-        }
+        if (typeof raycaster === 'undefined') { console.error("Raycaster missing!"); raycaster = new THREE.Raycaster(); }
         raycaster.set(rayOrigin, rayDirection);
-        raycaster.far = groundCheckDistance; // Only check directly below
+        raycaster.far = groundCheckDistance;
 
-        const intersects = raycaster.intersectObject(mapMesh, true); // Check map recursively
+        const intersects = raycaster.intersectObject(mapMesh, true);
 
         if (intersects.length > 0) {
             const distanceToGround = intersects[0].distance;
-            // If the intersection distance is less than or equal to the offset we started above the feet, we are on ground.
-            if (distanceToGround <= feetOffset + 0.01) { // Added small tolerance
+            if (distanceToGround <= feetOffset + 0.01) {
                 isOnGround = true;
-                velocityY = 0; // Stop falling
-                // Snap player exactly to the ground surface + camera offset
-                controlsObject.position.y = intersects[0].point.y + (CONFIG.CAMERA_Y_OFFSET || 1.9);
-                // console.log("Ground Hit! Snapped Y:", controlsObject.position.y); // Debug log
+                velocityY = 0;
+                controlsObject.position.y = intersects[0].point.y + cameraOffsetCheck; // Snap to ground + camera offset
             }
         }
     } else if (!mapMesh && isAlive) {
-        console.warn("mapMesh not available for ground check.");
-        // Fallback: If no map, maybe assume ground at Y=0 if below a certain threshold?
-        // if (controlsObject.position.y <= (CONFIG.CAMERA_Y_OFFSET || 1.9)) {
-        //     isOnGround = true;
-        //     velocityY = 0;
-        //     controlsObject.position.y = (CONFIG.CAMERA_Y_OFFSET || 1.9);
-        // }
+        // Log only once or less frequently if needed
+        // console.warn("mapMesh not available for ground check.");
     }
 
 
     // --- 4. Void Check (AFTER potential ground snap) ---
     let fellIntoVoid = false;
-    if (isAlive) { // Only check if alive
-        // Check Y Level
+    if (isAlive) {
         if (controlsObject.position.y < (CONFIG.VOID_Y_LEVEL || -40)) {
             console.log("Fell below VOID_Y_LEVEL.");
             fellIntoVoid = true;
         }
-        // Check X/Z map bounds
-        if (Math.abs(controlsObject.position.x) > (CONFIG.MAP_BOUNDS_X || 50) ||
-            Math.abs(controlsObject.position.z) > (CONFIG.MAP_BOUNDS_Z || 50)) {
+        if (!fellIntoVoid && (Math.abs(controlsObject.position.x) > (CONFIG.MAP_BOUNDS_X || 50) ||
+            Math.abs(controlsObject.position.z) > (CONFIG.MAP_BOUNDS_Z || 50))) {
             console.log("Fell outside MAP_BOUNDS.");
             fellIntoVoid = true;
         }
 
         if (fellIntoVoid) {
             console.log("Player fell into void!");
-            // Immediately update local state to prevent further actions
-            localPlayerData.health = 0;
+            localPlayerData.health = 0; // Update local state immediately
             if(typeof UIManager !== 'undefined') UIManager.updateHealthBar(0);
-            if(typeof Network !== 'undefined') Network.sendVoidDeath(); // Notify server
-            // Optional: stop processing immediately after sending death notice
-            return; // Exit update loop for this frame
+            if(typeof Network !== 'undefined') Network.sendVoidDeath();
+            return; // Exit update loop
         }
     }
 
-    // --- 5. Horizontal Movement (Based on Input & Camera Direction) ---
+    // --- 5. Horizontal Movement ---
     const moveSpeed = (typeof Input !== 'undefined' && Input.keys['ShiftLeft']) ? CONFIG.MOVEMENT_SPEED_SPRINTING : CONFIG.MOVEMENT_SPEED;
     const deltaSpeed = moveSpeed * deltaTime;
     const forward = new THREE.Vector3(), right = new THREE.Vector3();
@@ -122,8 +107,8 @@ function updateLocalPlayer(deltaTime) {
 
     let moveDirection = new THREE.Vector3(0,0,0);
     if(Input.keys['KeyW']){moveDirection.add(forward);} if(Input.keys['KeyS']){moveDirection.sub(forward);}
-    if(Input.keys['KeyA']){moveDirection.add(right);} // A = Right (Inverted)
-    if(Input.keys['KeyD']){moveDirection.sub(right);} // D = Left (Inverted)
+    if(Input.keys['KeyA']){moveDirection.add(right);}
+    if(Input.keys['KeyD']){moveDirection.sub(right);}
 
     if(moveDirection.lengthSq() > 0){
         moveDirection.normalize();
@@ -132,10 +117,7 @@ function updateLocalPlayer(deltaTime) {
 
     // --- 6. Dash Movement ---
     if (typeof Input !== 'undefined' && Input.isDashing) {
-        // Apply dash force - allowing vertical component based on view direction
         controlsObject.position.addScaledVector(Input.dashDirection, CONFIG.DASH_FORCE * deltaTime);
-         // Optional: Reset vertical velocity during dash? Or let gravity affect it?
-         // velocityY = 0; // Uncomment to make dash ignore gravity briefly
     }
 
     // --- 7. Collision (Player-Player - Basic Horizontal Revert) ---
@@ -147,26 +129,22 @@ function updateLocalPlayer(deltaTime) {
     for (const id in players) {
         if (id !== localPlayerId && players[id] instanceof ClientPlayer && players[id].mesh?.visible && players[id].mesh.position && players[id].health > 0) {
             const otherMesh = players[id].mesh;
-            const otherPos = otherMesh.position; // Visual position of the other player
+            const otherPos = otherMesh.position;
 
-            // Compare on XZ plane
             const distanceXZ = new THREE.Vector2(currentPosition.x - otherPos.x, currentPosition.z - otherPos.z).length();
 
-            if (distanceXZ < collisionRadius * 2) { // Potential collision
-                // Check vertical overlap - comparing estimated feet levels
+            if (distanceXZ < collisionRadius * 2) {
                 const currentFeetY = currentPosition.y - cameraOffsetCheck;
-                let otherFeetY = otherPos.y; // Assume GLB origin at feet
+                let otherFeetY = otherPos.y;
                 if (otherMesh.geometry instanceof THREE.CylinderGeometry) {
-                     otherFeetY = otherPos.y - playerHeightCheck / 2; // Adjust for cylinder center origin
+                     otherFeetY = otherPos.y - playerHeightCheck / 2;
                 }
                 const verticalDistance = Math.abs(currentFeetY - otherFeetY);
 
-                if (verticalDistance < playerHeightCheck) { // Vertical overlap exists
-                    // Revert only horizontal position components
+                if (verticalDistance < playerHeightCheck) {
                     currentPosition.x = previousPosition.x;
                     currentPosition.z = previousPosition.z;
-                    // console.log("Player-Player collision detected, reverting horizontal movement.");
-                    break; // Stop checking after one collision
+                    break;
                 }
             }
         }
@@ -174,32 +152,34 @@ function updateLocalPlayer(deltaTime) {
 
 
     // --- 8. Send Network Updates (IF state changed significantly AND alive) ---
-    if (isAlive) { // Only send updates if alive
+    if (isAlive) {
+        const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8);
         const logicalPosition = new THREE.Vector3(
              controlsObject.position.x,
-             controlsObject.position.y - (CONFIG.CAMERA_Y_OFFSET || 1.9), // Calculate feet Y
+             controlsObject.position.y - cameraOffset, // Calculate feet Y
              controlsObject.position.z
         );
         const currentRotation = new THREE.Euler().setFromQuaternion(controlsObject.quaternion,'YXZ'); const currentRotationY = currentRotation.y;
-        const lastSentState = playerState;
+
+        // Use localPlayerData (the plain object cache) to compare against and update
+        // const lastSentState = localPlayerData; // <<< This was the source of confusion, just use localPlayerData directly
 
         const pTSq = CONFIG.PLAYER_MOVE_THRESHOLD_SQ || 0.0001;
         const rTh = 0.01;
 
-        // Check if position or rotation changed significantly
-        // Important: Compare against the *last sent state* stored in the plain object
-        const posChanged = logicalPosition.distanceToSquared(new THREE.Vector3(lastSentState?.x ?? 0, lastSentState?.y ?? 0, lastSentState?.z ?? 0)) > pTSq;
-        const rotChanged = Math.abs(currentRotationY - (lastSentState?.rotationY ?? 0)) > rTh;
+        // Check if position or rotation changed significantly compared to the data cache
+        const posChanged = logicalPosition.distanceToSquared(new THREE.Vector3(localPlayerData?.x ?? 0, localPlayerData?.y ?? 0, localPlayerData?.z ?? 0)) > pTSq;
+        const rotChanged = Math.abs(currentRotationY - (localPlayerData?.rotationY ?? 0)) > rTh;
 
         if (posChanged || rotChanged) {
             // Update local cache immediately (plain object)
-            playerState.x = logicalPosition.x;
-            playerState.y = logicalPosition.y; // Send feet Y
-            playerState.z = logicalPosition.z;
-            playerState.rotationY = currentRotationY;
+            localPlayerData.x = logicalPosition.x; // <<< Use localPlayerData
+            localPlayerData.y = logicalPosition.y; // <<< Use localPlayerData
+            localPlayerData.z = logicalPosition.z; // <<< Use localPlayerData
+            localPlayerData.rotationY = currentRotationY; // <<< Use localPlayerData
 
             // Send update to server
-            if (typeof Network !== 'undefined') Network.sendPlayerUpdate({ x: playerState.x, y: playerState.y, z: playerState.z, rotationY: currentRotationY });
+            if (typeof Network !== 'undefined') Network.sendPlayerUpdate({ x: localPlayerData.x, y: localPlayerData.y, z: localPlayerData.z, rotationY: localPlayerData.rotationY });
         }
     }
 } // End updateLocalPlayer
