@@ -3,19 +3,17 @@
 // Manages keyboard and mouse state globally
 
 const Input = {
-    keys: {}, // Stores currently pressed keyboard keys (e.g., { KeyW: true, ShiftLeft: false })
-    mouseButtons: {}, // Stores currently pressed mouse buttons (e.g., { 0: true, 1: false })
-    controls: null, // Reference to PointerLockControls, set during initialization
-    lastDashTime: 0, // Timestamp of the last dash initiation
-    isDashing: false, // Flag indicating if currently dashing
-    dashDirection: new THREE.Vector3(), // World-space direction of the current dash
+    keys: {},
+    mouseButtons: {},
+    controls: null,
+    lastDashTime: 0,
+    isDashing: false, // Dash impulse flag, should be set false by gameLogic after use
+    dashDirection: new THREE.Vector3(), // Set on dash key down
 
     // Initialize input listeners
     init: function(controlsRef) {
-        if (!controlsRef) { console.error("[Input] PointerLockControls reference is needed for initialization!"); return; }
+        if (!controlsRef) { console.error("[Input] PointerLockControls ref needed!"); return; }
         this.controls = controlsRef;
-
-        // Bind event listeners to the document
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
         document.addEventListener('keyup', this.handleKeyUp.bind(this));
         document.addEventListener('mousedown', this.handleMouseDown.bind(this));
@@ -25,101 +23,89 @@ const Input = {
 
     // Handle key press down
     handleKeyDown: function(event) {
-        // Don't process inputs if typing in an input field (e.g., player name)
-        if (event.target.tagName === 'INPUT') return;
+        if (event.target.tagName === 'INPUT') return; // Ignore inputs in text fields
+        this.keys[event.code] = true;
 
-        this.keys[event.code] = true; // Mark key as pressed
-
-        // Handle Dash (ShiftLeft) - Requires CONFIG, stateMachine
+        // Handle Dash (ShiftLeft)
         if (event.code === 'ShiftLeft' && !event.repeat && !this.isDashing && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
-            const now = Date.now();
-            const cooldown = (CONFIG.DASH_COOLDOWN || 0.8) * 1000; // Get cooldown in ms
+            const now = Date.now(); const cooldown = (CONFIG.DASH_COOLDOWN || 0.8) * 1000;
             if ((now - this.lastDashTime > cooldown) && stateMachine.is('playing')) {
-                this.startDash();
+                this.startDash(); // Calls function below to set direction and flag
             }
         }
 
-        // Handle Jump (Space) - Re-enabled
+        // Handle Jump (Space)
         if (event.code === 'Space' && !event.repeat && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
-            event.preventDefault(); // Prevent default space bar action (e.g., scrolling)
-             // Check globals: isOnGround, velocityY
-            if (typeof isOnGround !== 'undefined' && isOnGround && stateMachine.is('playing')) {
-                // Only allow jump if on the ground and in playing state
-                velocityY = CONFIG.JUMP_FORCE || 9.0; // Apply jump force from config or default
-                isOnGround = false; // Player is leaving the ground
-                console.log("Jump! VelocityY:", velocityY); // Debug log
+            event.preventDefault();
+             // <<< CHANGED JUMP CONDITION: Check physics collision flag >>>
+            if (typeof isPlayerGrounded !== 'undefined' && isPlayerGrounded && stateMachine.is('playing')) {
+                console.log("Attempting Jump (Grounded=true)");
+                 // Set flag or state for gameLogic to apply jump velocity
+                 // Option 1: Let gameLogic handle velocity directly based on key press + ground state (requires slight change there)
+                 // Option 2 (Current): We can try setting velocity directly here, BUT we need access to the player body. Easier to let gameLogic check Input.keys['Space'] & isPlayerGrounded flag.
+                 // For now, keep simple key press logging, gameLogic will apply velocity.
+                 // OR -> Let's keep it simple and have input tell gameLogic to *try* jumping:
+                 Input.attemptingJump = true; // Set a flag for gameLogic to check and consume
+            } else {
+                 console.log("Jump key pressed but not grounded.");
+                 Input.attemptingJump = false; // Ensure flag is false if not grounded
             }
         }
     },
 
     // Handle key release
     handleKeyUp: function(event) {
-        if (event.target.tagName === 'INPUT') return; // Ignore if focus is on input field
-        this.keys[event.code] = false; // Mark key as released
+        if (event.target.tagName === 'INPUT') return;
+        this.keys[event.code] = false;
+        if (event.code === 'Space') {
+            Input.attemptingJump = false; // Reset jump flag on key up
+        }
     },
 
     // Handle mouse button press down
     handleMouseDown: function(event) {
-        this.mouseButtons[event.button] = true; // Mark button as pressed
-
-        // If in playing state but controls are not locked, lock them on any click
+        this.mouseButtons[event.button] = true;
         if (typeof stateMachine !== 'undefined' && stateMachine.is('playing') && this.controls && !this.controls.isLocked) {
              console.log("[Input] Attempting to lock controls...");
              this.controls.lock();
         }
-        // --- REMOVED SHOOTING LOGIC ---
     },
 
     // Handle mouse button release
     handleMouseUp: function(event) {
-        this.mouseButtons[event.button] = false; // Mark button as released
+        this.mouseButtons[event.button] = false;
     },
 
-    // Initiate the dash movement
+    // Initiate the dash - Set direction and impulse flag
     startDash: function() {
-         if(typeof CONFIG === 'undefined' || !this.controls) return; // Check dependencies
+         if(typeof CONFIG === 'undefined' || !this.controls) return;
          console.log("Dash!");
-         this.isDashing = true;
-         this.lastDashTime = Date.now();
+         // DON'T set isDashing true yet - let keydown set the flag & direction
+         // We set a different flag to signal that an IMPULSE should be applied *once*
+         this.lastDashTime = Date.now(); // Reset cooldown timer
 
-         // Calculate initial dash direction based on current movement keys (relative to camera)
-         let inputDirection = new THREE.Vector3();
-         if(this.keys['KeyW']){ inputDirection.z = -1; }
-         if(this.keys['KeyS']){ inputDirection.z = 1; }
-         if(this.keys['KeyA']){ inputDirection.x = -1; } // Corrected A/D relative to camera view
-         if(this.keys['KeyD']){ inputDirection.x = 1; }
+         // Calculate dash direction based on current view/movement
+         let inputDir = new THREE.Vector3();
+         if(this.keys['KeyW']){ inputDir.z = -1; } if(this.keys['KeyS']){ inputDir.z = 1; }
+         if(this.keys['KeyA']){ inputDir.x = -1; } if(this.keys['KeyD']){ inputDir.x = 1; }
 
-         // If no movement keys pressed, dash in the direction the camera is facing
-         if(inputDirection.lengthSq() === 0){
-             if (this.controls.getObject()) {
-                 this.controls.getObject().getWorldDirection(this.dashDirection);
-                 // Optional: Uncomment below if you want forward dash strictly on XZ plane
-                 // this.dashDirection.y = 0;
-                 // this.dashDirection.normalize();
-             } else {
-                 this.dashDirection.set(0, 0, -1); // Fallback: forward in Z
-             }
-         } else {
-             inputDirection.normalize(); // Ensure consistent magnitude for diagonal input
-             // Apply camera's rotation to the input direction to get world-space dash direction
-             if(this.controls.getObject()) {
-                 this.dashDirection.copy(inputDirection).applyQuaternion(this.controls.getObject().quaternion);
-             } else {
-                 this.dashDirection.copy(inputDirection); // Fallback if controls object is missing
-             }
+         if(inputDir.lengthSq() === 0){ // Dash forward if no move keys
+             if (this.controls.getObject()) { this.controls.getObject().getWorldDirection(this.dashDirection); } else { this.dashDirection.set(0, 0, -1); }
+         } else { // Dash in movement direction relative to camera
+             inputDir.normalize(); if(this.controls.getObject()) { this.dashDirection.copy(inputDir).applyQuaternion(this.controls.getObject().quaternion); } else { this.dashDirection.copy(inputDir); }
          }
+         this.dashDirection.normalize(); // Final normalization
 
-         // Ensure dash direction is normalized (might not be needed if derived from normalized vectors)
-         this.dashDirection.normalize();
-
-         // Set timeout to end the dash after duration
-         const duration = (CONFIG.DASH_DURATION || 0.15) * 1000; // Get duration in ms
-         setTimeout(() => {
-             this.isDashing = false;
-             // console.log("Dash ended."); // Optional log
-         }, duration);
+         // Set flags for gameLogic to use
+         this.requestingDashImpulse = true; // Signal to apply ONE impulse
+         // We don't use the timeout isDashing anymore - impulse is instantaneous
+         // console.log("Dash Requested. Direction:", this.dashDirection);
     }
 };
+// Initialize attempt flags
+Input.attemptingJump = false;
+Input.requestingDashImpulse = false;
+
 // Make Input globally accessible
 window.Input = Input;
-console.log("input.js loaded (Jump Re-enabled)");
+console.log("input.js loaded (Jump uses isPlayerGrounded, Dash uses impulse request)");
