@@ -11,8 +11,8 @@
  */
 function updateLocalPlayer(deltaTime) {
     // --- Guard Clause: Ensure active play state and locked controls ---
-    const isPlaying = stateMachine.is('playing');
-    const isLocked = controls?.isLocked;
+    const isPlaying = typeof stateMachine !== 'undefined' && stateMachine.is('playing');
+    const isLocked = typeof controls !== 'undefined' && controls?.isLocked;
     const localPlayerData = localPlayerId ? players[localPlayerId] : null;
     const isAlive = localPlayerData && localPlayerData.health > 0;
 
@@ -31,12 +31,16 @@ function updateLocalPlayer(deltaTime) {
     // No gravity, no Y velocity updates based on physics.
 
     // --- Horizontal Movement (Based on Input & Camera Direction - Inverted A/D) ---
-    const moveSpeed = Input.keys['ShiftLeft'] ? CONFIG.MOVEMENT_SPEED_SPRINTING : CONFIG.MOVEMENT_SPEED;
+    const moveSpeed = (typeof Input !== 'undefined' && Input.keys['ShiftLeft']) ? CONFIG.MOVEMENT_SPEED_SPRINTING : CONFIG.MOVEMENT_SPEED;
     const deltaSpeed = moveSpeed * deltaTime;
     const forward = new THREE.Vector3(), right = new THREE.Vector3();
     // Important: Use camera for direction even though controlsObject is moved
-    camera.getWorldDirection(forward); forward.y=0; forward.normalize(); // Project onto XZ plane
-    right.crossVectors(camera.up, forward).normalize(); // Camera up is usually (0,1,0)
+    if (typeof camera !== 'undefined') {
+        camera.getWorldDirection(forward); forward.y=0; forward.normalize(); // Project onto XZ plane
+        right.crossVectors(camera.up, forward).normalize(); // Camera up is usually (0,1,0)
+    } else {
+         console.error("Camera missing in updateLocalPlayer"); return; // Cannot move without camera
+    }
     let moveDirection = new THREE.Vector3(0,0,0);
 
     // Apply movement based on input keys
@@ -52,7 +56,7 @@ function updateLocalPlayer(deltaTime) {
 
     // --- Dash Movement ---
     // Applies force in the calculated dash direction (can have Y component if looking up/down)
-    if (Input.isDashing) {
+    if (typeof Input !== 'undefined' && Input.isDashing) {
         controlsObject.position.addScaledVector(Input.dashDirection, CONFIG.DASH_FORCE * deltaTime);
     }
 
@@ -86,7 +90,8 @@ function updateLocalPlayer(deltaTime) {
     // --- Send Network Updates (Based on position and rotation) ---
     // Calculate logical position (feet) to send to server
     const logicalPosition = controlsObject.position.clone();
-    logicalPosition.y -= (CONFIG.PLAYER_HEIGHT || 1.8); // Player feet Y
+    const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8); // Use camera offset, fallback to player height
+    logicalPosition.y -= cameraOffset; // <<< CHANGED Subtract camera offset to get feet Y
 
     const currentRotation = new THREE.Euler().setFromQuaternion(controlsObject.quaternion,'YXZ'); const currentRotationY = currentRotation.y;
     const lastSentState = playerState; // Reference to the plain object for local player
@@ -106,7 +111,7 @@ function updateLocalPlayer(deltaTime) {
         playerState.rotationY = currentRotationY;
 
         // Send update to server
-        if (Network) Network.sendPlayerUpdate({ x: playerState.x, y: playerState.y, z: playerState.z, rotationY: currentRotationY });
+        if (typeof Network !== 'undefined') Network.sendPlayerUpdate({ x: playerState.x, y: playerState.y, z: playerState.z, rotationY: currentRotationY });
     }
 } // End updateLocalPlayer
 
