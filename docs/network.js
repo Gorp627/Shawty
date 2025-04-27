@@ -287,25 +287,22 @@ const Network = {
              // --- Directly update properties of the plain local player data object ---
              player.health = playerData.health;
              player.x = playerData.x;
-             player.y = playerData.y;
+             player.y = playerData.y; // Server sends feet Y (should be 0)
              player.z = playerData.z;
              player.rotationY = playerData.rotationY;
              player.name = playerData.name; // Update name/phrase in case of change
              player.phrase = playerData.phrase;
              // --- END direct property updates ---
 
-             // Reset local controls position and view rotation
-             const visualY = player.y + (CONFIG?.PLAYER_HEIGHT || 1.8);
+             // Reset local controls position using the CAMERA_Y_OFFSET
+             const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8); // Use new offset
+             const visualY = player.y + cameraOffset; // <<< CHANGED Use camera offset
              if (typeof controls !== 'undefined' && controls?.getObject()) {
                  controls.getObject().position.set(player.x, visualY, player.z);
-                 // Reset view rotation on respawn
                  const targetRotation = new THREE.Euler(0, player.rotationY, 0, 'YXZ');
                  controls.getObject().rotation.copy(targetRotation);
-                 // If using PointerLockControls, direct rotation setting might be tricky.
-                 // Might need to re-lock or handle internally if PLC resets pitch/yaw on lock.
-                 console.log(`[Net] Set local controls pos/rot on respawn.`);
+                 console.log(`[Net] Set local controls pos/rot on respawn using camera offset.`);
              }
-             // No physics state (velocityY/isOnGround) to reset
 
              // Update UI
              if (typeof UIManager !== 'undefined') {
@@ -332,15 +329,14 @@ const Network = {
              // Make visible and snap position/rotation instantly
              player.setVisible?.(true);
              if (player.mesh) { // Snap visuals instantly
-                  // Use the logic from setInterpolationTargets to get correct visual Y
                   const pH=CONFIG?.PLAYER_HEIGHT||1.8;
                   let visualY=player.y;
                   if(player.mesh.geometry instanceof THREE.CylinderGeometry) visualY = player.y + pH/2;
                   else visualY = player.y; // Assume model origin at feet
 
                   player.mesh.position.set(player.x, visualY, player.z);
-                  player.mesh.rotation.y = player.rotationY; // Set rotation directly
-                  player.mesh.quaternion.setFromEuler(new THREE.Euler(0, player.rotationY, 0, 'YXZ')); // Ensure quaternion matches
+                  player.mesh.rotation.y = player.rotationY;
+                  player.mesh.quaternion.setFromEuler(new THREE.Euler(0, player.rotationY, 0, 'YXZ'));
                   console.log(`[Net] Snapped remote player ${player.id} visuals on respawn.`);
              }
         }
