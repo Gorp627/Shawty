@@ -214,12 +214,15 @@ class Game {
             if(id === localPlayerId){
                 console.log(`[Game] Init local player: ${sPD.name}`);
                 players[id] = { ...sPD, isLocal: true, mesh: null };
-                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z;
+                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z; // Server sends feet Y (now should be 0)
 
-                const visualY = iPosY + (CONFIG?.PLAYER_HEIGHT || 1.8);
+                // Set initial camera/controls position based on server data
+                // Camera Y = server Y (feet) + CAMERA_Y_OFFSET from config
+                const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8); // Use new offset, fallback to player height
+                const visualY = iPosY + cameraOffset; // <<< CHANGED Use camera offset
                 if(typeof controls !== 'undefined' && controls?.getObject()){
                     controls.getObject().position.set(iPosX, visualY, iPosZ);
-                    controls.getObject().rotation.set(0, sPD.rotationY || 0, 0);
+                    controls.getObject().rotation.set(0, sPD.rotationY || 0, 0); // Reset camera pitch, set yaw
                     console.log(`[Game] Set controls pos(${iPosX.toFixed(1)}, ${visualY.toFixed(1)}, ${iPosZ.toFixed(1)}) rotY(${sPD.rotationY?.toFixed(2)})`);
                 } else { console.error("[Game] Controls object missing during local player spawn!"); }
 
