@@ -7,8 +7,12 @@ const Input = {
     mouseButtons: {},
     controls: null,
     lastDashTime: 0,
-    isDashing: false, // Dash impulse flag, should be set false by gameLogic after use
     dashDirection: new THREE.Vector3(), // Set on dash key down
+
+    // These flags are set by keydown events and consumed by gameLogic.js
+    attemptingJump: false,
+    requestingDashImpulse: false,
+
 
     // Initialize input listeners
     init: function(controlsRef) {
@@ -18,6 +22,8 @@ const Input = {
         document.addEventListener('keyup', this.handleKeyUp.bind(this));
         document.addEventListener('mousedown', this.handleMouseDown.bind(this));
         document.addEventListener('mouseup', this.handleMouseUp.bind(this));
+        this.attemptingJump = false;        // Ensure flags start false
+        this.requestingDashImpulse = false; // Ensure flags start false
         console.log("[Input] Initialized.");
     },
 
@@ -27,29 +33,22 @@ const Input = {
         this.keys[event.code] = true;
 
         // Handle Dash (ShiftLeft)
-        if (event.code === 'ShiftLeft' && !event.repeat && !this.isDashing && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
+        // Only SET the request flag here if not on cooldown and playing
+        if (event.code === 'ShiftLeft' && !event.repeat && !this.requestingDashImpulse && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
             const now = Date.now(); const cooldown = (CONFIG.DASH_COOLDOWN || 0.8) * 1000;
             if ((now - this.lastDashTime > cooldown) && stateMachine.is('playing')) {
-                this.startDash(); // Calls function below to set direction and flag
+                this.startDash(); // Sets dashDirection and requestingDashImpulse=true
             }
         }
 
         // Handle Jump (Space)
-        if (event.code === 'Space' && !event.repeat && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
+        if (event.code === 'Space' && !event.repeat && typeof stateMachine !== 'undefined') {
             event.preventDefault();
-             // <<< CHANGED JUMP CONDITION: Check physics collision flag >>>
-            if (typeof isPlayerGrounded !== 'undefined' && isPlayerGrounded && stateMachine.is('playing')) {
-                console.log("Attempting Jump (Grounded=true)");
-                 // Set flag or state for gameLogic to apply jump velocity
-                 // Option 1: Let gameLogic handle velocity directly based on key press + ground state (requires slight change there)
-                 // Option 2 (Current): We can try setting velocity directly here, BUT we need access to the player body. Easier to let gameLogic check Input.keys['Space'] & isPlayerGrounded flag.
-                 // For now, keep simple key press logging, gameLogic will apply velocity.
-                 // OR -> Let's keep it simple and have input tell gameLogic to *try* jumping:
-                 Input.attemptingJump = true; // Set a flag for gameLogic to check and consume
-            } else {
-                 console.log("Jump key pressed but not grounded.");
-                 Input.attemptingJump = false; // Ensure flag is false if not grounded
-            }
+            // Set jump request flag ONLY if playing - gameLogic checks isPlayerGrounded
+            if (stateMachine.is('playing') && !this.attemptingJump) {
+                 console.log("Jump key pressed.");
+                 this.attemptingJump = true;
+             }
         }
     },
 
@@ -57,8 +56,10 @@ const Input = {
     handleKeyUp: function(event) {
         if (event.target.tagName === 'INPUT') return;
         this.keys[event.code] = false;
+        // Reset jump flag immediately on key up to prevent holding jump
         if (event.code === 'Space') {
-            Input.attemptingJump = false; // Reset jump flag on key up
+            this.attemptingJump = false;
+            // console.log("Jump key released, flag false.");
         }
     },
 
@@ -76,36 +77,28 @@ const Input = {
         this.mouseButtons[event.button] = false;
     },
 
-    // Initiate the dash - Set direction and impulse flag
+    // Initiate the dash - Calculate direction, reset cooldown, set impulse flag
     startDash: function() {
-         if(typeof CONFIG === 'undefined' || !this.controls) return;
-         console.log("Dash!");
-         // DON'T set isDashing true yet - let keydown set the flag & direction
-         // We set a different flag to signal that an IMPULSE should be applied *once*
+         if(!this.controls) return;
+         console.log("Dash initiated!");
          this.lastDashTime = Date.now(); // Reset cooldown timer
 
-         // Calculate dash direction based on current view/movement
          let inputDir = new THREE.Vector3();
          if(this.keys['KeyW']){ inputDir.z = -1; } if(this.keys['KeyS']){ inputDir.z = 1; }
+         // Use correct A/D logic based on swapped gameLogic
          if(this.keys['KeyA']){ inputDir.x = -1; } if(this.keys['KeyD']){ inputDir.x = 1; }
 
-         if(inputDir.lengthSq() === 0){ // Dash forward if no move keys
+         if(inputDir.lengthSq() === 0){ // Forward dash
              if (this.controls.getObject()) { this.controls.getObject().getWorldDirection(this.dashDirection); } else { this.dashDirection.set(0, 0, -1); }
-         } else { // Dash in movement direction relative to camera
+         } else { // Movement direction dash
              inputDir.normalize(); if(this.controls.getObject()) { this.dashDirection.copy(inputDir).applyQuaternion(this.controls.getObject().quaternion); } else { this.dashDirection.copy(inputDir); }
          }
-         this.dashDirection.normalize(); // Final normalization
+         this.dashDirection.normalize();
 
-         // Set flags for gameLogic to use
-         this.requestingDashImpulse = true; // Signal to apply ONE impulse
-         // We don't use the timeout isDashing anymore - impulse is instantaneous
-         // console.log("Dash Requested. Direction:", this.dashDirection);
+         this.requestingDashImpulse = true; // Set flag for gameLogic
     }
 };
-// Initialize attempt flags
-Input.attemptingJump = false;
-Input.requestingDashImpulse = false;
 
 // Make Input globally accessible
 window.Input = Input;
-console.log("input.js loaded (Jump uses isPlayerGrounded, Dash uses impulse request)");
+console.log("input.js loaded (Jump uses attempt flag, Dash uses impulse request)");
