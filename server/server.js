@@ -22,7 +22,7 @@ const PORT = process.env.PORT || 3000;
 // Define known safe spawn locations {x, y, z} where y is the ground level.
 // SPREAD THESE OUT across your map, including different heights if available.
 const SPAWN_POINTS = [
-    { x: 0,   y: 0, z: 0 },    // Center ground
+    { x: -1.91697, y: -59.6324, z: 37.3023},    // Center ground
     { x: 15,  y: 0, z: 15 },   // Example corner 1
     { x: -15, y: 0, z: 15 },   // Example corner 2
     { x: 15,  y: 0, z: -15 },  // Example corner 3
@@ -30,7 +30,7 @@ const SPAWN_POINTS = [
     // Add points on platforms, different areas, etc.
     // { x: 25, y: 5, z: 0 },   // Example platform
     // { x: -5, y: 0, z: 20 },  // Another ground spot
-    // { x: 0, y: 10, z: -25 } // High platform example
+    // { x: -1.91697, y: -126.718, z: 86.2695 } // High platform example
 ];
 // --- <<< END SPAWN POINTS >>> ---
 
