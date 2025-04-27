@@ -1,25 +1,26 @@
-// docs/config.js (Manual Physics Reverted)
+// docs/config.js (Config for Rapier)
 
 const CONFIG = {
     SERVER_URL: 'https://gametest-psxl.onrender.com',
-    MAP_PATH: 'assets/maps/the first map!.glb', // Using new map
+    MAP_PATH: 'assets/maps/the first map!.glb',
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
 
     PLAYER_HEIGHT: 1.8,
     PLAYER_RADIUS: 0.4,
-    CAMERA_Y_OFFSET: 1.6, // Camera height relative to FEET (Y=0) in manual physics
-    MOVEMENT_SPEED: 7.0,
-    MOVEMENT_SPEED_SPRINTING: 10.5,
-    DASH_FORCE: 25.0,       // <<< Speed added during dash (NOT impulse)
-    DASH_DURATION: 0.15,    // Duration dash speed is applied
+    PLAYER_MASS: 70,
+    CAMERA_Y_OFFSET: 0.7,   // Camera height relative to player BODY CENTER (Capsule center)
+    MOVEMENT_FORCE: 1500,  // Force applied for WASD movement (adjust as needed)
+    MAX_MOVE_VELOCITY: 8.0, // Max speed cap for regular movement
+    SPRINT_FACTOR: 1.5,     // Multiplier for movement force/max speed when sprinting
+    DASH_IMPULSE_MAGNITUDE: 450, // Impulse for dashing
     DASH_COOLDOWN: 0.8,
 
-    // --- Physics Config (Manual) ---
-    GRAVITY: 25.0,          // Positive value, subtracted from velocityY
-    JUMP_FORCE: 9.0,        // Initial upward velocity
-    VOID_Y_LEVEL: -100,      // <<< LOWERED SIGNIFICANTLY >>>
-    MAP_BOUNDS_X: 100.0,     // <<< INCREASED BOUNDS >>>
-    MAP_BOUNDS_Z: 100.0,     // <<< INCREASED BOUNDS >>>
+    // --- Physics Config (Rapier) ---
+    GRAVITY: -25.0,
+    JUMP_IMPULSE: 300,      // Upward IMPULSE force for jump
+    VOID_Y_LEVEL: -100,
+    MAP_BOUNDS_X: 100.0,
+    MAP_BOUNDS_Z: 100.0,
     // --- End Physics ---
 
     KILL_MESSAGE_DURATION: 3500,
@@ -35,14 +36,13 @@ const CONFIG = {
 let players = {}; let keys = {};
 let localPlayerId = null; let localPlayerName = 'Anonymous'; let localPlayerPhrase = '...'; let lastDashTime = 0;
 let scene, camera, renderer, controls, clock, loader, dracoLoader;
+// Globals set by rapier_init.js and Game.initializePhysics
+var RAPIER = window.RAPIER || null;
+var rapierWorld = null;
+var rapierEventQueue = null;
 
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
-let mapMesh = null; // Visual map mesh - USED FOR RAYCAST
+let mapMesh = null; // Visual map mesh
 
-// --- Manual Physics State ---
-let velocityY = 0;
-let isOnGround = false;
-let raycaster = new THREE.Raycaster(); // Raycaster for ground check
-
-console.log("config.js loaded (Manual Physics, Adjusted Void/Bounds)");
+console.log("config.js loaded (For Rapier Engine)");
