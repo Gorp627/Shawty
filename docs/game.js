@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (Manual Physics + Spawn Retries)
+// docs/game.js - Main Game Orchestrator (Manual Physics + Procedural Spawn Retries)
 
 // --- Global Flags and Data ---
 let networkIsInitialized = false; let assetsAreReady = false; let initializationData = null;
@@ -15,15 +15,21 @@ class Game {
 
     // --- Start Method ---
     start() {
-        console.log("[Game] Starting..."); networkIsInitialized = false; assetsAreReady = false; initializationData = null; this.mapMesh = null; this.lastCallTime = performance.now();
+        console.log("[Game] Starting...");
+        networkIsInitialized = false; assetsAreReady = false; initializationData = null;
+        this.mapMesh = null; // Reset map mesh ref
+        this.lastCallTime = performance.now();
 
         if (!this.initializeCoreComponents()) { return; }
         if (!this.initializeManagers()) { return; }
         if (!this.initializeNetwork()) { return; }
-        this.bindLoadManagerListeners(); this.bindOtherStateTransitions(); this.addEventListeners();
+        this.bindLoadManagerListeners();
+        this.bindOtherStateTransitions();
+        this.addEventListeners();
         if(stateMachine) stateMachine.transitionTo('loading'); else console.error("stateMachine missing!");
         this.startAssetLoading();
-        this.animate(); console.log("[Game] Started successfully setup.");
+        this.animate();
+        console.log("[Game] Started successfully setup.");
     }
 
     // --- Initialize Core Components (Three.js ONLY) ---
@@ -77,8 +83,8 @@ class Game {
             if(id === localPlayerId){ // --- LOCAL PLAYER ---
                 console.log(`Init local: ${sPD.name}`);
 
-                let currentSpawnX = sPD.x; // Start with server suggestion
-                let currentSpawnZ = sPD.z;
+                let currentSpawnX = sPD.x; // Start with server suggestion X
+                let currentSpawnZ = sPD.z; // Start with server suggestion Z
                 let foundGroundY = 0;    // Default ground level if all raycasts fail
                 let foundGround = false; // Flag to check if we succeeded
                 let attempts = 0;
@@ -106,8 +112,8 @@ class Game {
                     } else {
                         console.warn(`Spawn ray ${attempts} MISSED at X:${currentSpawnX.toFixed(1)}, Z:${currentSpawnZ.toFixed(1)}.`);
                         if (attempts < maxSpawnAttempts) {
-                             // Try new random coordinates within general bounds
-                             const boundX = CONFIG?.MAP_BOUNDS_X || 50;
+                             // Try new random coordinates within general bounds from CONFIG
+                             const boundX = CONFIG?.MAP_BOUNDS_X || 50; // Use config bounds
                              const boundZ = CONFIG?.MAP_BOUNDS_Z || 50;
                              // Generate random point within a slightly smaller area than map bounds (e.g. 90%)
                              currentSpawnX = Math.random() * (boundX * 1.8) - (boundX * 0.9);
@@ -157,4 +163,4 @@ class Game {
 // --- Global Entry Point & DOM Ready ---
 function runGame() { console.log("--- runGame() ---"); try { const gI=new Game(); window.currentGameInstance=gI; gI.start(); window.onresize=()=>gI.handleResize(); } catch(e){console.error("!!Error creating Game:",e);document.body.innerHTML="<p>GAME INIT FAILED.</p>";}}
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Retry Spawn Raycast)");
+console.log("game.js loaded (Procedural Spawn Raycast Retries)");
