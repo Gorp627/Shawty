@@ -214,17 +214,21 @@ class Game {
             if(id === localPlayerId){
                 console.log(`[Game] Init local player: ${sPD.name}`);
                 players[id] = { ...sPD, isLocal: true, mesh: null };
-                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z; // Server sends feet Y (now should be 0)
+                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z; // Server sends feet Y (should be 0)
 
-                // Set initial camera/controls position based on server data
-                // Camera Y = server Y (feet) + CAMERA_Y_OFFSET from config
-                const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8); // Use new offset, fallback to player height
-                const visualY = iPosY + cameraOffset; // <<< CHANGED Use camera offset
+                const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8);
+                const visualY = iPosY + cameraOffset;
                 if(typeof controls !== 'undefined' && controls?.getObject()){
                     controls.getObject().position.set(iPosX, visualY, iPosZ);
-                    controls.getObject().rotation.set(0, sPD.rotationY || 0, 0); // Reset camera pitch, set yaw
+                    controls.getObject().rotation.set(0, sPD.rotationY || 0, 0);
                     console.log(`[Game] Set controls pos(${iPosX.toFixed(1)}, ${visualY.toFixed(1)}, ${iPosZ.toFixed(1)}) rotY(${sPD.rotationY?.toFixed(2)})`);
                 } else { console.error("[Game] Controls object missing during local player spawn!"); }
+
+                // --- Reset Physics State for Local Player ---
+                velocityY = 0;
+                isOnGround = true; // Assume spawn position is valid ground initially
+                console.log("[Game] Initial physics state reset (vy=0, onGround=true).");
+                // --- End Physics Reset ---
 
                 if(typeof UIManager !== 'undefined'){
                     UIManager.updateHealthBar(sPD.health);
@@ -252,4 +256,4 @@ function runGame() { console.log("--- runGame() ---"); try { const gI=new Game()
 
 // --- DOM Ready Execution ---
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Simplified Join Logic)");
+console.log("game.js loaded (Physics Reset Added)");
