@@ -41,19 +41,19 @@ class Game {
                          currentGameInstance.startGamePlay(initializationData);
                      } else { console.error("[Game LoadReady Handler] Game instance missing!"); }
 
-                 } else if (stateMachine.is('joining') && Network.isConnected()) {
+                 } else if (typeof stateMachine !== 'undefined' && stateMachine.is('joining') && typeof Network !== 'undefined' && Network.isConnected()) {
                       // Assets just finished loading WHILE we were in the 'joining' state AND connected. Send details now.
                       console.log("[Game LoadReady Handler] Assets ready while joining and connected. Sending join details...");
                       Network.sendJoinDetails();
 
-                 } else if (stateMachine.is('loading')) {
+                 } else if (typeof stateMachine !== 'undefined' && stateMachine.is('loading')) {
                      // Assets ready, network not ready OR not joining. Go to homescreen.
                      console.log("[Game LoadReady Handler] Assets ready, Network not ready or not joining. Transitioning to Homescreen.");
-                     stateMachine.transitionTo('homescreen', { playerCount: UIManager.playerCountSpan?.textContent ?? '?' });
+                     stateMachine.transitionTo('homescreen', { playerCount: typeof UIManager !== 'undefined' ? (UIManager.playerCountSpan?.textContent ?? '?') : '?' });
 
                  } else {
                      // Assets ready, but state is already homescreen or playing. Do nothing specific here.
-                     console.log(`[Game LoadReady Handler] Assets ready, state is ${stateMachine.currentState}. No action needed from here.`);
+                     console.log(`[Game LoadReady Handler] Assets ready, state is ${stateMachine?.currentState || 'unknown'}. No action needed from here.`);
                  }
             });
             // Listener for LoadManager errors
@@ -66,7 +66,7 @@ class Game {
         } else {
             console.error("LoadManager missing!");
              if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:`FATAL: LoadManager Missing!`,error:true});
-            return;
+            return; // Cannot proceed without LoadManager
         }
 
         this.bindOtherStateTransitions();
@@ -96,40 +96,56 @@ class Game {
     }
 
     // --- Initialize Core Components ---
-    initializeCoreComponents() { /* ... no change ... */ }
+    initializeCoreComponents() {
+         console.log("[Game] Init Core Components...");
+         try {
+             this.scene = new THREE.Scene(); scene = this.scene; this.scene.background = new THREE.Color(0x6699cc); this.scene.fog = new THREE.Fog(0x6699cc, 0, 200);
+             this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera = this.camera;
+             this.clock = new THREE.Clock(); clock = this.clock; const canvas = document.getElementById('gameCanvas'); if (!canvas) throw new Error("#gameCanvas missing!"); this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); renderer = this.renderer; this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true;
+             this.controls = new THREE.PointerLockControls(this.camera, document.body); controls = this.controls; this.controls.addEventListener('lock', ()=>{console.log('[Controls] Locked');}); this.controls.addEventListener('unlock', ()=>{console.log('[Controls] Unlocked');});
+             dracoLoader = new THREE.DRACOLoader(); dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); dracoLoader.setDecoderConfig({ type: 'js' }); dracoLoader.preload(); loader = new THREE.GLTFLoader(); loader.setDRACOLoader(dracoLoader); console.log("[Game] Loaders Initialized."); const ambL=new THREE.AmbientLight(0xffffff,0.7); scene.add(ambL); const dirL=new THREE.DirectionalLight(0xffffff,1.0); dirL.position.set(15,20,10); dirL.castShadow=true; dirL.shadow.mapSize.width=1024; dirL.shadow.mapSize.height=1024; scene.add(dirL); scene.add(dirL.target); console.log("[Game] Core Components OK."); return true;
+         } catch(e) { console.error("!!! Core Comp Init Error:", e); if(typeof UIManager !== 'undefined' && UIManager?.showError) UIManager.showError("FATAL: Graphics Init Error!", 'loading'); else alert("FATAL: Graphics Init Error!"); return false;}
+    }
 
     // --- Initialize Managers ---
-    initializeManagers() { /* ... no change ... */ }
+    initializeManagers() {
+         console.log("[Game] Init Managers...");
+         if(typeof UIManager === 'undefined' || typeof Input === 'undefined' || typeof stateMachine === 'undefined' || typeof loadManager === 'undefined' || typeof Network === 'undefined' || typeof Effects === 'undefined') { console.error("!!! Mgr undefined!"); if(typeof UIManager !== 'undefined' && UIManager?.showError) UIManager.showError("FATAL: Mgr Load Error!", 'loading'); else document.body.innerHTML = "<p>FATAL: MANAGER SCRIPT LOAD ERROR</p>"; return false; } try { if(!UIManager.initialize()) throw new Error("UIManager failed init"); Input.init(this.controls); Effects.initialize(this.scene); console.log("[Game] Managers Initialized."); return true; } catch (e) { console.error("!!! Mgr Init Error:", e); if(typeof UIManager !== 'undefined' && UIManager?.showError) UIManager.showError("FATAL: Game Setup Error!", 'loading'); else alert("FATAL: Game Setup Error!"); return false; }
+    }
 
     // --- Bind State Transitions ---
     bindOtherStateTransitions() {
-        if(UIManager?.bindStateListeners) UIManager.bindStateListeners(stateMachine);
+        if(typeof UIManager !== 'undefined' && UIManager?.bindStateListeners) UIManager.bindStateListeners(stateMachine);
         else console.error("UIManager missing");
 
-        stateMachine.on('transition', (data) => {
-             console.log(`[Game State Listener] Transition: ${data.from} -> ${data.to}`);
-             if (data.to === 'homescreen') {
-                 // Reset flags when returning to homescreen
-                 networkIsInitialized = false; // Socket might still be connected, but we are not 'initialized' in game context
-                 initializationData = null;
-                 console.log("[Game] Reset network/init flags for homescreen.");
-                 // Player list cleanup moved here for robustness
-                 if (data.from === 'playing' || data.from === 'joining') { // Clean up if coming from playing OR joining
-                     console.log(`[Game] Cleanup after ${data.from} state...`);
-                     for(const id in players){ if(id !== localPlayerId && Network._removePlayer){ Network._removePlayer(id); } }
-                     if(players[localPlayerId]) { delete players[localPlayerId]; }
-                     players = {}; localPlayerId = null;
-                     if(controls?.isLocked) controls.unlock();
-                     console.log("[Game] Player state cleared for homescreen.");
-                 }
-             } else if (data.to === 'playing') {
-                 console.log("[Game] State transitioned to 'playing'.");
-                 // Ensure UI reflects playing state
-                 if (UIManager && localPlayerId && players[localPlayerId]) UIManager.updateHealthBar(players[localPlayerId].health);
-                 if (UIManager && players[localPlayerId]?.name) UIManager.updateInfo(`Playing as ${players[localPlayerId].name}`);
+        if (typeof stateMachine !== 'undefined') {
+            stateMachine.on('transition', (data) => {
+                 console.log(`[Game State Listener] Transition: ${data.from} -> ${data.to}`);
+                 if (data.to === 'homescreen') {
+                     // Reset flags when returning to homescreen
+                     networkIsInitialized = false; // Socket might still be connected, but we are not 'initialized' in game context
+                     initializationData = null;
+                     console.log("[Game] Reset network/init flags for homescreen.");
+                     // Player list cleanup moved here for robustness
+                     if (data.from === 'playing' || data.from === 'joining') { // Clean up if coming from playing OR joining
+                         console.log(`[Game] Cleanup after ${data.from} state...`);
+                         for(const id in players){ if(id !== localPlayerId && typeof Network !== 'undefined' && Network._removePlayer){ Network._removePlayer(id); } }
+                         if(typeof players !== 'undefined' && players[localPlayerId]) { delete players[localPlayerId]; }
+                         players = {}; localPlayerId = null;
+                         if(typeof controls !== 'undefined' && controls?.isLocked) controls.unlock();
+                         console.log("[Game] Player state cleared for homescreen.");
+                     }
+                 } else if (data.to === 'playing') {
+                     console.log("[Game] State transitioned to 'playing'.");
+                     // Ensure UI reflects playing state
+                     if (typeof UIManager !== 'undefined' && localPlayerId && players[localPlayerId]) UIManager.updateHealthBar(players[localPlayerId].health);
+                     if (typeof UIManager !== 'undefined' && players[localPlayerId]?.name) UIManager.updateInfo(`Playing as ${players[localPlayerId].name}`);
 
-             } else if (data.to === 'loading' && data.options?.error) { console.error("Loading error state:", data.options.message); if(controls?.isLocked)controls.unlock(); networkIsInitialized = false; assetsAreReady = false; initializationData = null;}
-        });
+                 } else if (data.to === 'loading' && data.options?.error) { console.error("Loading error state:", data.options.message); if(typeof controls !== 'undefined' && controls?.isLocked)controls.unlock(); networkIsInitialized = false; assetsAreReady = false; initializationData = null;}
+            });
+        } else {
+            console.error("stateMachine missing when binding transitions!");
+        }
         console.log("[Game] Other State Listeners Bound");
     }
 
@@ -137,13 +153,11 @@ class Game {
     addEventListeners() {
         console.log("[Game] Add global listeners...");
         // Modify Join Button listener
-        if (UIManager?.joinButton && Network?.attemptJoinGame) {
+        if (typeof UIManager !== 'undefined' && UIManager?.joinButton && typeof Network !== 'undefined' && Network?.attemptJoinGame) {
             UIManager.joinButton.addEventListener('click', () => {
                 // Check if assets are ready before attempting to join
-                if (!assetsAreReady) {
+                if (typeof assetsAreReady === 'undefined' || !assetsAreReady) {
                     UIManager.showError("Assets still loading, please wait...", 'homescreen');
-                    // Optionally trigger loading screen again or just keep button disabled
-                    // stateMachine?.transitionTo('loading', { message: "Waiting for assets..." });
                     return;
                 }
                 // If assets are ready, proceed with the join attempt
@@ -151,20 +165,26 @@ class Game {
             });
             console.log("[Game] Join listener added (with asset check).");
         } else {
-            console.error("Cannot add join listener!");
+            console.error("Cannot add join listener! UIManager, joinButton, Network, or attemptJoinGame is missing.");
         }
         window.addEventListener('resize', this.handleResize.bind(this));
         console.log("[Game] Global Listeners added.");
     }
 
     // --- Update Loop ---
-    update(dt) { /* ... no change ... */ }
+    update(dt) {
+        if(typeof stateMachine !== 'undefined' && stateMachine.is('playing')){
+            try{ if(typeof updateLocalPlayer === 'function') updateLocalPlayer(dt); } catch(e){console.error("Err updateLP:",e);}
+            try{ if(typeof updateRemotePlayers === 'function') updateRemotePlayers(dt); } catch(e){console.error("Err updateRP:",e);}
+            try{ if(typeof Effects !== 'undefined' && Effects?.update) Effects.update(dt); } catch(e){console.error("Err Effects.update:",e);}
+        }
+    }
 
     // --- Animate Loop ---
-    animate() { /* ... no change ... */ }
+    animate() { requestAnimationFrame(()=>this.animate()); const dT=this.clock?this.clock.getDelta():0.016; this.update(dT); if(this.renderer&&this.scene&&this.camera){try{this.renderer.render(this.scene,this.camera);}catch(e){console.error("Render err:",e);}} }
 
     // --- Resize Handler ---
-    handleResize() { /* ... no change ... */ }
+    handleResize() { if(this.camera){this.camera.aspect=window.innerWidth/window.innerHeight;this.camera.updateProjectionMatrix();} if(this.renderer)this.renderer.setSize(window.innerWidth,window.innerHeight);}
 
     // --- Start Game Play Method ---
     // This is now ONLY called by Network.handleInitialize when initialize data is received AND assets are ready
@@ -172,18 +192,18 @@ class Game {
         console.log('[Game] startGamePlay called.');
         if (!initData || !initData.id) {
             console.error("[Game] startGamePlay called with invalid initData!");
-            stateMachine.transitionTo('homescreen');
-            UIManager.showError("Failed to initialize game.", 'homescreen');
+            if (typeof stateMachine !== 'undefined') stateMachine.transitionTo('homescreen');
+            if (typeof UIManager !== 'undefined') UIManager.showError("Failed to initialize game.", 'homescreen');
             return;
         }
-        if (stateMachine.is('playing')) {
+        if (typeof stateMachine !== 'undefined' && stateMachine.is('playing')) {
              console.warn("[Game] startGamePlay called while already playing. Ignoring.");
              return;
         }
 
         localPlayerId = initData.id; console.log(`[Game] Local ID: ${localPlayerId}`);
         console.log("[Game] Clearing previous player state for game start...");
-        for(const id in players) { Network._removePlayer(id); } // Ensure clean slate
+        for(const id in players) { if (typeof Network !== 'undefined' && Network._removePlayer) Network._removePlayer(id); } // Ensure clean slate
         players={};
 
         let iPosX=0, iPosY=0, iPosZ=0;
@@ -197,36 +217,32 @@ class Game {
                 iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z;
 
                 const visualY = iPosY + (CONFIG?.PLAYER_HEIGHT || 1.8);
-                if(controls?.getObject()){
+                if(typeof controls !== 'undefined' && controls?.getObject()){
                     controls.getObject().position.set(iPosX, visualY, iPosZ);
                     controls.getObject().rotation.set(0, sPD.rotationY || 0, 0);
                     console.log(`[Game] Set controls pos(${iPosX.toFixed(1)}, ${visualY.toFixed(1)}, ${iPosZ.toFixed(1)}) rotY(${sPD.rotationY?.toFixed(2)})`);
-                    // Attempt to lock pointer AFTER setting position and transitioning state
-                    // Pointer lock requires user interaction usually, handled by mousedown in Input.js
                 } else { console.error("[Game] Controls object missing during local player spawn!"); }
 
-                if(UIManager){
+                if(typeof UIManager !== 'undefined'){
                     UIManager.updateHealthBar(sPD.health);
                     UIManager.updateInfo(`Playing as ${players[id].name}`);
                     UIManager.clearError('homescreen');
                     UIManager.clearKillMessage();
                 }
             } else {
-                if(Network._addPlayer) Network._addPlayer(sPD);
+                if(typeof Network !== 'undefined' && Network._addPlayer) Network._addPlayer(sPD);
             }
         }
         console.log(`[Game] Init complete. ${Object.keys(players).length} players.`);
 
         // Transition state AFTER setting up player data and controls position
-        if(stateMachine){
+        if(typeof stateMachine !== 'undefined'){
             console.log("[Game] Transitioning state to 'playing'...");
             stateMachine.transitionTo('playing'); // This will trigger UI changes via UIManager listeners
         } else { console.error("stateMachine missing!"); }
     }
 
 } // End Game Class
-
-// --- REMOVED Global Function: attemptEnterPlayingState ---
 
 // --- Global Entry Point: runGame ---
 function runGame() { console.log("--- runGame() ---"); try { const gI=new Game(); window.currentGameInstance=gI; gI.start(); window.onresize=()=>gI.handleResize(); } catch(e){console.error("Error creating Game:",e);document.body.innerHTML="<p>GAME INIT FAILED.</p>";}}
