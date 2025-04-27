@@ -1,9 +1,7 @@
 // docs/network.js (Reverted to Manual Physics)
 
 // Depends on: config.js, stateMachine.js, entities.js, input.js, uiManager.js, game.js
-// Accesses globals: players, localPlayerId, socket, controls, CONFIG,
-//                   stateMachine, UIManager, ClientPlayer, scene, infoDiv, currentGameInstance, assetsAreReady,
-//                   velocityY, isOnGround // Access manual physics state
+// Accesses globals: players, localPlayerId, socket, controls, CONFIG, stateMachine, UIManager, ClientPlayer, scene, infoDiv, currentGameInstance, assetsAreReady, velocityY, isOnGround
 
 var socket;
 
@@ -36,11 +34,7 @@ const Network = {
     },
     _removePlayer: function(playerId) { // Removes visual ONLY
         const player = this._getPlayer(playerId);
-        if (player) {
-            console.log(`Removing player: ${player.name || playerId}`);
-            if (player instanceof ClientPlayer) player.remove?.(); // Cleanup THREE mesh
-            if (players?.[playerId]) delete players[playerId]; // Remove from local cache
-        }
+        if (player) { console.log(`Removing player: ${player.name || playerId}`); if (player instanceof ClientPlayer) player.remove?.(); if (players?.[playerId]) delete players[playerId]; }
     },
 
     handleInitialize: function(data) {
@@ -50,67 +44,31 @@ const Network = {
     },
 
     handlePlayerJoined: function(playerData) { // Just adds visual
-        if (playerData?.id !== localPlayerId && !this._getPlayer(playerData.id)) {
-            const name = playerData.name || 'Player'; console.log(`Player joined event: ${name}`);
-            const newPlayer = this._addPlayer(playerData); // Adds visual ClientPlayer
-            // No physics body to create here
-            if(UIManager?.showKillMessage) UIManager.showKillMessage(`${name} joined.`);
-        }
+        if (playerData?.id !== localPlayerId && !this._getPlayer(playerData.id)) { const name = playerData.name || 'Player'; console.log(`Player joined event: ${name}`); const newPlayer = this._addPlayer(playerData); if(UIManager?.showKillMessage) UIManager.showKillMessage(`${name} joined.`); }
     },
 
     handlePlayerLeft: function(playerId) { if(playerId){ const pName=players?.[playerId]?.name||'Player'; console.log(`Player left event: ${pName}`); this._removePlayer(playerId); if(UIManager?.showKillMessage) UIManager.showKillMessage(`${pName} left.`);}},
 
-    // Update REMOTE players' ClientPlayer instances based on server state
-    handleGameStateUpdate: function(state) {
+    handleGameStateUpdate: function(state) { // Updates remote ClientPlayer instances
         if(!players || !state?.players || !stateMachine?.is('playing') || !localPlayerId) return;
-        for (const id in state.players) { const sPD = state.players[id]; // Lean data {id, x, y, z, r, h}
-            if (id !== localPlayerId) { // Only update remote players
-                 const rp = players[id]; // Get ClientPlayer instance
-                 if (rp instanceof ClientPlayer) {
-                      rp.updateData(sPD); // Let ClientPlayer handle interpolation targets etc.
-                 } else if (!rp) {
-                      // Player in update but not known locally? Might happen on join.
-                      // console.warn(`GSU for unknown remote player ${id}`);
-                 }
-            }
-            // Local player state is updated directly in gameLogic
-        }
+        for (const id in state.players) { const sPD = state.players[id]; if (id !== localPlayerId) { const rp = players[id]; if (rp instanceof ClientPlayer) { rp.updateData(sPD); } }}
     },
 
     handleHealthUpdate: function(data) { if(!data?.id||data.health===undefined) return; const p=this._getPlayer(data.id); if(p){p.health=data.health; if(data.id===localPlayerId&&UIManager)UIManager.updateHealthBar(p.health);} },
     handlePlayerDied: function(data) { if (!data?.targetId) return; console.log(`>>> Died: ${data.targetId}`); const targetP=this._getPlayer(data.targetId); if(targetP) targetP.health=0; if(data.targetId===localPlayerId){ if(UIManager){ UIManager.updateHealthBar(0); let m=data.killerId===null?"Fell out.":`${data.killerName||'P'} ${data.killerPhrase||'el.'} ${targetP?.name||'you'}`; UIManager.showKillMessage(m); } if(infoDiv) infoDiv.textContent=`DEAD`; if(controls?.isLocked) controls.unlock(); } else if(targetP instanceof ClientPlayer){ targetP.setVisible?.(false); if(UIManager){ let m=`${targetP.name||'P'} elim.`; if(data.killerName&&data.killerId!==null) m=`${data.killerName} ${data.killerPhrase||'el.'} ${targetP.name}`; else if(data.killerId===null) m=`${targetP.name||'P'} fell out.`; UIManager.showKillMessage(m);} } },
-
-    // Resets local player position and physics state, or remote player state
-    handlePlayerRespawned: function(playerData) {
-         if(!playerData?.id) return; console.log(`>>> Respawn: ${playerData.name}`); let player=this._getPlayer(playerData.id);
-         const playerHeight = CONFIG?.PLAYER_HEIGHT||1.8;
-         const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6;
-
+    handlePlayerRespawned: function(playerData) { // Resets local state/pos or remote state/pos
+         if(!playerData?.id) return; console.log(`>>> Respawn: ${playerData.name}`); let player=this._getPlayer(playerData.id); const playerHeight = CONFIG?.PLAYER_HEIGHT||1.8; const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6;
          if (playerData.id === localPlayerId) { console.log("LOCAL respawn."); if (!player){player={isLocal: true}; players[localPlayerId]=player;}
-              // Update local player cache
-              player.health=playerData.health; player.x=playerData.x; player.y=playerData.y; // Feet Y
-              player.z=playerData.z; player.rotationY=playerData.rotationY; player.name=playerData.name; player.phrase=playerData.phrase;
-              // Reset Controls position
+              player.health=playerData.health; player.x=playerData.x; player.y=playerData.y; player.z=playerData.z; player.rotationY=playerData.rotationY; player.name=playerData.name; player.phrase=playerData.phrase;
               if (controls?.getObject()){ controls.getObject().position.set(playerData.x, playerData.y + cameraHeight, playerData.z); controls.getObject().rotation.set(0, playerData.rotationY || 0, 0); }
-              // Reset manual physics state
-              velocityY = 0; isOnGround = true;
+              velocityY = 0; isOnGround = true; // Reset manual physics
               console.log("Reset local position & physics state."); if (UIManager){ UIManager.updateHealthBar(player.health); UIManager.updateInfo(`Playing as ${player.name}`); UIManager.clearKillMessage();}
-         } else { // REMOTE player respawn
-             console.log(`REMOTE respawn: ${playerData.name}.`); if(!player||!(player instanceof ClientPlayer)){ console.warn(`Respawn recreate ${playerData.id}...`); this._removePlayer(playerData.id); player=this._addPlayer(playerData); if(!player){console.error("Recreate fail!");return;}}
-              player.updateData(playerData); // Update ClientPlayer state (pos, rot, health etc.)
-              player.setVisible?.(true); // Make visual mesh visible again
-              // Force snap visual position immediately (ClientPlayer.updateData sets targets, but snap ensures no weird lerp)
-              if (player.mesh) {
-                  let visualY = playerData.y; // Server sends feet Y
-                  if (player.mesh.geometry instanceof THREE.CylinderGeometry) visualY += playerHeight / 2.0; // Adjust for cylinder center
-                  player.mesh.position.set(playerData.x, visualY, playerData.z);
-                  player.mesh.rotation.y = playerData.rotationY || 0;
-              }
+         } else { console.log(`REMOTE respawn: ${playerData.name}.`); if(!player||!(player instanceof ClientPlayer)){ console.warn(`Respawn recreate ${playerData.id}...`); this._removePlayer(playerData.id); player=this._addPlayer(playerData); if(!player){console.error("Recreate fail!");return;}}
+              player.updateData(playerData); player.setVisible?.(true);
+              if (player.mesh) { let visualY = playerData.y; if (player.mesh.geometry instanceof THREE.CylinderGeometry) visualY += playerHeight / 2.0; player.mesh.position.set(playerData.x, visualY, playerData.z); player.mesh.rotation.y = playerData.rotationY || 0; }
               console.log("Reset remote player state/visuals.");
          }
     },
-
-
     handleServerFull: function() { console.warn("Server Full."); if(socket) socket.disconnect(); stateMachine?.transitionTo('loading',{message:`Server Full!`,error:true}); },
 
      // Actions
