@@ -14,15 +14,11 @@ function updateLocalPlayer(deltaTime) {
     // --- Guard Clause: Ensure active play state and locked controls ---
     const isPlaying = typeof stateMachine !== 'undefined' && stateMachine.is('playing');
     const isLocked = typeof controls !== 'undefined' && controls?.isLocked;
-    const localPlayerData = localPlayerId ? players[localPlayerId] : null;
+    const localPlayerData = localPlayerId ? players[localPlayerId] : null; // This is the plain object cache
 
-    // --- ADDED: Guard Clause for mapMesh ---
-    // Stop processing physics if the map isn't loaded yet (prevents falling through floor immediately)
-    if (typeof mapMesh === 'undefined' || !mapMesh) {
-        console.warn("updateLocalPlayer: mapMesh not ready, skipping physics update.");
-        return; // Don't run physics/movement until map is ready
-    }
-    // --- END ADDED Guard Clause ---
+    // --- REMOVED Guard Clause for mapMesh ---
+    // State machine logic now ensures map is ready before 'playing' state is entered.
+    // if (typeof mapMesh === 'undefined' || !mapMesh) { ... } // REMOVED
 
     // STOP processing if not playing, not locked, or local player doesn't exist
     if (!isPlaying || !isLocked || !localPlayerData) {
@@ -50,8 +46,7 @@ function updateLocalPlayer(deltaTime) {
     isOnGround = false; // Assume not on ground
 
     // --- 3. Ground Collision Check (Raycast) ---
-    // Map mesh check is now done at the top of the function
-    if (isAlive) {
+    if (mapMesh && isAlive) { // Check mapMesh *still* necessary here before using it
         const feetOffset = 0.1;
         const groundCheckDistance = feetOffset + 0.1;
         const cameraOffsetCheck = CONFIG.CAMERA_Y_OFFSET || 1.9;
@@ -66,7 +61,7 @@ function updateLocalPlayer(deltaTime) {
         raycaster.set(rayOrigin, rayDirection);
         raycaster.far = groundCheckDistance;
 
-        const intersects = raycaster.intersectObject(mapMesh, true); // mapMesh is guaranteed to exist here
+        const intersects = raycaster.intersectObject(mapMesh, true);
 
         if (intersects.length > 0) {
             const distanceToGround = intersects[0].distance;
@@ -76,6 +71,8 @@ function updateLocalPlayer(deltaTime) {
                 controlsObject.position.y = intersects[0].point.y + cameraOffsetCheck; // Snap to ground + camera offset
             }
         }
+    } else if (!mapMesh && isAlive) {
+         console.warn("updateLocalPlayer: mapMesh check failed within physics update!"); // Log if it's missing here
     }
 
 
@@ -167,22 +164,18 @@ function updateLocalPlayer(deltaTime) {
         );
         const currentRotation = new THREE.Euler().setFromQuaternion(controlsObject.quaternion,'YXZ'); const currentRotationY = currentRotation.y;
 
-        // Use localPlayerData (the plain object cache) to compare against and update
         const pTSq = CONFIG.PLAYER_MOVE_THRESHOLD_SQ || 0.0001;
         const rTh = 0.01;
 
-        // Check if position or rotation changed significantly compared to the data cache
         const posChanged = logicalPosition.distanceToSquared(new THREE.Vector3(localPlayerData?.x ?? 0, localPlayerData?.y ?? 0, localPlayerData?.z ?? 0)) > pTSq;
         const rotChanged = Math.abs(currentRotationY - (localPlayerData?.rotationY ?? 0)) > rTh;
 
         if (posChanged || rotChanged) {
-            // Update local cache immediately (plain object)
             localPlayerData.x = logicalPosition.x;
             localPlayerData.y = logicalPosition.y;
             localPlayerData.z = logicalPosition.z;
             localPlayerData.rotationY = currentRotationY;
 
-            // Send update to server
             if (typeof Network !== 'undefined') Network.sendPlayerUpdate({ x: localPlayerData.x, y: localPlayerData.y, z: localPlayerData.z, rotationY: localPlayerData.rotationY });
         }
     }
