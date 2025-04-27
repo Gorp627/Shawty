@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. (Cannon-es Physics)</title> <!-- Updated title -->
+    <title>Shawty. (Cannon-es Physics)</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -41,9 +41,13 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
-    <!-- <<< ADDED Physics Engine >>> -->
-    <script src="https://unpkg.com/cannon-es@0.19.0/dist/cannon-es.js"></script>
-    <!-- <<< END ADDED Physics Engine >>> -->
+
+    <!-- <<< CHANGED Physics Engine Script >>> -->
+    <!-- Use a CDN that typically provides a UMD build (creates global CANNON object) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js" integrity="sha512-avuUTDYJkn0PIh7hDluS0ZN/YVOhaCM7ibsvGJXgUIY9PaN/CGGlFSDzdDj7KPEaOmLrIBpf3BTDYdyFfsNaHA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- Note: This uses the older cannon.js 0.6.2, not cannon-es. -->
+    <!-- If you specifically need cannon-es features, we'd need to import it as a module -->
+    <!-- <<< END CHANGED Physics Engine Script >>> -->
 
 
     <!-- Core & Game Logic - ORDER MATTERS -->
