@@ -8,19 +8,20 @@ const CONFIG = {
     PLAYER_HEIGHT: 1.8,
     PLAYER_RADIUS: 0.4,
     PLAYER_MASS: 70,
-    CAMERA_Y_OFFSET: 0.7,   // Camera height relative to player BODY CENTER (Capsule center)
-    MOVEMENT_FORCE: 1500,  // Force applied for WASD movement (adjust as needed)
-    MAX_MOVE_VELOCITY: 8.0, // Max speed cap for regular movement
-    SPRINT_FACTOR: 1.5,     // Multiplier for movement force/max speed when sprinting
-    DASH_IMPULSE_MAGNITUDE: 450, // Impulse for dashing
+    CAMERA_Y_OFFSET: 1.6,   // Camera height relative to player BODY CENTER
+    MOVEMENT_FORCE: 1500,
+    MAX_MOVE_VELOCITY: 8.0,
+    SPRINT_FACTOR: 1.5,
+    DASH_IMPULSE_MAGNITUDE: 450,
     DASH_COOLDOWN: 0.8,
 
     // --- Physics Config (Rapier) ---
     GRAVITY: -25.0,
-    JUMP_IMPULSE: 300,      // Upward IMPULSE force for jump
+    JUMP_IMPULSE: 300,
     VOID_Y_LEVEL: -100,
     MAP_BOUNDS_X: 100.0,
     MAP_BOUNDS_Z: 100.0,
+    GROUND_CHECK_DISTANCE: 0.25, // How far below the capsule center to check for ground
     // --- End Physics ---
 
     KILL_MESSAGE_DURATION: 3500,
@@ -36,7 +37,6 @@ const CONFIG = {
 let players = {}; let keys = {};
 let localPlayerId = null; let localPlayerName = 'Anonymous'; let localPlayerPhrase = '...'; let lastDashTime = 0;
 let scene, camera, renderer, controls, clock, loader, dracoLoader;
-// Globals set by rapier_init.js and Game.initializePhysics
 var RAPIER = window.RAPIER || null;
 var rapierWorld = null;
 var rapierEventQueue = null;
@@ -45,4 +45,9 @@ let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerP
 let killMessageTimeout = null;
 let mapMesh = null; // Visual map mesh
 
-console.log("config.js loaded (For Rapier Engine)");
+// --- Removed Manual Physics/Raycaster State ---
+// let velocityY = 0;
+// let isOnGround = false;
+// let raycaster = new THREE.Raycaster(); // <<< REMOVED
+
+console.log("config.js loaded (Rapier - Removed raycaster)");
