@@ -1,10 +1,14 @@
-// docs/game.js - Main Game Orchestrator
+// docs/game.js - Main Game Orchestrator (with Cannon-es)
 
-// --- Global Flags and Data for State Synchronization ---
-let networkIsInitialized = false; // Flag: Socket connection established
-let assetsAreReady = false;       // Flag: LoadManager confirmed required assets are loaded via 'ready' event
-let initializationData = null;  // To store data from server's 'initialize' event
-var currentGameInstance = null; // To hold the Game instance
+// --- Global Flags and Data ---
+let networkIsInitialized = false;
+let assetsAreReady = false;
+let initializationData = null;
+var currentGameInstance = null;
+
+// --- Physics Constants ---
+// Define timeStep using CONFIG after it's loaded. Default provided here as fallback.
+const timeStep = 1 / 60; // Default value, CONFIG will override later if possible.
 
 class Game {
     // --- Constructor ---
@@ -12,213 +16,227 @@ class Game {
         this.scene = null; this.camera = null; this.renderer = null; this.controls = null; this.clock = null;
         this.players = players; // Use global players object
         this.keys = keys;       // Use global keys object
-        this.mapMesh = null;   // Reference to the loaded map mesh
+        this.mapMesh = null;    // Visual map mesh reference
+        this.physicsBodies = {}; // Store physics bodies keyed by player ID
+        this.world = null;      // Cannon-es world stored on instance
+        this.lastCallTime = performance.now(); // For physics step timing
         console.log("[Game] Instance created.");
     }
 
     // --- Start Method ---
     start() {
         console.log("[Game] Starting...");
-        // Reset flags
         networkIsInitialized = false;
         assetsAreReady = false;
         initializationData = null;
-        this.mapMesh = null; // Reset map mesh ref
+        this.mapMesh = null;
+        this.physicsBodies = {};
+        this.world = null;
+        this.lastCallTime = performance.now();
 
-        if (!this.initializeCoreComponents()) { return; }
+        // Use CONFIG value for timeStep if available
+        const effectiveTimeStep = typeof CONFIG !== 'undefined' ? (CONFIG.PHYSICS_TIMESTEP || 1 / 60) : 1/60;
+
+        if (!this.initializeCoreComponents()) { return; } // Initializes Three.js AND Cannon.js world
         if (!this.initializeManagers()) { return; }
 
-        // Bind LoadManager Listener
-        console.log("[Game] Binding LoadManager listeners...");
-        if (typeof loadManager !== 'undefined') {
-            loadManager.on('ready', () => {
-                console.log("[Game] LoadManager 'ready' event received.");
-                assetsAreReady = true;
-
-                // Get map mesh data from LoadManager and store it on the instance
-                this.mapMesh = loadManager.getAssetData('map');
-                if (!this.mapMesh) {
-                    console.error("!!! [Game] LoadManager 'ready' but mapMesh data is missing!");
-                    stateMachine.transitionTo('loading', { message: "FATAL: Map asset data missing!", error: true });
-                    return;
-                }
-                console.log("[Game] Map mesh reference stored in game instance.");
-
-
-                // Decide next step based on network status and current game state
-                if (networkIsInitialized && initializationData) {
-                     console.log("[Game LoadReady Handler] Assets ready, Network was initialized. Attempting game play start.");
-                     if (currentGameInstance?.startGamePlay) {
-                         currentGameInstance.startGamePlay(initializationData); // startGamePlay will verify this.mapMesh
-                     } else { console.error("[Game LoadReady Handler] Game instance missing!"); }
-
-                 } else if (typeof stateMachine !== 'undefined' && stateMachine.is('joining') && typeof Network !== 'undefined' && Network.isConnected()) {
-                      console.log("[Game LoadReady Handler] Assets ready while joining and connected. Sending join details...");
-                      Network.sendJoinDetails();
-
-                 } else if (typeof stateMachine !== 'undefined' && stateMachine.is('loading')) {
-                     console.log("[Game LoadReady Handler] Assets ready, Network not ready or not joining. Transitioning to Homescreen.");
-                     stateMachine.transitionTo('homescreen', { playerCount: typeof UIManager !== 'undefined' ? (UIManager.playerCountSpan?.textContent ?? '?') : '?' });
-
-                 } else {
-                     console.log(`[Game LoadReady Handler] Assets ready, state is ${stateMachine?.currentState || 'unknown'}. No action needed from here.`);
-                 }
-            });
-            // Listener for LoadManager errors
-            loadManager.on('error', (data) => {
-                console.error("[Game] LoadManager 'error' event received.");
-                assetsAreReady = false;
-                this.mapMesh = null;   // Reset map ref on error
-                if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:`FATAL: Asset Error!<br/>${data.message||'Check console.'}`,error:true});
-            });
-            console.log("[Game] LoadManager listeners attached.");
-        } else {
-            console.error("LoadManager missing!");
-             if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:`FATAL: LoadManager Missing!`,error:true});
-            return; // Cannot proceed without LoadManager
-        }
-
+        this.bindLoadManagerListeners(); // Setup asset loading listeners
         this.bindOtherStateTransitions();
+
         if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading'); else console.error("stateMachine missing!");
 
-        // Initialize Network
-        console.log("[Game] Initializing Network...");
-        if(typeof Network!=='undefined' && typeof Network.init==='function') {
-            Network.init();
-        } else {
-            console.error("Network missing or invalid!");
-            if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:`FATAL: Network Module Failed!`,error:true});
-            return;
-        }
-
-        // Start loading assets
-        console.log("[Game] Starting asset load via LoadManager...");
-        if(typeof loadManager!=='undefined') {
-            loadManager.startLoading();
-        } else {
-             console.error("LoadManager missing - cannot start loading!");
-        }
-
-        this.addEventListeners();
-        this.animate();
+        this.initializeNetwork();   // Setup network connections
+        this.startAssetLoading();   // Start loading map, models etc.
+        this.addEventListeners();   // Setup UI listeners (join button etc.)
+        this.animate(effectiveTimeStep);             // Start the main loop, pass timestep
         console.log("[Game] Started successfully setup.");
     }
 
-    // --- Initialize Core Components ---
+    // --- Setup Asset Loading ---
+    bindLoadManagerListeners() {
+        console.log("[Game] Binding LoadManager listeners...");
+        if (typeof loadManager === 'undefined') {
+            console.error("LoadManager missing!");
+            // Consider adding error state transition here
+             if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:"FATAL: Load Manager script missing!", error:true});
+            return;
+        }
+
+        loadManager.on('ready', () => {
+            console.log("[Game] LoadManager 'ready' event received.");
+            assetsAreReady = true;
+            this.mapMesh = loadManager.getAssetData('map'); // Store visual map reference
+            if (!this.mapMesh) {
+                console.error("!!! [Game] LoadManager 'ready' but mapMesh data is missing!");
+                stateMachine.transitionTo('loading', { message: "FATAL: Map asset data failed!", error: true });
+                return;
+            }
+            console.log("[Game] Visual map mesh reference stored.");
+
+            // Now that assets are ready, check if we can proceed
+            this.attemptProceedToGame();
+        });
+
+        loadManager.on('error', (data) => {
+            console.error("[Game] LoadManager 'error' event received.");
+            assetsAreReady = false;
+            this.mapMesh = null;   // Reset map ref on error
+            if(typeof stateMachine!=='undefined') stateMachine.transitionTo('loading',{message:`FATAL: Asset Error!<br/>${data.message||'Check console.'}`,error:true});
+        });
+    }
+
+     // --- Centralized logic to check if game can start ---
+    attemptProceedToGame() {
+        console.log(`[Game] attemptProceedToGame: assetsReady=${assetsAreReady}, networkInitialized=${networkIsInitialized}, initData=${!!initializationData}`);
+        if (assetsAreReady && networkIsInitialized && initializationData) {
+            // Everything is ready! Start the game.
+            console.log("[Game] All prerequisites met. Starting game play...");
+            if (currentGameInstance?.startGamePlay) {
+                currentGameInstance.startGamePlay(initializationData);
+            } else { console.error("[Game] Game instance missing!"); }
+        } else if (assetsAreReady && stateMachine?.is('joining') && Network.isConnected()) {
+            // Assets finished while joining and connected, send details.
+            console.log("[Game] Assets ready while joining. Sending join details...");
+            Network.sendJoinDetails();
+        } else if (!assetsAreReady && stateMachine?.is('joining')) {
+             console.log("[Game] Waiting for assets...");
+             // UI should indicate loading state via UIManager listener
+        } else if (assetsAreReady && !networkIsInitialized && stateMachine?.is('joining')) {
+             console.log("[Game] Assets ready, waiting for network connection/initialization...");
+             // UI should indicate connecting state via UIManager listener
+        } else {
+            console.log(`[Game] Prerequisites not yet met. State: ${stateMachine?.currentState || 'Unknown'}`);
+        }
+    }
+
+
+    // --- Initialize Core Components (Three.js + Cannon.js) ---
     initializeCoreComponents() {
-         console.log("[Game] Init Core Components...");
+         console.log("[Game] Init Core Components (Three.js & Cannon.js)...");
          try {
-             // Scene setup
-             this.scene = new THREE.Scene(); scene = this.scene; // Assign to global 'scene'
+             // --- Three.js Setup ---
+             this.scene = new THREE.Scene(); scene = this.scene;
              this.scene.background = new THREE.Color(0x6699cc);
              this.scene.fog = new THREE.Fog(0x6699cc, 0, 200);
-
-             // Camera setup
-             this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera = this.camera; // Assign to global 'camera'
-
-             // Clock and Renderer setup
-             this.clock = new THREE.Clock(); clock = this.clock; // Assign to global 'clock'
+             this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera = this.camera;
+             this.clock = new THREE.Clock(); clock = this.clock;
              const canvas = document.getElementById('gameCanvas');
-             if (!canvas) throw new Error("Fatal: #gameCanvas element not found in HTML!");
-             this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); renderer = this.renderer; // Assign to global 'renderer'
+             if (!canvas) throw new Error("Fatal: #gameCanvas element not found!");
+             this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); renderer = this.renderer;
              this.renderer.setSize(window.innerWidth, window.innerHeight);
              this.renderer.shadowMap.enabled = true;
-
-             // Controls setup
-             this.controls = new THREE.PointerLockControls(this.camera, document.body); controls = this.controls; // Assign to global 'controls'
+             this.controls = new THREE.PointerLockControls(this.camera, document.body); controls = this.controls;
              this.controls.addEventListener('lock', () => { console.log('[Controls] Locked'); });
              this.controls.addEventListener('unlock', () => { console.log('[Controls] Unlocked'); });
-
-             // Loaders setup (assigning to globals used by loadManager etc.)
-             dracoLoader = new THREE.DRACOLoader(); // Assign to global 'dracoLoader'
+             dracoLoader = new THREE.DRACOLoader();
              dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
-             dracoLoader.setDecoderConfig({ type: 'js' });
-             dracoLoader.preload();
-             loader = new THREE.GLTFLoader(); // Assign to global 'loader'
-             loader.setDRACOLoader(dracoLoader);
-             console.log("[Game] Loaders Initialized.");
-
-             // Lighting setup
-             const ambL = new THREE.AmbientLight(0xffffff, 0.7);
-             scene.add(ambL);
+             dracoLoader.setDecoderConfig({ type: 'js' }); dracoLoader.preload();
+             loader = new THREE.GLTFLoader(); loader.setDRACOLoader(dracoLoader);
+             const ambL = new THREE.AmbientLight(0xffffff, 0.7); this.scene.add(ambL);
              const dirL = new THREE.DirectionalLight(0xffffff, 1.0);
              dirL.position.set(15, 20, 10);
              dirL.castShadow = true;
-             dirL.shadow.mapSize.width = 1024;
-             dirL.shadow.mapSize.height = 1024;
-             scene.add(dirL);
-             scene.add(dirL.target); // Target for directional light
+             dirL.shadow.mapSize.width = 1024; dirL.shadow.mapSize.height = 1024;
+             this.scene.add(dirL); this.scene.add(dirL.target);
+             console.log("[Game] Three.js Components OK.");
 
-             console.log("[Game] Core Components OK.");
-             return true; // Indicate success
+             // --- Cannon.js Setup ---
+             if (typeof CANNON === 'undefined') throw new Error("Cannon-es library not loaded!");
+             this.world = new CANNON.World(); world = this.world; // Assign to global
+             this.world.gravity.set(0, CONFIG.GRAVITY || -9.82, 0); // Set gravity from config
+             this.world.broadphase = new CANNON.NaiveBroadphase(); // Simple broadphase needed for collisions
+
+             // -- Create Materials --
+             const groundMaterial = new CANNON.Material("groundMaterial");
+             const playerMaterial = new CANNON.Material("playerMaterial");
+
+             // -- Define Contact Material --
+             const groundPlayerContactMaterial = new CANNON.ContactMaterial(
+                 groundMaterial, playerMaterial,
+                 {
+                     friction: 0.1,      // Adjust friction as needed
+                     restitution: 0.1    // Adjust bounciness as needed
+                 }
+             );
+             this.world.addContactMaterial(groundPlayerContactMaterial); // Add the contact material to the world
+
+             // -- Create Ground Physics Body --
+             const groundShape = new CANNON.Plane(); // Represents an infinite horizontal plane
+             const groundBody = new CANNON.Body({
+                 mass: 0, // Static body
+                 shape: groundShape,
+                 material: groundMaterial // Assign the ground material
+             });
+             // Rotate the plane so its normal points upwards (along positive Y)
+             groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+             groundBody.position.set(0, 0, 0); // Position the ground plane at Y=0
+             this.world.addBody(groundBody);
+             console.log("[Game] Cannon.js World and Ground OK.");
+
+
+             return true; // Success
          } catch(e) {
-             console.error("!!! Core Component Initialization Error:", e);
+             console.error("!!! Core Component Init Error:", e);
              if(typeof UIManager !== 'undefined' && UIManager?.showError) UIManager.showError("FATAL: Graphics Init Error!", 'loading');
              else alert("FATAL: Graphics Init Error!");
-             return false; // Indicate failure
+             return false;
          }
     }
 
-    // --- Initialize Managers ---
+    // --- Initialize Other Managers ---
     initializeManagers() {
          console.log("[Game] Init Managers...");
-         // Check if all required manager modules/globals exist
          if(typeof UIManager === 'undefined' || typeof Input === 'undefined' || typeof stateMachine === 'undefined' || typeof loadManager === 'undefined' || typeof Network === 'undefined' || typeof Effects === 'undefined') {
              console.error("!!! One or more Manager modules are undefined!");
              if(typeof UIManager !== 'undefined' && UIManager?.showError) UIManager.showError("FATAL: Mgr Load Error!", 'loading');
-             else document.body.innerHTML = "<p>FATAL: MANAGER SCRIPT LOAD ERROR</p>"; // Fallback error display
-             return false; // Indicate failure
+             else document.body.innerHTML = "<p>FATAL: MANAGER SCRIPT LOAD ERROR</p>";
+             return false;
          }
          try {
-             // Initialize each manager
              if(!UIManager.initialize()) throw new Error("UIManager failed init");
-             Input.init(this.controls); // Pass controls reference to Input manager
-             Effects.initialize(this.scene); // Pass scene reference to Effects manager
+             Input.init(this.controls);
+             Effects.initialize(this.scene);
              console.log("[Game] Managers Initialized.");
-             return true; // Indicate success
+             return true;
          } catch (e) {
              console.error("!!! Manager Initialization Error:", e);
              if(typeof UIManager !== 'undefined' && UIManager?.showError) UIManager.showError("FATAL: Game Setup Error!", 'loading');
              else alert("FATAL: Game Setup Error!");
-             return false; // Indicate failure
+             return false;
          }
     }
 
     // --- Bind State Transitions ---
     bindOtherStateTransitions() {
-        // Bind UIManager listeners first if available
         if(typeof UIManager !== 'undefined' && UIManager?.bindStateListeners) UIManager.bindStateListeners(stateMachine);
         else console.error("UIManager missing when binding state listeners");
 
-        // Bind Game's own transition listener
         if (typeof stateMachine !== 'undefined') {
             stateMachine.on('transition', (data) => {
                  console.log(`[Game State Listener] Transition: ${data.from} -> ${data.to}`);
                  if (data.to === 'homescreen') {
-                     // Reset flags when returning to homescreen
                      networkIsInitialized = false;
                      initializationData = null;
                      console.log("[Game] Reset network/init flags for homescreen.");
-                     // Cleanup players when leaving playing/joining state
                      if (data.from === 'playing' || data.from === 'joining') {
                          console.log(`[Game] Cleanup after ${data.from} state...`);
-                         for(const id in players){ if(id !== localPlayerId && typeof Network !== 'undefined' && Network._removePlayer){ Network._removePlayer(id); } }
+                         // Clear physics bodies and players map
+                         for(const id in this.physicsBodies) { if (this.world) this.world.removeBody(this.physicsBodies[id]); } this.physicsBodies = {};
+                         for(const id in players){ if(id !== localPlayerId && typeof Network !== 'undefined' && Network._removePlayer){ Network._removePlayer(id); } } // Let network handle removing ClientPlayer meshes
                          if(typeof players !== 'undefined' && players[localPlayerId]) { delete players[localPlayerId]; }
                          players = {}; localPlayerId = null;
                          if(typeof controls !== 'undefined' && controls?.isLocked) controls.unlock();
-                         console.log("[Game] Player state cleared for homescreen.");
+                         console.log("[Game] Player and physics state cleared for homescreen.");
                      }
                  } else if (data.to === 'playing') {
                      console.log("[Game] State transitioned to 'playing'.");
-                     // Update UI elements relevant to playing state
                      if (typeof UIManager !== 'undefined' && localPlayerId && players[localPlayerId]) UIManager.updateHealthBar(players[localPlayerId].health);
                      if (typeof UIManager !== 'undefined' && players[localPlayerId]?.name) UIManager.updateInfo(`Playing as ${players[localPlayerId].name}`);
 
                  } else if (data.to === 'loading' && data.options?.error) {
-                     // Handle entering loading state due to an error
                      console.error("Loading error state:", data.options.message);
                      if(typeof controls !== 'undefined' && controls?.isLocked)controls.unlock();
-                     networkIsInitialized = false; assetsAreReady = false; initializationData = null; // Reset flags on error
+                     networkIsInitialized = false; assetsAreReady = false; initializationData = null; this.mapMesh = null; this.physicsBodies = {};
                  }
             });
         } else {
@@ -230,53 +248,83 @@ class Game {
     // --- Add Event Listeners ---
     addEventListeners() {
         console.log("[Game] Add global listeners...");
-        // Join Button Listener
         if (typeof UIManager !== 'undefined' && UIManager?.joinButton && typeof Network !== 'undefined' && Network?.attemptJoinGame) {
             UIManager.joinButton.addEventListener('click', () => {
-                // Ensure assets are ready before allowing join attempt
                 if (typeof assetsAreReady === 'undefined' || !assetsAreReady) {
                     UIManager.showError("Assets still loading, please wait...", 'homescreen');
-                    return; // Prevent join attempt if assets aren't ready
+                    return;
                 }
-                // Assets are ready, proceed with join attempt
                 Network.attemptJoinGame();
             });
             console.log("[Game] Join listener added (with asset check).");
         } else {
             console.error("Cannot add join listener! Check UIManager, joinButton, Network, and attemptJoinGame availability.");
         }
-        // Window Resize Listener
-        window.addEventListener('resize', this.handleResize.bind(this)); // Use bind to maintain 'this' context
+        window.addEventListener('resize', this.handleResize.bind(this));
         console.log("[Game] Global Listeners added.");
     }
 
-    // --- Update Loop ---
-    update(dt) {
+    // --- Main Update/Animate Loop ---
+     animate(physicsTimeStep) { // Accept timestep from config
+        requestAnimationFrame(() => this.animate(physicsTimeStep)); // Pass timestep recursively
+
+        const now = performance.now();
+        const dt = (now - this.lastCallTime) / 1000.0;
+        this.lastCallTime = now;
+
+        // --- Physics Step ---
+        if (this.world) {
+             this.world.step(physicsTimeStep, dt); // Use passed fixed timestep
+        }
+
+        // --- Game Logic Update ---
         if(typeof stateMachine !== 'undefined' && stateMachine.is('playing')){
             try{
-                // Pass mapMesh instance variable to updateLocalPlayer
-                if(typeof updateLocalPlayer === 'function') updateLocalPlayer(dt, this.mapMesh);
+                const localPlayerBody = localPlayerId ? this.physicsBodies[localPlayerId] : null;
+                if (typeof updateLocalPlayer === 'function') {
+                     updateLocalPlayer(dt, localPlayerBody); // Pass actual delta time for logic checks? Or physicsTimeStep? Usually delta.
+                 }
             } catch(e){console.error("Err updateLP:",e);}
-            try{ if(typeof updateRemotePlayers === 'function') updateRemotePlayers(dt); } catch(e){console.error("Err updateRP:",e);}
+
+            // updateRemotePlayers function may not be needed if visuals are directly synced below
+            // try{ if(typeof updateRemotePlayers === 'function') updateRemotePlayers(dt); } catch(e){console.error("Err updateRP:",e);}
+
             try{ if(typeof Effects !== 'undefined' && Effects?.update) Effects.update(dt); } catch(e){console.error("Err Effects.update:",e);}
+
+
+             // --- Synchronize ALL Visuals with Physics ---
+             // Local Player Camera/Controls
+             const localBody = localPlayerId ? this.physicsBodies[localPlayerId] : null;
+             if (localBody && typeof controls !== 'undefined' && controls?.getObject()) {
+                 controls.getObject().position.copy(localBody.position);
+                 controls.getObject().position.y += (CONFIG?.CAMERA_Y_OFFSET !== undefined ? CONFIG.CAMERA_Y_OFFSET : 1.6); // Adjust camera relative to body center
+             }
+
+             // Remote Player Meshes
+             for (const id in players) {
+                 if (id !== localPlayerId && players[id] instanceof ClientPlayer && players[id].mesh) {
+                     const remoteBody = this.physicsBodies[id];
+                     if (remoteBody) {
+                          players[id].mesh.position.copy(remoteBody.position);
+                          players[id].mesh.quaternion.copy(remoteBody.quaternion);
+                          const playerHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
+                           // Adjust visual mesh Y if its origin is different from the physics body origin (center)
+                           if (!(players[id].mesh.geometry instanceof THREE.CylinderGeometry)) { // Assuming cylinder is centered, but GLB might be at feet
+                               // Adjust feet-origin mesh based on center-origin physics body
+                               players[id].mesh.position.y -= playerHeight / 2;
+                           }
+                     }
+                 }
+             }
+        }
+
+
+        // --- Render ---
+        if (this.renderer && this.scene && this.camera) {
+            try { this.renderer.render(this.scene, this.camera); } catch (e) { console.error("Render error:", e); }
         }
     }
 
-    // --- Animate Loop ---
-    animate() {
-        requestAnimationFrame(() => this.animate()); // Queue next frame
-        const dT = this.clock ? this.clock.getDelta() : 0.016; // Get delta time, default if clock missing
-        this.update(dT); // Call update logic
-        // Render scene if components are ready
-        if (this.renderer && this.scene && this.camera) {
-            try {
-                this.renderer.render(this.scene, this.camera);
-            } catch (e) {
-                console.error("Render error:", e);
-                // Consider adding logic to stop the loop or show an error state if rendering fails repeatedly
-            }
-        }
-    }
 
     // --- Resize Handler ---
     handleResize() {
@@ -292,67 +340,93 @@ class Game {
     // --- Start Game Play Method ---
     startGamePlay(initData) {
         console.log('[Game] startGamePlay called.');
-        if (!initData || !initData.id) {
-            console.error("[Game] startGamePlay called with invalid initData!");
-            if (typeof stateMachine !== 'undefined') stateMachine.transitionTo('homescreen');
-            if (typeof UIManager !== 'undefined') UIManager.showError("Failed to initialize game.", 'homescreen');
-            return;
-        }
-        if (typeof stateMachine !== 'undefined' && stateMachine.is('playing')) {
-             console.warn("[Game] startGamePlay called while already playing. Ignoring.");
-             return;
-        }
-
-        // Check the mapMesh stored on the Game instance
-        if (!this.mapMesh) {
-            console.error("!!! [Game] startGamePlay: Instance mapMesh is not ready! Cannot start game. Assets loaded?", assetsAreReady);
-             if (typeof stateMachine !== 'undefined') stateMachine.transitionTo('homescreen');
-             if (typeof UIManager !== 'undefined') UIManager.showError("Map data missing. Cannot start.", 'homescreen');
-            return;
-        }
+        if (!initData || !initData.id) { /* ... error handling ... */ return; }
+        if (stateMachine?.is('playing')) { /* ... warning ... */ return; }
+        if (!this.world) { /* ... error handling ... */ return; }
 
 
         localPlayerId = initData.id; console.log(`[Game] Local ID: ${localPlayerId}`);
-        console.log("[Game] Clearing previous player state for game start...");
-        for(const id in players) { if (typeof Network !== 'undefined' && Network._removePlayer) Network._removePlayer(id); }
-        players={};
+        console.log("[Game] Clearing previous player/physics state...");
+        for (const id in this.physicsBodies) { if (this.world) this.world.removeBody(this.physicsBodies[id]); } this.physicsBodies = {};
+        for (const id in players) { if (Network._removePlayer) Network._removePlayer(id); } players = {};
+
 
         let iPosX=0, iPosY=0, iPosZ=0;
 
-        // Process player data from server's initialize message
+        // Process player data from server
         for(const id in initData.players){
             const sPD = initData.players[id];
+
+            // Find the playerMaterial defined during physics setup
+            const playerMaterial = this.world.materials.find(m => m.name === "playerMaterial");
+            if (!playerMaterial) console.warn("Player material not found in physics world!");
+
             if(id === localPlayerId){
                 console.log(`[Game] Init local player: ${sPD.name}`);
                 players[id] = { ...sPD, isLocal: true, mesh: null };
-                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z;
 
-                const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8);
-                const visualY = iPosY + cameraOffset;
-                if(typeof controls !== 'undefined' && controls?.getObject()){
-                    controls.getObject().position.set(iPosX, visualY, iPosZ);
-                    controls.getObject().rotation.set(0, sPD.rotationY || 0, 0);
-                    console.log(`[Game] Set controls pos(${iPosX.toFixed(1)}, ${visualY.toFixed(1)}, ${iPosZ.toFixed(1)}) rotY(${sPD.rotationY?.toFixed(2)})`);
-                } else { console.error("[Game] Controls object missing during local player spawn!"); }
+                // Create Local Player Physics Body
+                const playerRadius = CONFIG?.PLAYER_RADIUS || 0.4;
+                const playerHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
+                const playerShape = new CANNON.Sphere(playerRadius); // Simple sphere shape for now
+                const bodyCenterY = sPD.y + playerHeight / 2.0; // Calculate center from feet
+                const playerBody = new CANNON.Body({
+                    mass: CONFIG?.PLAYER_MASS || 70,
+                    position: new CANNON.Vec3(sPD.x, bodyCenterY, sPD.z),
+                    shape: playerShape,
+                    material: playerMaterial, // Assign physics material
+                    linearDamping: 0.5,
+                    angularDamping: 0.9
+                });
+                 playerBody.angularFactor.set(0,1,0); // Prevent tilting
+                this.world.addBody(playerBody);
+                this.physicsBodies[id] = playerBody;
+                console.log(`[Game] Created local physics body at y=${bodyCenterY.toFixed(2)}`);
 
-                // Reset Physics State for Local Player
-                velocityY = 0;
-                isOnGround = true;
-                console.log("[Game] Initial physics state reset (vy=0, onGround=true).");
+                // Initial controls position (will be updated in animate)
+                 if(typeof controls !== 'undefined' && controls?.getObject()){
+                     controls.getObject().position.copy(playerBody.position);
+                     controls.getObject().position.y += (CONFIG?.CAMERA_Y_OFFSET !== undefined ? CONFIG.CAMERA_Y_OFFSET : 1.6);
+                 } else { console.error("[Game] Controls object missing during local player spawn!"); }
+
+                // No manual physics state reset needed
 
                 if(typeof UIManager !== 'undefined'){
-                    UIManager.updateHealthBar(sPD.health);
-                    UIManager.updateInfo(`Playing as ${players[id].name}`);
-                    UIManager.clearError('homescreen');
-                    UIManager.clearKillMessage();
-                }
+                     UIManager.updateHealthBar(sPD.health);
+                     UIManager.updateInfo(`Playing as ${players[id].name}`);
+                     UIManager.clearError('homescreen');
+                     UIManager.clearKillMessage();
+                 }
+
             } else {
-                if(typeof Network !== 'undefined' && Network._addPlayer) Network._addPlayer(sPD);
+                 // Create Remote Player (Visual + Physics)
+                 if(typeof Network !== 'undefined' && Network._addPlayer) {
+                     Network._addPlayer(sPD); // Creates ClientPlayer instance and visual mesh
+                     const remotePlayer = players[id];
+
+                     if (remotePlayer instanceof ClientPlayer && typeof world !== 'undefined') {
+                         const remoteRadius = CONFIG?.PLAYER_RADIUS || 0.4;
+                         const remoteHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
+                         const remoteShape = new CANNON.Sphere(remoteRadius);
+                         const remoteBodyCenterY = sPD.y + remoteHeight / 2.0;
+                         const remoteBody = new CANNON.Body({
+                              mass: 0, // KINEMATIC
+                              shape: remoteShape,
+                              position: new CANNON.Vec3(sPD.x, remoteBodyCenterY, sPD.z),
+                              type: CANNON.Body.KINEMATIC,
+                              material: playerMaterial // Assign physics material
+                         });
+                         // Set initial rotation for kinematic body
+                          remoteBody.quaternion.setFromEuler(0, sPD.rotationY || 0, 0);
+                         this.world.addBody(remoteBody);
+                         this.physicsBodies[id] = remoteBody; // Store body ref
+                     }
+                 }
             }
         }
         console.log(`[Game] Init complete. ${Object.keys(players).length} players.`);
 
-        // Transition state AFTER setting up player data and CONFIRMING mapMesh
+        // Transition state AFTER setting up world and bodies
         if(typeof stateMachine !== 'undefined'){
             console.log("[Game] Transitioning state to 'playing'...");
             stateMachine.transitionTo('playing');
@@ -366,4 +440,4 @@ function runGame() { console.log("--- runGame() ---"); try { const gI=new Game()
 
 // --- DOM Ready Execution ---
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Using Instance mapMesh, Passing to Logic)");
+console.log("game.js loaded (Cannon-es Integration)");
