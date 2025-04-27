@@ -7,11 +7,10 @@ const Input = {
     mouseButtons: {},
     controls: null,
     lastDashTime: 0,
-    dashDirection: new THREE.Vector3(), // Set on dash key down
+    dashDirection: new THREE.Vector3(), // Calculated when dash is activated
 
-    // These flags are set by keydown events and consumed by gameLogic.js
-    attemptingJump: false,
-    requestingDashImpulse: false,
+    // Flags for gameLogic
+    dashJustActivated: false, // Set true for ONE frame when dash key pressed + ready
 
 
     // Initialize input listeners
@@ -22,8 +21,7 @@ const Input = {
         document.addEventListener('keyup', this.handleKeyUp.bind(this));
         document.addEventListener('mousedown', this.handleMouseDown.bind(this));
         document.addEventListener('mouseup', this.handleMouseUp.bind(this));
-        this.attemptingJump = false;        // Ensure flags start false
-        this.requestingDashImpulse = false; // Ensure flags start false
+        this.dashJustActivated = false; // Ensure flag starts false
         console.log("[Input] Initialized.");
     },
 
@@ -32,23 +30,19 @@ const Input = {
         if (event.target.tagName === 'INPUT') return; // Ignore inputs in text fields
         this.keys[event.code] = true;
 
-        // Handle Dash (ShiftLeft)
-        // Only SET the request flag here if not on cooldown and playing
-        if (event.code === 'ShiftLeft' && !event.repeat && !this.requestingDashImpulse && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
+        // Handle Dash (ShiftLeft) - Set flag if cooldown ready
+        if (event.code === 'ShiftLeft' && !event.repeat && !this.dashJustActivated && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
             const now = Date.now(); const cooldown = (CONFIG.DASH_COOLDOWN || 0.8) * 1000;
             if ((now - this.lastDashTime > cooldown) && stateMachine.is('playing')) {
-                this.startDash(); // Sets dashDirection and requestingDashImpulse=true
+                this.startDash(); // Calculates direction, resets timer, sets dashJustActivated = true
             }
         }
 
-        // Handle Jump (Space)
-        if (event.code === 'Space' && !event.repeat && typeof stateMachine !== 'undefined') {
+        // Handle Jump (Space) - Just records the key press, logic is in gameLogic
+        if (event.code === 'Space' && !event.repeat) {
             event.preventDefault();
-            // Set jump request flag ONLY if playing - gameLogic checks isPlayerGrounded
-            if (stateMachine.is('playing') && !this.attemptingJump) {
-                 console.log("Jump key pressed.");
-                 this.attemptingJump = true;
-             }
+             // No flag needed here, gameLogic checks keys['Space'] directly now
+             console.log("Space pressed");
         }
     },
 
@@ -56,18 +50,14 @@ const Input = {
     handleKeyUp: function(event) {
         if (event.target.tagName === 'INPUT') return;
         this.keys[event.code] = false;
-        // Reset jump flag immediately on key up to prevent holding jump
-        if (event.code === 'Space') {
-            this.attemptingJump = false;
-            // console.log("Jump key released, flag false.");
-        }
+        // Reset jump 'attempt' immediately? Not strictly needed if gameLogic checks ground state
+        // if (event.code === 'Space') { }
     },
 
     // Handle mouse button press down
     handleMouseDown: function(event) {
         this.mouseButtons[event.button] = true;
-        if (typeof stateMachine !== 'undefined' && stateMachine.is('playing') && this.controls && !this.controls.isLocked) {
-             console.log("[Input] Attempting to lock controls...");
+        if (stateMachine?.is('playing') && this.controls && !this.controls.isLocked) {
              this.controls.lock();
         }
     },
@@ -77,15 +67,14 @@ const Input = {
         this.mouseButtons[event.button] = false;
     },
 
-    // Initiate the dash - Calculate direction, reset cooldown, set impulse flag
+    // Calculate direction, set flag for gameLogic
     startDash: function() {
          if(!this.controls) return;
-         console.log("Dash initiated!");
          this.lastDashTime = Date.now(); // Reset cooldown timer
 
          let inputDir = new THREE.Vector3();
          if(this.keys['KeyW']){ inputDir.z = -1; } if(this.keys['KeyS']){ inputDir.z = 1; }
-         // Use correct A/D logic based on swapped gameLogic
+         // Corrected A/D logic matching gameLogic fix
          if(this.keys['KeyA']){ inputDir.x = -1; } if(this.keys['KeyD']){ inputDir.x = 1; }
 
          if(inputDir.lengthSq() === 0){ // Forward dash
@@ -95,10 +84,11 @@ const Input = {
          }
          this.dashDirection.normalize();
 
-         this.requestingDashImpulse = true; // Set flag for gameLogic
+         this.dashJustActivated = true; // Set flag for ONE frame
+         console.log("Dash Requested. Direction:", this.dashDirection);
     }
 };
 
 // Make Input globally accessible
 window.Input = Input;
-console.log("input.js loaded (Jump uses attempt flag, Dash uses impulse request)");
+console.log("input.js loaded (Simplified Jump/Dash Flags)");
