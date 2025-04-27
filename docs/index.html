@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. (Cannon-es Physics)</title>
+    <title>Shawty. (Rapier Physics)</title> <!-- Updated title -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -42,10 +42,11 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- <<< CHANGED Physics Engine Script >>> -->
-    <!-- Removed integrity and crossorigin attributes -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
-    <!-- <<< END CHANGED Physics Engine Script >>> -->
+    <!-- <<< REPLACED Physics Engine Script >>> -->
+    <!-- Load Rapier library via CDN - Note: This uses an import pattern -->
+    <script type="module" src="rapier_init.js"></script>
+    <!-- We need a small helper JS file (rapier_init.js) to load the wasm -->
+    <!-- <<< END REPLACED Physics Engine Script >>> -->
 
 
     <!-- Core & Game Logic - ORDER MATTERS -->
