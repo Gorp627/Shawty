@@ -35,10 +35,10 @@ class Game {
 
                 // Decide next step based on network status and current game state
                 if (networkIsInitialized && initializationData) {
-                     // Network was already initialized (got 'initialize' event) before assets finished. Start game now.
-                     console.log("[Game LoadReady Handler] Assets ready, Network was initialized. Starting game play.");
+                     // Network was already initialized (got 'initialize' event) before assets finished. Try starting game.
+                     console.log("[Game LoadReady Handler] Assets ready, Network was initialized. Attempting game play start.");
                      if (currentGameInstance?.startGamePlay) {
-                         currentGameInstance.startGamePlay(initializationData);
+                         currentGameInstance.startGamePlay(initializationData); // startGamePlay will verify mapMesh now
                      } else { console.error("[Game LoadReady Handler] Game instance missing!"); }
 
                  } else if (typeof stateMachine !== 'undefined' && stateMachine.is('joining') && typeof Network !== 'undefined' && Network.isConnected()) {
@@ -122,12 +122,10 @@ class Game {
             stateMachine.on('transition', (data) => {
                  console.log(`[Game State Listener] Transition: ${data.from} -> ${data.to}`);
                  if (data.to === 'homescreen') {
-                     // Reset flags when returning to homescreen
-                     networkIsInitialized = false; // Socket might still be connected, but we are not 'initialized' in game context
+                     networkIsInitialized = false;
                      initializationData = null;
                      console.log("[Game] Reset network/init flags for homescreen.");
-                     // Player list cleanup moved here for robustness
-                     if (data.from === 'playing' || data.from === 'joining') { // Clean up if coming from playing OR joining
+                     if (data.from === 'playing' || data.from === 'joining') {
                          console.log(`[Game] Cleanup after ${data.from} state...`);
                          for(const id in players){ if(id !== localPlayerId && typeof Network !== 'undefined' && Network._removePlayer){ Network._removePlayer(id); } }
                          if(typeof players !== 'undefined' && players[localPlayerId]) { delete players[localPlayerId]; }
@@ -137,7 +135,6 @@ class Game {
                      }
                  } else if (data.to === 'playing') {
                      console.log("[Game] State transitioned to 'playing'.");
-                     // Ensure UI reflects playing state
                      if (typeof UIManager !== 'undefined' && localPlayerId && players[localPlayerId]) UIManager.updateHealthBar(players[localPlayerId].health);
                      if (typeof UIManager !== 'undefined' && players[localPlayerId]?.name) UIManager.updateInfo(`Playing as ${players[localPlayerId].name}`);
 
@@ -152,15 +149,12 @@ class Game {
     // --- Add Event Listeners ---
     addEventListeners() {
         console.log("[Game] Add global listeners...");
-        // Modify Join Button listener
         if (typeof UIManager !== 'undefined' && UIManager?.joinButton && typeof Network !== 'undefined' && Network?.attemptJoinGame) {
             UIManager.joinButton.addEventListener('click', () => {
-                // Check if assets are ready before attempting to join
                 if (typeof assetsAreReady === 'undefined' || !assetsAreReady) {
                     UIManager.showError("Assets still loading, please wait...", 'homescreen');
                     return;
                 }
-                // If assets are ready, proceed with the join attempt
                 Network.attemptJoinGame();
             });
             console.log("[Game] Join listener added (with asset check).");
@@ -187,7 +181,6 @@ class Game {
     handleResize() { if(this.camera){this.camera.aspect=window.innerWidth/window.innerHeight;this.camera.updateProjectionMatrix();} if(this.renderer)this.renderer.setSize(window.innerWidth,window.innerHeight);}
 
     // --- Start Game Play Method ---
-    // This is now ONLY called by Network.handleInitialize when initialize data is received AND assets are ready
     startGamePlay(initData) {
         console.log('[Game] startGamePlay called.');
         if (!initData || !initData.id) {
@@ -201,9 +194,21 @@ class Game {
              return;
         }
 
+        // --- <<< ADDED MAP MESH CHECK >>> ---
+        // Ensure mapMesh is globally available BEFORE proceeding to playing state
+        if (typeof mapMesh === 'undefined' || !mapMesh) {
+            console.error("!!! [Game] startGamePlay: mapMesh is not ready! Cannot start game. Assets loaded?", assetsAreReady);
+            // Transition back or show error
+             if (typeof stateMachine !== 'undefined') stateMachine.transitionTo('homescreen');
+             if (typeof UIManager !== 'undefined') UIManager.showError("Map failed to load. Cannot start.", 'homescreen');
+            return;
+        }
+        // --- <<< END MAP MESH CHECK >>> ---
+
+
         localPlayerId = initData.id; console.log(`[Game] Local ID: ${localPlayerId}`);
         console.log("[Game] Clearing previous player state for game start...");
-        for(const id in players) { if (typeof Network !== 'undefined' && Network._removePlayer) Network._removePlayer(id); } // Ensure clean slate
+        for(const id in players) { if (typeof Network !== 'undefined' && Network._removePlayer) Network._removePlayer(id); }
         players={};
 
         let iPosX=0, iPosY=0, iPosZ=0;
@@ -214,7 +219,7 @@ class Game {
             if(id === localPlayerId){
                 console.log(`[Game] Init local player: ${sPD.name}`);
                 players[id] = { ...sPD, isLocal: true, mesh: null };
-                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z; // Server sends feet Y (should be 0)
+                iPosX=sPD.x; iPosY=sPD.y; iPosZ=sPD.z;
 
                 const cameraOffset = CONFIG?.CAMERA_Y_OFFSET || (CONFIG?.PLAYER_HEIGHT || 1.8);
                 const visualY = iPosY + cameraOffset;
@@ -224,11 +229,10 @@ class Game {
                     console.log(`[Game] Set controls pos(${iPosX.toFixed(1)}, ${visualY.toFixed(1)}, ${iPosZ.toFixed(1)}) rotY(${sPD.rotationY?.toFixed(2)})`);
                 } else { console.error("[Game] Controls object missing during local player spawn!"); }
 
-                // --- Reset Physics State for Local Player ---
+                // Reset Physics State for Local Player
                 velocityY = 0;
-                isOnGround = true; // Assume spawn position is valid ground initially
+                isOnGround = true;
                 console.log("[Game] Initial physics state reset (vy=0, onGround=true).");
-                // --- End Physics Reset ---
 
                 if(typeof UIManager !== 'undefined'){
                     UIManager.updateHealthBar(sPD.health);
@@ -242,10 +246,10 @@ class Game {
         }
         console.log(`[Game] Init complete. ${Object.keys(players).length} players.`);
 
-        // Transition state AFTER setting up player data and controls position
+        // Transition state AFTER setting up player data and CONFIRMING mapMesh
         if(typeof stateMachine !== 'undefined'){
             console.log("[Game] Transitioning state to 'playing'...");
-            stateMachine.transitionTo('playing'); // This will trigger UI changes via UIManager listeners
+            stateMachine.transitionTo('playing');
         } else { console.error("stateMachine missing!"); }
     }
 
@@ -256,4 +260,4 @@ function runGame() { console.log("--- runGame() ---"); try { const gI=new Game()
 
 // --- DOM Ready Execution ---
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Physics Reset Added)");
+console.log("game.js loaded (Added mapMesh Check before Play)");
