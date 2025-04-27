@@ -10,16 +10,16 @@ const CONFIG = {
     CAMERA_Y_OFFSET: 1.6, // Camera height relative to FEET (Y=0) in manual physics
     MOVEMENT_SPEED: 7.0,
     MOVEMENT_SPEED_SPRINTING: 10.5,
-    DASH_FORCE: 25.0,
-    DASH_DURATION: 0.15,
+    DASH_FORCE: 25.0,       // <<< Speed added during dash (NOT impulse)
+    DASH_DURATION: 0.15,    // Duration dash speed is applied
     DASH_COOLDOWN: 0.8,
 
     // --- Physics Config (Manual) ---
-    GRAVITY: 25.0,
-    JUMP_FORCE: 9.0,
-    VOID_Y_LEVEL: -50,      // <<< LOWERED >>>
-    MAP_BOUNDS_X: 50.0,     // ADJUST these based on "the first map!" size
-    MAP_BOUNDS_Z: 50.0,     // ADJUST these based on "the first map!" size
+    GRAVITY: 25.0,          // Positive value, subtracted from velocityY
+    JUMP_FORCE: 9.0,        // Initial upward velocity
+    VOID_Y_LEVEL: -100,      // <<< LOWERED SIGNIFICANTLY >>>
+    MAP_BOUNDS_X: 100.0,     // <<< INCREASED BOUNDS >>>
+    MAP_BOUNDS_Z: 100.0,     // <<< INCREASED BOUNDS >>>
     // --- End Physics ---
 
     KILL_MESSAGE_DURATION: 3500,
@@ -38,11 +38,11 @@ let scene, camera, renderer, controls, clock, loader, dracoLoader;
 
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
-let mapMesh = null;
+let mapMesh = null; // Visual map mesh - USED FOR RAYCAST
 
 // --- Manual Physics State ---
 let velocityY = 0;
 let isOnGround = false;
-let raycaster = new THREE.Raycaster();
+let raycaster = new THREE.Raycaster(); // Raycaster for ground check
 
-console.log("config.js loaded (Reverted to Manual Physics, Lower Void)");
+console.log("config.js loaded (Manual Physics, Adjusted Void/Bounds)");
