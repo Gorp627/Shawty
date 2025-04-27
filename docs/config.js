@@ -7,12 +7,19 @@ const CONFIG = {
 
     PLAYER_HEIGHT: 1.8, // Total logical height of player collision/model
     PLAYER_RADIUS: 0.4, // Unified radius name
-    CAMERA_Y_OFFSET: 1.9, // <<< ADDED: Height of camera viewpoint from player feet (Y=0)
+    CAMERA_Y_OFFSET: 1.9, // Height of camera viewpoint from player feet (Y=0)
     MOVEMENT_SPEED: 6.0, MOVEMENT_SPEED_SPRINTING: 9.5,
     DASH_FORCE: 25.0, DASH_DURATION: 0.15, DASH_COOLDOWN: 0.8,
-    KILL_MESSAGE_DURATION: 3500,
 
-    // --- Removed Shooting/Gun Configs ---
+    // --- Physics Re-added ---
+    GRAVITY: 25.0,          // Acceleration due to gravity
+    JUMP_FORCE: 9.0,        // Initial upward velocity on jump
+    VOID_Y_LEVEL: -40,      // Y level below which player instantly dies
+    MAP_BOUNDS_X: 50.0,     // Max distance from center X before falling into void (adjust based on map size)
+    MAP_BOUNDS_Z: 50.0,     // Max distance from center Z before falling into void (adjust based on map size)
+    // --- End Physics ---
+
+    KILL_MESSAGE_DURATION: 3500,
 
     CLIENT_UPDATE_INTERVAL: 1000 / 20,
     SERVER_BROADCAST_INTERVAL: 1000 / 15,
@@ -22,11 +29,16 @@ const CONFIG = {
 Object.freeze(CONFIG); // Good practice: prevent accidental modification
 
 // --- Global Game Variables ---
-let players = {}; let keys = {}; // bullets removed, physics state removed
+let players = {}; let keys = {};
 let localPlayerId = null; let localPlayerName = 'Anonymous'; let localPlayerPhrase = '...'; let lastDashTime = 0;
 let scene, camera, renderer, controls, clock, loader, dracoLoader;
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
 let mapMesh = null; // Assigned by loadManager
 
-console.log("config.js loaded and executed (Vertical Physics Removed)");
+// --- Physics State Variables ---
+let velocityY = 0;      // Current vertical velocity
+let isOnGround = false; // Is the player currently touching the ground?
+let raycaster = new THREE.Raycaster(); // Raycaster for ground check
+
+console.log("config.js loaded and executed (Physics Re-enabled)");
