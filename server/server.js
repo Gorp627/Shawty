@@ -14,22 +14,23 @@ const CONFIG = {
     SERVER_BROADCAST_INTERVAL: 1000 / 15,
     PLAYER_MOVE_THRESHOLD_SQ: 0.0001,
     MAX_PLAYERS: 20,
-    // VOID_Y_LEVEL: -40 // Server doesn't check void anymore, client reports
 };
 const io = new Server(server, { cors: { origin: ["https://gorp627.github.io", "http://localhost:8080"], methods: ["GET", "POST"] } });
 const PORT = process.env.PORT || 3000;
 
-// --- <<< ADDED SPAWN POINTS >>> ---
+// --- <<< ADD MORE DIVERSE SPAWN POINTS >>> ---
 // Define known safe spawn locations {x, y, z} where y is the ground level.
-// ADJUST THESE COORDINATES BASED ON YOUR "the first map!.glb" GEOMETRY!
+// SPREAD THESE OUT across your map, including different heights if available.
 const SPAWN_POINTS = [
-    { x: 0,   y: 0, z: 0 },    // Center
-    { x: 10,  y: 0, z: 10 },   // Example corner 1
-    { x: -10, y: 0, z: 10 },   // Example corner 2
-    { x: 10,  y: 0, z: -10 },  // Example corner 3
-    { x: -10, y: 0, z: -10 },  // Example corner 4
-    // Add more safe points from your map here
-    // e.g., { x: 5, y: 2.5, z: -8 } // If there's a platform at y=2.5
+    { x: 0,   y: 0, z: 0 },    // Center ground
+    { x: 15,  y: 0, z: 15 },   // Example corner 1
+    { x: -15, y: 0, z: 15 },   // Example corner 2
+    { x: 15,  y: 0, z: -15 },  // Example corner 3
+    { x: -15, y: 0, z: -15 },  // Example corner 4
+    // Add points on platforms, different areas, etc.
+    // { x: 25, y: 5, z: 0 },   // Example platform
+    // { x: -5, y: 0, z: 20 },  // Another ground spot
+    // { x: 0, y: 10, z: -25 } // High platform example
 ];
 // --- <<< END SPAWN POINTS >>> ---
 
@@ -172,16 +173,14 @@ io.on('connection', function(socket) {
 
     socket.on('playerUpdate',function(d){ const p=players[socket.id]; if(p) p.updatePosition(d); }); // Update player state from client data
 
-    // --- Re-added listener for client-reported void death ---
+    // Client reports falling into void
     socket.on('fellIntoVoid', function() {
         const p = players[socket.id];
         if (p && p.health > 0) { // Check if player exists and is actually alive
             console.log(`${p.name} reported falling into void.`);
             p.takeDamage(9999, {id: null, name: "The Void", phrase: "consumed"}); // Deal massive damage, trigger death logic
-            // scheduleRespawn(socket.id); // takeDamage now schedules respawn on death
         }
     });
-    // --- End added listener ---
 
     socket.on('disconnect',function(r){
         const p = players[socket.id];
