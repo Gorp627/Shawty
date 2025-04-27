@@ -39,11 +39,17 @@ const Input = {
             }
         }
 
-        // Handle Jump (Space) - REMOVED
-        // if (event.code === 'Space' && !event.repeat && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
-        //     event.preventDefault(); // Prevent default space bar action (e.g., scrolling)
-        //     // Jump logic removed - requires isOnGround, velocityY
-        // }
+        // Handle Jump (Space) - Re-enabled
+        if (event.code === 'Space' && !event.repeat && typeof CONFIG !== 'undefined' && typeof stateMachine !== 'undefined') {
+            event.preventDefault(); // Prevent default space bar action (e.g., scrolling)
+             // Check globals: isOnGround, velocityY
+            if (typeof isOnGround !== 'undefined' && isOnGround && stateMachine.is('playing')) {
+                // Only allow jump if on the ground and in playing state
+                velocityY = CONFIG.JUMP_FORCE || 9.0; // Apply jump force from config or default
+                isOnGround = false; // Player is leaving the ground
+                console.log("Jump! VelocityY:", velocityY); // Debug log
+            }
+        }
     },
 
     // Handle key release
@@ -62,9 +68,6 @@ const Input = {
              this.controls.lock();
         }
         // --- REMOVED SHOOTING LOGIC ---
-        // else if (stateMachine.is('playing') && this.controls?.isLocked && event.button === 0) {
-        //     // Shooting logic removed
-        // }
     },
 
     // Handle mouse button release
@@ -89,7 +92,6 @@ const Input = {
          // If no movement keys pressed, dash in the direction the camera is facing
          if(inputDirection.lengthSq() === 0){
              if (this.controls.getObject()) {
-                 // Get camera forward direction, ignore Y component for pure forward dash
                  this.controls.getObject().getWorldDirection(this.dashDirection);
                  // Optional: Uncomment below if you want forward dash strictly on XZ plane
                  // this.dashDirection.y = 0;
@@ -120,4 +122,4 @@ const Input = {
 };
 // Make Input globally accessible
 window.Input = Input;
-console.log("input.js loaded (Jump Removed)");
+console.log("input.js loaded (Jump Re-enabled)");
