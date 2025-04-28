@@ -1,10 +1,10 @@
-// docs/network.js (Adapted for Rapier - Refined attemptJoinGame UI)
+// docs/network.js (Adapted for Rapier - Detailed Check Logging)
 
 // Depends on: config.js, stateMachine.js, entities.js, input.js, uiManager.js, game.js
 // Accesses globals: players, localPlayerId, socket, controls, CONFIG, RAPIER, rapierWorld,
 //                   stateMachine, UIManager, ClientPlayer, scene, infoDiv, currentGameInstance, assetsAreReady
 
-var socket;
+var socket; // Global socket variable
 
 const Network = {
     init: function() { this.setupSocketIO(); console.log("[Network] Initialized."); },
@@ -16,19 +16,11 @@ const Network = {
         try { if(!io) throw new Error("Socket.IO missing!"); socket = io(CONFIG.SERVER_URL, { transports: ['websocket'], autoConnect: true }); console.log("Socket init..."); }
         catch (e) { console.error("Socket.IO Err:", e); stateMachine?.transitionTo('loading',{message:`Net Init Err! ${e.message}`,error:true}); return; }
 
-        // Event Listeners
         socket.on('connect', () => {
-            console.log('[Net] Socket Connected! ID:', socket.id);
-            networkIsInitialized = true;
-            if (typeof UIManager !== 'undefined') {
-                UIManager.clearError('homescreen'); // Clear potential "Connecting..." error
-                if (stateMachine?.is('homescreen') && UIManager.joinButton) {
-                     UIManager.joinButton.disabled = false; UIManager.joinButton.textContent = "Join Game"; console.log("[Net Connect] Reset Join Button.");
-                }
-            }
-            currentGameInstance?.attemptProceedToGame(); // Check if we can proceed now
+            console.log('[Net] Socket Connected! ID:', socket.id); networkIsInitialized = true;
+            if (typeof UIManager !== 'undefined') { UIManager.clearError('homescreen'); if (stateMachine?.is('homescreen') && UIManager.joinButton) { UIManager.joinButton.disabled = false; UIManager.joinButton.textContent = "Join Game"; console.log("[Net Connect] Reset Join Button."); } }
+            currentGameInstance?.attemptProceedToGame();
         });
-
         socket.on('disconnect', (reason) => { console.warn('Disconnected:', reason); networkIsInitialized = false; initializationData = null; stateMachine?.transitionTo('homescreen', { playerCount: 0 }); if(UIManager) { UIManager.updatePlayerCount(0); UIManager.showError("Disconnected.", 'homescreen'); } if(infoDiv) infoDiv.textContent='Disc.'; if(controls?.isLocked) controls.unlock(); });
         socket.on('connect_error', (err) => { console.error('Net Conn Err:', err.message); networkIsInitialized = false; if(stateMachine?.is('loading')||stateMachine?.is('joining')) stateMachine.transitionTo('loading',{message:`Conn Fail!<br/>${err.message}`,error:true}); else { stateMachine?.transitionTo('homescreen'); UIManager?.showError(`Conn Fail: ${err.message}`, 'homescreen');} });
         socket.on('playerCountUpdate', (count) => { if (UIManager) UIManager.updatePlayerCount(count); });
@@ -36,7 +28,6 @@ const Network = {
         console.log("Network listeners attached.");
     },
 
-    // Handlers
     _getPlayer: function(id) { return players?.[id] || null; },
     _addPlayer: function(playerData) { if(!ClientPlayer||!players) return null; if(playerData?.id && !players[playerData.id]){ console.log(`Creating ClientPlayer visual: ${playerData.name || '??'}`); players[playerData.id] = new ClientPlayer(playerData); return players[playerData.id]; } return null; },
     _removePlayer: function(playerId) { const player = this._getPlayer(playerId); const bodyHandle = currentGameInstance?.playerRigidBodyHandles?.[playerId]; if (player || bodyHandle !== undefined) { console.log(`Removing player/body: ${player?.name || playerId} (Handle: ${bodyHandle})`); if (player instanceof ClientPlayer) player.remove?.(); if (bodyHandle !== undefined && rapierWorld) { rapierWorld.removeRigidBody(bodyHandle); console.log(`Removed Rapier body handle ${bodyHandle}`); } if (players?.[playerId]) delete players[playerId]; if (currentGameInstance?.playerRigidBodyHandles) delete currentGameInstance.playerRigidBodyHandles[playerId]; } },
@@ -53,43 +44,52 @@ const Network = {
      attemptJoinGame: function() {
          console.log("Attempt Join...");
          if (!UIManager?.playerNameInput || !UIManager.playerPhraseInput) { return; }
-         localPlayerName = UIManager.playerNameInput.value.trim()||'Anon';
-         localPlayerPhrase = UIManager.playerPhraseInput.value.trim()||'...';
-         if (!localPlayerName) { UIManager.showError('Need name.', 'homescreen'); return; }
+         localPlayerName=UIManager.playerNameInput.value.trim()||'Anon';
+         localPlayerPhrase=UIManager.playerPhraseInput.value.trim()||'...';
+         if(!localPlayerName){UIManager.showError('Need name.', 'homescreen'); return;}
 
-         // <<< CLEAR ERROR AT START >>>
-         UIManager.clearError('homescreen');
+         UIManager.clearError('homescreen'); // Clear error state FIRST
+
+         // ---<<< ADDED DETAILED LOGGING FOR PREREQUISITES >>>---
+         console.log(`[Attempt Join] Checking prerequisites:`);
+         console.log(`  - Assets Ready? ${assetsAreReady}`);
+         console.log(`  - Rapier Ready? ${!!RAPIER}`);
+         console.log(`  - World Exists? ${!!rapierWorld}`);
+         console.log(`  - Map Collider Exists? ${currentGameInstance?.mapColliderHandle !== null}`);
+         // ---<<< END LOGGING >>>---
 
          // Check prerequisites *before* changing state or UI
-         if (!assetsAreReady || !rapierWorld || !RAPIER || !currentGameInstance?.mapColliderHandle) {
-             console.warn("Attempt Join blocked: Assets/Physics not ready.");
-             UIManager.showError('Game still loading, please wait...', 'homescreen'); // Inform user, but don't change button state yet
-             return;
+         const mapColliderExists = currentGameInstance?.mapColliderHandle !== null && currentGameInstance?.mapColliderHandle !== undefined;
+         if (!assetsAreReady || !rapierWorld || !RAPIER || !mapColliderExists) {
+             console.warn("Attempt Join blocked: Core components not ready.");
+             // Use a DIFFERENT message to distinguish this from connection issues
+             UIManager.showError('Game systems initializing...', 'homescreen');
+             return; // Stop the join attempt
          }
 
          // Prerequisites met, proceed
          stateMachine?.transitionTo('joining');
          if(UIManager.joinButton){
-             UIManager.joinButton.disabled = true; // Disable button
-             // Button text will be set based on connection status below
+             UIManager.joinButton.disabled=true; // Disable button
+             // Button text set below based on connection
          }
 
          if (Network.isConnected()) {
              console.log("Connected -> sendDetails");
-             if(UIManager.joinButton) UIManager.joinButton.textContent = "Joining..."; // Update text
+             if(UIManager.joinButton) UIManager.joinButton.textContent = "Joining...";
              Network.sendJoinDetails();
          } else {
              console.log("Not Connected -> Wait for connect event");
-             if (UIManager.joinButton) UIManager.joinButton.textContent = "Connecting..."; // Update text
-             // <<< NO UIManager.showError call here >>>
-             if (socket && !socket.active) { socket.connect(); } // Ensure connection attempt
+             if (UIManager.joinButton) UIManager.joinButton.textContent = "Connecting...";
+             // NO error message here - button text is sufficient
+             if (socket && !socket.active) { socket.connect(); }
          }
      },
-     sendJoinDetails: function() { if(!stateMachine?.is('joining')){console.warn("Not joining state.");return;} if(!Network.isConnected()){console.error("Disconnected"); stateMachine?.transitionTo('homescreen'); UIManager?.showError('Lost connection.', 'homescreen'); return;} console.log(`TX setPlayerDetails Name: ${localPlayerName}`); socket.emit('setPlayerDetails', { name: localPlayerName, phrase: localPlayerPhrase }); },
+     sendJoinDetails: function() { if(!stateMachine?.is('joining')){console.warn("Not joining.");return;} if(!Network.isConnected()){console.error("Disconnected"); stateMachine?.transitionTo('homescreen'); UIManager?.showError('Lost connection.', 'homescreen'); return;} console.log(`TX setPlayerDetails Name: ${localPlayerName}`); socket.emit('setPlayerDetails', { name: localPlayerName, phrase: localPlayerPhrase }); },
      sendPlayerUpdate: function(data) { const p=this._getPlayer(localPlayerId); if(Network.isConnected() && stateMachine?.is('playing') && p?.health > 0) { socket.emit('playerUpdate', data); } },
      sendVoidDeath: function() { if(Network.isConnected() && stateMachine?.is('playing')){ console.log("TX fellIntoVoid"); socket.emit('fellIntoVoid'); } }
 
 }; // End Network object
 
 window.Network = Network;
-console.log("network.js loaded (Rapier - Refined Join UI)");
+console.log("network.js loaded (Rapier - Detailed Join Check)");
