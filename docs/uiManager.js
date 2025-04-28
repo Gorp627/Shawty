@@ -1,4 +1,4 @@
-// docs/uiManager.js
+// docs/uiManager.js (With Debugging Logs and Fixes - REGENERATED)
 
 const UIManager = {
      loadingScreen: null,
@@ -17,172 +17,293 @@ const UIManager = {
      killMessageTimeout: null,
 
      initialize: function() {
+         console.log("[UIManager] Initializing...");
          // Query selectors for all UI elements
-         this.loadingScreen=document.getElementById('loadingScreen');
-         this.homeScreen=document.getElementById('homeScreen');
-         this.gameUI=document.getElementById('gameUI');
-         this.playerCountSpan=document.getElementById('playerCount');
-         this.playerNameInput=document.getElementById('playerNameInput');
-         this.playerPhraseInput=document.getElementById('playerPhraseInput');
-         this.joinButton=document.getElementById('joinButton');
-         this.homeScreenError=document.getElementById('homeScreenError');
-         this.infoDiv=document.getElementById('info');
-         this.healthBarFill=document.getElementById('healthBarFill');
-         this.healthText=document.getElementById('healthText');
-         this.killMessageDiv=document.getElementById('killMessage');
-         this.canvas=document.getElementById('gameCanvas');
-         // Basic check if elements were found
-         if(!this.loadingScreen||!this.homeScreen||!this.gameUI||!this.canvas||!this.joinButton){
-             console.error("!!! UIManager: One or more essential UI Elements Query Failed!");
-             // Optionally display a fatal error to the user here
-             document.body.innerHTML = "<p style='color:red; text-align:center; font-size: 1.5em;'>FATAL UI INIT ERROR!</p>";
+         this.loadingScreen = document.getElementById('loadingScreen');
+         this.homeScreen = document.getElementById('homeScreen');
+         this.gameUI = document.getElementById('gameUI');
+         this.playerCountSpan = document.getElementById('playerCount');
+         this.playerNameInput = document.getElementById('playerNameInput');
+         this.playerPhraseInput = document.getElementById('playerPhraseInput');
+         this.joinButton = document.getElementById('joinButton');
+         this.homeScreenError = document.getElementById('homeScreenError');
+         this.infoDiv = document.getElementById('info');
+         this.healthBarFill = document.getElementById('healthBarFill');
+         this.healthText = document.getElementById('healthText');
+         this.killMessageDiv = document.getElementById('killMessage');
+         this.canvas = document.getElementById('gameCanvas');
+
+         // Basic check if essential elements were found
+         let essentialFound = true;
+         const essentialElements = {
+             loadingScreen: this.loadingScreen,
+             homeScreen: this.homeScreen,
+             gameUI: this.gameUI,
+             canvas: this.canvas,
+             joinButton: this.joinButton, // Crucial for starting
+             homeScreenError: this.homeScreenError // Crucial for feedback
+         };
+         for (const key in essentialElements) {
+             if (!essentialElements[key]) {
+                 // Construct the likely ID for the error message
+                 const likelyId = key.replace(/([A-Z])/g, (match) => `-${match.toLowerCase()}`);
+                 console.error(`!!! UIManager Init Error: Essential UI Element Query Failed for ID likely '#${likelyId}' (Var: ${key})`);
+                 essentialFound = false;
+             }
+         }
+
+         if (!essentialFound) {
+             // Display a fatal error to the user if essential elements are missing
+             document.body.innerHTML = "<p style='color:red; text-align:center; font-size: 1.5em;'>FATAL UI INITIALIZATION ERROR!<br/>Essential HTML elements are missing. Check console (F12).</p>";
              return false; // Indicate failure
          }
-         console.log("[UIManager] Initialized.");
+
+         // Check optional elements and log warnings if missing
+         if (!this.playerCountSpan) console.warn("[UIManager] Optional element 'playerCount' not found.");
+         if (!this.playerNameInput) console.warn("[UIManager] Optional element 'playerNameInput' not found.");
+         if (!this.playerPhraseInput) console.warn("[UIManager] Optional element 'playerPhraseInput' not found.");
+         if (!this.infoDiv) console.warn("[UIManager] Optional element 'info' not found.");
+         if (!this.healthBarFill || !this.healthText) console.warn("[UIManager] Health bar elements ('healthBarFill' or 'healthText') not found.");
+         if (!this.killMessageDiv) console.warn("[UIManager] Optional element 'killMessage' not found.");
+
+
+         console.log("[UIManager] Initialized successfully.");
          return true; // Indicate success
      },
 
      bindStateListeners: function(stateMachine) {
-         if (!stateMachine?.on) { console.error("UIManager: Invalid stateMachine provided for binding."); return; }
+         if (!stateMachine?.on) {
+             console.error("!!! UIManager: Invalid stateMachine provided for binding listeners.");
+             return;
+         }
+         console.log("[UIManager] Binding state listeners...");
          // Add logging to each state handler
-         stateMachine.on('loading', (opts={})=>{ console.log("[UIManager Listener] >> Loading State Triggered"); this.showLoading(opts.message, opts.error, opts.assets); });
-         stateMachine.on('homescreen',(opts={})=>{ console.log("[UIManager Listener] >> Homescreen State Triggered"); this.showHomescreen(opts.playerCount); });
-         stateMachine.on('joining',(opts={})=>{ console.log("[UIManager Listener] >> Joining State Triggered"); this.showJoining(opts.waitingForAssets); });
-         stateMachine.on('playing',()=> { console.log("[UIManager Listener] >> Playing State Triggered"); this.showGame(); });
-         console.log("[UIManager] State listeners bound.");
+         stateMachine.on('loading', (opts = {}) => {
+             console.log("[UIManager Listener] >> 'loading' State Triggered. Options:", opts);
+             this.showLoading(opts.message, opts.error);
+         });
+         stateMachine.on('homescreen', (opts = {}) => {
+             console.log("[UIManager Listener] >> 'homescreen' State Triggered. Options:", opts);
+             this.showHomescreen(opts.playerCount);
+         });
+         stateMachine.on('joining', (opts = {}) => {
+             console.log("[UIManager Listener] >> 'joining' State Triggered. Options:", opts);
+             this.showJoining(); // Updates button text on homescreen
+         });
+         stateMachine.on('playing', () => {
+             console.log("[UIManager Listener] >> 'playing' State Triggered.");
+             this.showGame();
+         });
+         console.log("[UIManager] State listeners bound successfully.");
      },
 
-     showLoading: function(msg="Loading...", err=false, assets=false){
-         if(!this.loadingScreen || !this.homeScreen || !this.gameUI || !this.canvas) { console.error("UIManager: Cannot showLoading - elements missing."); return; }
-         console.log(`[UIManager] showLoading: msg=${msg}, err=${err}`);
-         // Ensure other screens are hidden
+     // --- Screen Visibility Control ---
+
+     showLoading: function(msg = "Loading...", err = false) {
+         if (!this.loadingScreen || !this.homeScreen || !this.gameUI || !this.canvas) {
+             console.error("!!! UIManager: Cannot showLoading - essential elements missing.");
+             return;
+         }
+         console.log(`[UIManager] showLoading called. Message: "${msg}", IsError: ${err}`);
+
+         // Ensure other screens are hidden first
          this.homeScreen.classList.remove('visible');
          this.gameUI.classList.remove('visible');
-         this.canvas.classList.remove('visible'); // Hide canvas too
          this.canvas.style.visibility = 'hidden'; // Use visibility for canvas
 
-         // Prepare loading screen
-         this.loadingScreen.classList.remove('error', 'assets'); // Clear previous states
-         const p = this.loadingScreen.querySelector('p');
-         if(p) p.innerHTML = msg; else console.warn("Loading screen <p> tag not found");
-         if (assets) this.loadingScreen.classList.add('assets');
-         if (err) { this.loadingScreen.classList.add('error'); if(p) p.style.color='red'; }
-         else { if(p) p.style.color=''; } // Reset color if not error
+         // Prepare loading screen content and style
+         const pElement = this.loadingScreen.querySelector('p');
+         if (pElement) {
+             pElement.innerHTML = msg; // Use innerHTML to allow line breaks <br/>
+             pElement.style.color = err ? '#FF6666' : ''; // Set text color based on error flag (use a visible red)
+         } else {
+             console.warn("[UIManager] Loading screen <p> tag not found for message.");
+         }
+         // Add/remove error class for other potential styling
+         if (err) {
+             this.loadingScreen.classList.add('error');
+         } else {
+             this.loadingScreen.classList.remove('error');
+         }
 
          // Make loading screen visible
          this.loadingScreen.classList.add('visible');
+         console.log("[UIManager] Loading screen should now be visible.");
      },
 
-     showHomescreen: function(pCount='?'){
-         if(!this.loadingScreen || !this.homeScreen || !this.gameUI || !this.canvas) { console.error("UIManager: Cannot showHomescreen - elements missing."); return; }
-         console.log(`[UIManager] showHomescreen: pCount=${pCount}`);
+     showHomescreen: function(pCount = '?') {
+         if (!this.loadingScreen || !this.homeScreen || !this.gameUI || !this.canvas) {
+             console.error("!!! UIManager: Cannot showHomescreen - essential elements missing.");
+             return;
+         }
+         const displayCount = pCount ?? '?'; // Use ?? for nullish coalescing
+         console.log(`[UIManager] showHomescreen called. PlayerCount: ${displayCount}`);
+
          // Hide other screens
          this.loadingScreen.classList.remove('visible');
          this.gameUI.classList.remove('visible');
-         this.canvas.classList.remove('visible');
          this.canvas.style.visibility = 'hidden';
 
-         // Reset join button state (if it exists)
-         if(this.joinButton){this.joinButton.disabled=false; this.joinButton.textContent="Join Game";}
-         // Update player count (if it exists)
-         if(this.playerCountSpan) this.playerCountSpan.textContent = pCount ?? '?'; // Use ?? for nullish coalescing
+         // Reset join button state (important when returning to homescreen)
+         if (this.joinButton) {
+             this.joinButton.disabled = false;
+             this.joinButton.textContent = "Join Game";
+         }
+         // Update player count display
+         if (this.playerCountSpan) {
+             this.playerCountSpan.textContent = displayCount;
+         }
+         // Clear any previous error message *before* showing the screen
+         this.clearError('homescreen');
 
          // Show the homescreen
          this.homeScreen.classList.add('visible');
+         console.log("[UIManager] Homescreen should now be visible.");
      },
 
-     showJoining: function(waitAssets=false){
-         // This state might just update button text while on homescreen or show loading
-         if(!this.joinButton) { console.error("UIManager: Cannot showJoining - joinButton missing."); return; }
-         console.log(`[UIManager] showJoining: waitAssets=${waitAssets}`);
-         if(waitAssets && this.loadingScreen){ // Show loading screen if waiting for assets
-             this.showLoading("Loading Assets...", false, true);
-         } else if (this.homeScreen) { // Otherwise, update button text on homescreen
-             this.homeScreen.classList.add('visible'); // Ensure homescreen is visible
-             this.joinButton.disabled=true;
-             this.joinButton.textContent="Joining...";
+     // Simplified 'joining' state - just updates button text on homescreen
+     showJoining: function() {
+         if (!this.joinButton || !this.homeScreen) {
+             console.error("!!! UIManager: Cannot showJoining - joinButton or homeScreen missing.");
+             return;
          }
+         console.log(`[UIManager] showJoining called.`);
+         // Ensure homescreen is technically visible if called directly
+         // Note: This doesn't hide other screens, assumes already on homescreen
+         this.homeScreen.classList.add('visible');
+         this.joinButton.disabled = true;
+         // Set text based on network status (handled in Network.attemptJoinGame)
+         // this.joinButton.textContent = "Joining..."; // Or "Connecting..."
+         console.log("[UIManager] Join button state should be updated by Network.attemptJoinGame.");
      },
 
-     showGame: function(){
-         if(!this.loadingScreen || !this.homeScreen || !this.gameUI || !this.canvas) { console.error("UIManager: Cannot showGame - elements missing."); return; }
-         console.log("[UIManager] showGame");
+     showGame: function() {
+         if (!this.loadingScreen || !this.homeScreen || !this.gameUI || !this.canvas) {
+             console.error("!!! UIManager: Cannot showGame - essential elements missing.");
+             return;
+         }
+         console.log("[UIManager] showGame called.");
+
          // Hide other screens
          this.loadingScreen.classList.remove('visible');
          this.homeScreen.classList.remove('visible');
-         // Show game UI and canvas
+
+         // Show game UI overlay and canvas
          this.gameUI.classList.add('visible');
-         this.canvas.classList.add('visible');
          this.canvas.style.visibility = 'visible'; // Make canvas visible
-         // Update initial game info
-         if(this.infoDiv) this.infoDiv.textContent=`Playing as ${window.localPlayerName||'Player'}`; // Access global directly? OK for now.
-         this.clearError('homescreen'); // Clear any lingering homescreen errors
+
+         // Update initial game info (if elements exist)
+         if (this.infoDiv) {
+             const playerName = window.localPlayerName || 'Player'; // Access global directly (ensure it's set)
+             this.infoDiv.textContent = `Playing as ${playerName}`;
+         }
+         // Clear any lingering homescreen errors (just in case)
+         this.clearError('homescreen');
+         // Optionally clear kill messages on game start
+         this.clearKillMessage();
+
+         // *** ADDED: Verification Logs ***
+         console.log("--- UI State Verification After showGame ---");
+         console.log("LoadingScreen hidden? Classes:", this.loadingScreen.className, "Visible:", window.getComputedStyle(this.loadingScreen).display);
+         console.log("Homescreen hidden? Classes:", this.homeScreen.className, "Visible:", window.getComputedStyle(this.homeScreen).display);
+         console.log("GameUI visible? Classes:", this.gameUI.className, "Visible:", window.getComputedStyle(this.gameUI).display);
+         console.log("Canvas visible? Style.visibility:", this.canvas.style.visibility, "Visible:", window.getComputedStyle(this.canvas).visibility);
+         console.log("--- End Verification ---");
      },
 
-     updatePlayerCount: function(c){
-         if(this.playerCountSpan) this.playerCountSpan.textContent=c;
-         else console.warn("UIManager: playerCountSpan not found for update.");
+     // --- UI Element Updates ---
+
+     updatePlayerCount: function(count) {
+         if (this.playerCountSpan) {
+             this.playerCountSpan.textContent = count ?? '?';
+         }
      },
 
-     updateHealthBar: function(h){
-         if(this.healthBarFill && this.healthText){
-             const hp = Math.max(0, Math.min(100, h)); // Clamp health 0-100
+     updateHealthBar: function(healthValue) {
+         if (this.healthBarFill && this.healthText) {
+             const hp = Math.max(0, Math.min(100, Math.round(healthValue)));
              const fillWidth = `${hp}%`;
-             const backgroundPos = `${100-hp}% 0%`; // For gradient effect
+             const backgroundPos = `${100 - hp}% 0%`; // Gradient position
              this.healthBarFill.style.width = fillWidth;
              this.healthBarFill.style.backgroundPosition = backgroundPos;
-             this.healthText.textContent = `${Math.round(hp)}%`;
-         } else { console.warn("UIManager: Health bar elements not found."); }
-     },
-
-     updateInfo: function(t){
-         if(this.infoDiv) this.infoDiv.textContent=t;
-         else console.warn("UIManager: infoDiv not found for update.");
-     },
-
-     showError: function(t, s='homescreen'){
-         console.log(`[UIManager] showError called for screen '${s}': "${t}"`); // Log error call
-         if(s==='homescreen' && this.homeScreenError){
-             this.homeScreenError.textContent=t;
-         } else if (s==='loading' && this.loadingScreen){
-             const p = this.loadingScreen.querySelector('p');
-             if(p){ p.innerHTML=t; p.style.color='red'; }
-             this.loadingScreen.classList.add('error'); // Add error class for styling
+             this.healthText.textContent = `${hp}%`;
          } else {
-             console.error(`UI Error display target screen '${s}' not handled or element missing for message: ${t}`);
+             // console.warn("[UIManager] Health bar elements not found for update."); // Less critical warning
          }
      },
 
-     clearError: function(s='homescreen'){ // Added 's' parameter
-         console.log(`[UIManager] Attempting clearError for screen: ${s}`); // <<< ADD LOG
-         if(s==='homescreen' && this.homeScreenError){
-             this.homeScreenError.textContent=''; // Clear text content
-             console.log("[UIManager] Cleared homescreen error text."); // <<< ADD LOG
-         } else if (s==='loading' && this.loadingScreen){
-             this.loadingScreen.classList.remove('error'); // Remove error class
-             const p = this.loadingScreen.querySelector('p');
-             if(p) p.style.color=''; // Reset text color
-             console.log("[UIManager] Cleared loading error style."); // <<< ADD LOG
+     updateInfo: function(text) {
+         if (this.infoDiv) {
+             this.infoDiv.textContent = text;
+         } else {
+             console.warn("[UIManager] infoDiv not found for update.");
          }
      },
 
-     showKillMessage: function(m){
-         if(this.killMessageTimeout) clearTimeout(this.killMessageTimeout); // Clear previous timeout
-         if(this.killMessageDiv){
-             this.killMessageDiv.textContent=m;
-             this.killMessageDiv.classList.add('visible');
-             // Ensure CONFIG is accessible or use default
+     // --- Error Handling ---
+
+     showError: function(text, screen = 'homescreen') {
+         console.warn(`[UIManager] showError called for screen '${screen}': "${text}"`);
+
+         if (screen === 'homescreen' && this.homeScreenError) {
+             this.homeScreenError.textContent = text;
+             this.homeScreenError.style.display = 'block'; // Ensure error is visible
+             console.log("[UIManager] Displayed error on homescreen.");
+         } else if (screen === 'loading' && this.loadingScreen) {
+             // Loading screen error handled within showLoading
+             this.showLoading(text, true); // Call showLoading with error flag
+             console.log("[UIManager] Displayed error on loading screen via showLoading.");
+         } else {
+             console.error(`!!! UIManager: Error display target screen '${screen}' not handled or element missing for message: ${text}`);
+             // Fallback: Alert the user? Only if really critical.
+             // if (screen === 'loading') alert(`Critical Error: ${text}`);
+         }
+     },
+
+     clearError: function(screen = 'homescreen') {
+         // console.log(`[UIManager] Attempting clearError for screen: ${screen}`); // Optional log
+
+         if (screen === 'homescreen' && this.homeScreenError) {
+             if (this.homeScreenError.textContent !== '' || this.homeScreenError.style.display !== 'none') {
+                 this.homeScreenError.textContent = ''; // Clear text content
+                 this.homeScreenError.style.display = 'none'; // Hide error element
+                 console.log("[UIManager] Cleared homescreen error text and hid element.");
+             }
+         } else if (screen === 'loading' && this.loadingScreen) {
+             // Clearing loading error means removing class and resetting text color
+             if (this.loadingScreen.classList.contains('error')) {
+                  this.loadingScreen.classList.remove('error');
+                  const pElement = this.loadingScreen.querySelector('p');
+                  if (pElement) pElement.style.color = ''; // Reset text color
+                  console.log("[UIManager] Cleared loading screen error style.");
+             }
+         }
+         // No need to log if nothing was cleared
+     },
+
+     // --- Kill Messages ---
+
+     showKillMessage: function(message) {
+         if (this.killMessageTimeout) clearTimeout(this.killMessageTimeout); // Clear previous timeout
+
+         if (this.killMessageDiv) {
+             this.killMessageDiv.textContent = message;
+             this.killMessageDiv.classList.add('visible'); // Make visible
+
              const duration = typeof CONFIG !== 'undefined' ? (CONFIG.KILL_MESSAGE_DURATION || 3500) : 3500;
-             this.killMessageTimeout = setTimeout(()=>{
-                 if(this.killMessageDiv) this.killMessageDiv.classList.remove('visible');
+
+             this.killMessageTimeout = setTimeout(() => {
+                 if (this.killMessageDiv) this.killMessageDiv.classList.remove('visible'); // Hide after duration
              }, duration);
-         } else { console.warn("UIManager: killMessageDiv not found."); }
+         } else {
+             console.warn("[UIManager] killMessageDiv not found, cannot show message:", message);
+         }
      },
 
-     clearKillMessage: function(){
-         if(this.killMessageTimeout) clearTimeout(this.killMessageTimeout);
-         if(this.killMessageDiv) this.killMessageDiv.classList.remove('visible');
+     clearKillMessage: function() {
+         if (this.killMessageTimeout) clearTimeout(this.killMessageTimeout);
+         if (this.killMessageDiv) this.killMessageDiv.classList.remove('visible');
      }
 };
 window.UIManager = UIManager; // Export globally
-console.log("uiManager.js loaded (Added clearError Logging)");
+console.log("uiManager.js loaded (REGENERATED with Debug Logs and Fixes)");
