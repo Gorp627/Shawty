@@ -1,9 +1,8 @@
-// docs/game.js - Main Game Orchestrator (with Rapier.js - Fixed Body Desc Rotation)
+// docs/game.js - Main Game Orchestrator (with Rapier.js - Trying fromAxisAngle Again)
 
 // --- Global Flags and Data ---
 let networkIsInitialized = false; let assetsAreReady = false; let initializationData = null;
 var currentGameInstance = null; var groundColliderHandle = null;
-
 var RAPIER = window.RAPIER || null; var rapierWorld = null; var rapierEventQueue = null;
 window.isRapierReady = window.isRapierReady || false;
 
@@ -12,8 +11,7 @@ class Game {
     constructor() {
         this.scene = null; this.camera = null; this.renderer = null; this.controls = null; this.clock = null;
         this.players = players; this.keys = keys; this.mapMesh = null;
-        this.playerRigidBodyHandles = {}; // Map Player ID -> RAPIER.RigidBody handle
-        this.mapColliderHandle = null;
+        this.playerRigidBodyHandles = {}; this.mapColliderHandle = null;
         this.rapierReady = window.isRapierReady;
         this.lastCallTime = performance.now();
         console.log("[Game] Instance created.");
@@ -67,17 +65,11 @@ class Game {
     startGamePlay(initData) {
         console.log('[Game] startGamePlay called.'); if (!initData?.id || !rapierWorld || !RAPIER || this.mapColliderHandle === null) { console.error("Invalid Data/Rapier/World/MapCollider"); stateMachine?.transitionTo('homescreen'); UIManager?.showError("Init fail (setup).", 'homescreen'); return; } if (stateMachine?.is('playing')) { console.warn("Already playing"); return; } localPlayerId = initData.id; console.log(`Local ID: ${localPlayerId}`); console.log("Clearing previous state..."); for (const handle of Object.values(this.playerRigidBodyHandles)) { if (rapierWorld && handle !== undefined) rapierWorld.removeRigidBody(handle); } this.playerRigidBodyHandles = {}; for (const id in players) { if (Network?._removePlayer) Network._removePlayer(id); } players = {};
 
-        for(const id in initData.players){ const sPD = initData.players[id]; if (sPD.x===undefined||sPD.y===undefined||sPD.z===undefined) {console.warn(`Invalid pos for ${id}`); continue;} const h=CONFIG?.PLAYER_HEIGHT||1.8; const r=CONFIG?.PLAYER_RADIUS||0.4; const capH=Math.max(0.01, h/2.0-r); const bodyY = sPD.y+h/2.0; try { let playerColliderDesc = RAPIER.ColliderDesc.capsule(capH, r).setFriction(0.7).setRestitution(0.1).setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.DEFAULT | RAPIER.ActiveCollisionTypes.KINEMATIC_FIXED); if(id===localPlayerId){ console.log(`Init local: ${sPD.name}`); players[id] = { ...sPD, isLocal: true, mesh: null }; const rotY=sPD.rotationY||0;
-                     // <<< CORRECTED ROTATION for dynamic body >>>
-                     const initialRot = RAPIER.Quaternion.fromEulerAngles(0, rotY, 0);
-                     let rbDesc=RAPIER.RigidBodyDesc.dynamic().setTranslation(sPD.x,bodyY,sPD.z).setRotation(initialRot).setLinvel(0,0,0).setAngvel({x:0,y:0,z:0}).setLinearDamping(0.5).setAngularDamping(1.0).lockRotations().setCanSleep(false);
-                     // <<< END CORRECTION >>>
-                     let body=rapierWorld.createRigidBody(rbDesc); if(!body)throw new Error("Local body fail."); let col=rapierWorld.createCollider(playerColliderDesc,body.handle); this.playerRigidBodyHandles[id]=body.handle; console.log(`Created DYNAMIC handle ${body.handle}`); if(controls?.getObject()){const bPos=body.translation(); controls.getObject().position.set(bPos.x,bPos.y+(CONFIG?.CAMERA_Y_OFFSET??1.6),bPos.z);} if(UIManager){UIManager.updateHealthBar(sPD.health??100); UIManager.updateInfo(`Playing as ${sPD.name}`); UIManager.clearError('homescreen'); UIManager.clearKillMessage();}} else { if(Network?._addPlayer) Network._addPlayer(sPD); const remoteP=players[id]; if(remoteP instanceof ClientPlayer && rapierWorld){const rotY=sPD.rotationY||0;
-                         // <<< CORRECTED ROTATION for kinematic body >>>
-                         const initialRot = RAPIER.Quaternion.fromEulerAngles(0, rotY, 0);
-                         let rbDesc=RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(sPD.x,bodyY,sPD.z).setRotation(initialRot); // Pass quat
-                         // <<< END CORRECTION >>>
-                         let body=rapierWorld.createRigidBody(rbDesc); if(!body)throw new Error(`Remote body ${id} fail.`); let col=rapierWorld.createCollider(playerColliderDesc,body.handle); this.playerRigidBodyHandles[id]=body.handle; console.log(`Created KINEMATIC handle ${body.handle}`);} else {console.warn(`Skip remote physics ${id}.`);}}} catch(bodyError) { console.error(`Body creation error ${id}:`, bodyError); stateMachine?.transitionTo('homescreen'); UIManager?.showError("Init fail (body).", 'homescreen'); return; } }
+        for(const id in initData.players){ const sPD = initData.players[id]; if (sPD.x===undefined||sPD.y===undefined||sPD.z===undefined) {console.warn(`Invalid pos for ${id}`); continue;} const h=CONFIG?.PLAYER_HEIGHT||1.8; const r=CONFIG?.PLAYER_RADIUS||0.4; const capH=Math.max(0.01, h/2.0-r); const bodyY = sPD.y+h/2.0; try { let playerColliderDesc = RAPIER.ColliderDesc.capsule(capH, r).setFriction(0.7).setRestitution(0.1); const rotY=sPD.rotationY||0;
+                 // ---<<< CORRECTED ROTATION using fromAxisAngle >>>---
+                 const initialRot = RAPIER.Quaternion.fromAxisAngle({ x: 0, y: 1, z: 0 }, rotY);
+                 // ---<<< END CORRECTION >>>---
+                 if(id===localPlayerId){ console.log(`Init local: ${sPD.name}`); players[id] = { ...sPD, isLocal: true, mesh: null }; let rbDesc=RAPIER.RigidBodyDesc.dynamic().setTranslation(sPD.x,bodyY,sPD.z).setRotation(initialRot).setLinvel(0,0,0).setAngvel({x:0,y:0,z:0}).setLinearDamping(0.5).setAngularDamping(1.0).lockRotations().setCanSleep(false); let body=rapierWorld.createRigidBody(rbDesc); if(!body)throw new Error("Local body fail."); let col=rapierWorld.createCollider(playerColliderDesc,body.handle); this.playerRigidBodyHandles[id]=body.handle; console.log(`Created DYNAMIC handle ${body.handle}`); if(controls?.getObject()){const bPos=body.translation(); controls.getObject().position.set(bPos.x,bPos.y+(CONFIG?.CAMERA_Y_OFFSET??1.6),bPos.z);} if(UIManager){UIManager.updateHealthBar(sPD.health??100); UIManager.updateInfo(`Playing as ${sPD.name}`); UIManager.clearError('homescreen'); UIManager.clearKillMessage();}} else { if(Network?._addPlayer) Network._addPlayer(sPD); const remoteP=players[id]; if(remoteP instanceof ClientPlayer && rapierWorld){ let rbDesc=RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(sPD.x,bodyY,sPD.z).setRotation(initialRot); let body=rapierWorld.createRigidBody(rbDesc); if(!body)throw new Error(`Remote body ${id} fail.`); let col=rapierWorld.createCollider(playerColliderDesc,body.handle); this.playerRigidBodyHandles[id]=body.handle; console.log(`Created KINEMATIC handle ${body.handle}`);} else {console.warn(`Skip remote physics ${id}.`);}}} catch(bodyError) { console.error(`Body creation error ${id}:`, bodyError); stateMachine?.transitionTo('homescreen'); UIManager?.showError("Init fail (body).", 'homescreen'); return; } }
         console.log(`Init complete. ${Object.keys(players).length} players.`); if(stateMachine){ console.log("-> 'playing'..."); stateMachine.transitionTo('playing'); } else { console.error("stateMachine missing!"); }
     }
 
@@ -88,4 +80,4 @@ class Game {
 
 function runGame() { console.log("--- runGame() ---"); try { const gI=new Game(); window.currentGameInstance=gI; gI.start(); window.onresize=()=>gI.handleResize(); } catch(e){console.error("!!Error creating Game:",e);document.body.innerHTML="<p>GAME INIT FAILED.</p>";}}
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Corrected EulerAngles Rotation)");
+console.log("game.js loaded (Corrected fromAxisAngle)");
