@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (Fixed Rapier Rotation Setting)
+// docs/game.js - Main Game Orchestrator (Simplified Lighting Debug)
 
 // --- Global Flags and Data ---
 let networkIsInitialized = false; let assetsAreReady = false; let initializationData = null;
@@ -67,9 +67,9 @@ class Game {
         this.lastCallTime = performance.now();
 
         // Initialize subsystems in order
-        if (!this.initializeThreeJS()) { return; }
-        if (!this.initializeManagers()) { return; }
-        if (!this.initializeNetwork()) { return; }
+        if (!this.initializeThreeJS()) { return; } // Stop if Three.js fails
+        if (!this.initializeManagers()) { return; } // Stop if essential managers fail
+        if (!this.initializeNetwork()) { return; } // Stop if network setup fails
 
         // Bind event listeners after managers are initialized
         this.bindLoadManagerListeners();
@@ -77,7 +77,7 @@ class Game {
         this.addEventListeners();
 
         console.log("[Game] Triggering Asset loading and waiting for Rapier...");
-        this.startAssetLoading();
+        this.startAssetLoading(); // Start loading map/player models
 
         // Set initial state machine state
         if (stateMachine) stateMachine.transitionTo('loading', { message: "Initializing..." });
@@ -92,31 +92,33 @@ class Game {
         console.log("[Game] Initializing Three.js...");
         try {
             // Scene
-            this.scene = new THREE.Scene(); window.scene = this.scene;
-            this.scene.background = new THREE.Color(0x6699cc);
-            this.scene.fog = new THREE.Fog(0x6699cc, 20, 200);
+            this.scene = new THREE.Scene(); window.scene = this.scene; // Assign to global scope
+            this.scene.background = new THREE.Color(0x6699cc); // Sky blue
+            this.scene.fog = new THREE.Fog(0x6699cc, 20, 200); // Fog effect
 
             // Camera
             this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            window.camera = this.camera;
+            window.camera = this.camera; // Assign to global scope
+            // Camera position is dynamic, set relative to player later
 
             // Clock
-            this.clock = new THREE.Clock(); window.clock = this.clock;
+            this.clock = new THREE.Clock(); window.clock = this.clock; // Assign to global scope
 
             // Renderer
             const canvasElement = document.getElementById('gameCanvas');
             if (!canvasElement) throw new Error("Required canvas element '#gameCanvas' not found in HTML!");
             this.renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true });
-            window.renderer = this.renderer;
+            window.renderer = this.renderer; // Assign to global scope
             this.renderer.setSize(window.innerWidth, window.innerHeight);
-            this.renderer.shadowMap.enabled = true;
-            this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            this.renderer.shadowMap.enabled = true; // Enable shadows
+            this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Optional: Softer shadows
 
             // Pointer Lock Controls
             this.controls = new THREE.PointerLockControls(this.camera, document.body);
-            window.controls = this.controls;
+            window.controls = this.controls; // Assign to global scope
             this.controls.addEventListener('lock', () => { console.log('[Controls] Pointer Locked'); });
             this.controls.addEventListener('unlock', () => { console.log('[Controls] Pointer Unlocked'); });
+            // We move the controls.getObject() container in the animate loop
 
             // GLTF Loader Setup (using globals from <script> tags)
             if (typeof THREE.DRACOLoader === 'undefined' || typeof THREE.GLTFLoader === 'undefined') {
@@ -126,25 +128,39 @@ class Game {
             window.dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
             window.dracoLoader.setDecoderConfig({ type: 'js' });
             window.dracoLoader.preload();
-            window.loader = new THREE.GLTFLoader();
+            window.loader = new THREE.GLTFLoader(); // Assign global loader used by LoadManager
             window.loader.setDRACOLoader(window.dracoLoader);
 
-            // Lighting
+            // --- Lighting Setup (Simplified for Debugging) ---
+            console.log("[Game] Using simplified Hemisphere lighting for debugging black screen issue.");
+            // Remove previous lights if they existed from a failed previous init (unlikely but safe)
+            // this.scene.remove(...this.scene.children.filter(c => c.isLight)); // More robust cleanup if needed
+            const hemisphereLight = new THREE.HemisphereLight(0xccccff, 0x888844, 1.5); // Sky color, Ground color, Intensity (Increased intensity)
+            this.scene.add(hemisphereLight);
+            // --- End Simplified Lighting ---
+
+
+            /* --- Original Lighting (Commented Out for Debugging) ---
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
             this.scene.add(ambientLight);
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(30, 40, 20);
+            directionalLight.position.set(30, 40, 20); // Adjust light direction
             directionalLight.castShadow = true;
             directionalLight.shadow.mapSize.width = 1024;
             directionalLight.shadow.mapSize.height = 1024;
-            directionalLight.shadow.camera.near = 1;
-            directionalLight.shadow.camera.far = 150;
-            directionalLight.shadow.camera.left = -60;
-            directionalLight.shadow.camera.right = 60;
-            directionalLight.shadow.camera.top = 60;
-            directionalLight.shadow.camera.bottom = -60;
+             // Adjust shadow camera frustum to encompass the expected map size
+             directionalLight.shadow.camera.near = 1;
+             directionalLight.shadow.camera.far = 150; // Increased far plane
+             directionalLight.shadow.camera.left = -60; // Wider bounds
+             directionalLight.shadow.camera.right = 60;
+             directionalLight.shadow.camera.top = 60;
+             directionalLight.shadow.camera.bottom = -60;
             this.scene.add(directionalLight);
-            this.scene.add(directionalLight.target);
+            this.scene.add(directionalLight.target); // Important for directing the light
+            // Add helper to visualize light direction (optional debug)
+            // scene.add(new THREE.DirectionalLightHelper(directionalLight, 5));
+            */
+
 
             console.log("[Game] Three.js initialized successfully.");
             return true;
@@ -257,6 +273,20 @@ class Game {
             if (this.scene && !this.mapMesh.parent) {
                  this.scene.add(this.mapMesh);
                  console.log("[Game] Added visual map mesh to the Three.js scene.");
+
+                 // --- Optional Wireframe Debug ---
+                 /*
+                 console.log("Applying wireframe material to map for debugging...");
+                 const wireframeMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+                 this.mapMesh.traverse((child) => {
+                     if (child.isMesh) {
+                         // Be careful replacing materials if multiple exist
+                         child.material = wireframeMat;
+                     }
+                 });
+                 */
+                 // --- End Wireframe Debug ---
+
              }
             this.createMapCollider(); // Attempt to create map physics collider
             this.attemptProceedToGame(); // Check if ready for next stage
@@ -414,7 +444,8 @@ class Game {
                 if (typeof Effects?.update === 'function') { Effects.update(dt); }
 
                 // Sync Camera to Local Player Body
-                this.syncCameraToBody(localBody); // Use helper
+                if (localBody) { this.syncCameraToBody(localBody); } // Use helper
+
 
                 // Sync Remote Player Visuals
                 for (const id in window.players) {
@@ -490,6 +521,7 @@ class Game {
             if (serverPlayerData.x === undefined || serverPlayerData.y === undefined || serverPlayerData.z === undefined) {
                 console.warn(`[Game] Invalid position data for player ${id}. Skipping creation.`); continue;
             }
+            // Server sends Y at feet, calculate center Y for Rapier body
             const bodyCenterY = serverPlayerData.y + playerHeight / 2.0;
 
             try {
@@ -498,8 +530,8 @@ class Game {
 
                 // --- Initial Rotation ---
                 const initialRotationY = serverPlayerData.rotationY || 0;
-                 // *** FIX: Set rotation directly on RigidBodyDesc using Euler angles ***
-                 const initialRotationEuler = { x: 0, y: initialRotationY, z: 0 };
+                // Use Euler angles for setting rotation on the RigidBodyDesc
+                const initialRotationEuler = { x: 0, y: initialRotationY, z: 0 };
 
                 let rigidBody; let rigidBodyDesc;
 
@@ -509,7 +541,7 @@ class Game {
                     window.players[id] = { ...serverPlayerData, isLocal: true, mesh: null };
                     rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
                         .setTranslation(serverPlayerData.x, bodyCenterY, serverPlayerData.z)
-                        .setRotation(initialRotationEuler) // <<< USE EULER ANGLES HERE
+                        .setRotation(initialRotationEuler) // Use Euler angles here
                         .setLinvel(0, 0, 0).setAngvel({ x: 0, y: 0, z: 0 })
                         .setLinearDamping(0.5).setAngularDamping(1.0)
                         .lockRotations().setCanSleep(false);
@@ -518,7 +550,7 @@ class Game {
                     this.playerRigidBodyHandles[id] = rigidBody.handle;
                     console.log(`[Game] Created DYNAMIC Rapier body for local player. Handle: ${rigidBody.handle}`);
                     rapierWorld.createCollider(playerColliderDesc, rigidBody.handle);
-                    this.syncCameraToBody(rigidBody);
+                    this.syncCameraToBody(rigidBody); // Sync camera to the newly created body
                     if (UIManager) {
                         UIManager.updateHealthBar(serverPlayerData.health ?? CONFIG.PLAYER_DEFAULT_HEALTH);
                         UIManager.updateInfo(`Playing as ${serverPlayerData.name || 'Player'}`);
@@ -537,7 +569,7 @@ class Game {
                     }
                     rigidBodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
                         .setTranslation(serverPlayerData.x, bodyCenterY, serverPlayerData.z)
-                        .setRotation(initialRotationEuler); // <<< USE EULER ANGLES HERE
+                        .setRotation(initialRotationEuler); // Use Euler angles here
                     rigidBody = rapierWorld.createRigidBody(rigidBodyDesc);
                     if (!rigidBody) throw new Error(`Failed to create remote player (${id}) rigid body.`);
                     this.playerRigidBodyHandles[id] = rigidBody.handle;
@@ -569,9 +601,22 @@ class Game {
     // --- Helper: Sync Camera to Body ---
     syncCameraToBody(playerBody) {
         if (playerBody && controls?.getObject()) {
-            const bodyPos = playerBody.translation();
-            const cameraOffset = CONFIG?.CAMERA_Y_OFFSET ?? 1.6;
-            controls.getObject().position.set(bodyPos.x, bodyPos.y + cameraOffset, bodyPos.z);
+            try {
+                const bodyPos = playerBody.translation();
+                const cameraOffset = CONFIG?.CAMERA_Y_OFFSET ?? 1.6;
+                controls.getObject().position.set(bodyPos.x, bodyPos.y + cameraOffset, bodyPos.z);
+
+                // *** Camera Logging (Optional - Enable if needed) ***
+                /*
+                const camContainer = controls.getObject();
+                const camWorldPos = new THREE.Vector3();
+                camera.getWorldPosition(camWorldPos); // Get actual camera world pos
+                console.log(`Cam Sync: BodyY=${bodyPos.y.toFixed(2)}, ContY=${camContainer.position.y.toFixed(2)}, CamWorldY=${camWorldPos.y.toFixed(2)}`);
+                */
+
+            } catch (e) {
+                console.error("Error accessing body translation in syncCameraToBody:", e);
+            }
         }
     }
 
@@ -642,4 +687,4 @@ if (document.readyState === 'loading') {
     runGame();
 }
 
-console.log("game.js loaded (Fixed Rapier Rotation Setting)");
+console.log("game.js loaded (Simplified Lighting Debug)");
