@@ -9,11 +9,14 @@ const CONFIG = {
     PLAYER_RADIUS: 0.4,
     PLAYER_MASS: 70,
     CAMERA_Y_OFFSET: 1.6,   // Camera height relative to player BODY CENTER
-    MOVEMENT_FORCE: 1500,
-    MAX_MOVE_VELOCITY: 8.0,
-    SPRINT_FACTOR: 1.5,
+    MOVEMENT_FORCE: 1500, // Note: Not currently used in gameLogic.js, which uses setLinvel with speeds
+    MAX_MOVE_VELOCITY: 8.0, // Note: Not currently used directly, gameLogic uses speeds below
+    MOVEMENT_SPEED: 7.0, // Base speed for setLinvel
+    MOVEMENT_SPEED_SPRINTING: 10.5, // Sprint speed for setLinvel
+    SPRINT_FACTOR: 1.5, // Kept for reference, but direct speeds are used now
     DASH_IMPULSE_MAGNITUDE: 450,
     DASH_COOLDOWN: 0.8,
+    DASH_DURATION: 0.15, // Added from input.js logic
 
     // --- Physics Config (Rapier) ---
     GRAVITY: -25.0,
@@ -31,7 +34,7 @@ const CONFIG = {
     PLAYER_DEFAULT_HEALTH: 100,
     PLAYER_MOVE_THRESHOLD_SQ: 0.0001
 };
-// Object.freeze(CONFIG);
+// Object.freeze(CONFIG); // Freezing can sometimes make debugging harder, keep commented for now
 
 // --- Global Game Variables ---
 let players = {}; let keys = {};
@@ -46,8 +49,7 @@ let killMessageTimeout = null;
 let mapMesh = null; // Visual map mesh
 
 // --- Removed Manual Physics/Raycaster State ---
-// let velocityY = 0;
-// let isOnGround = false;
-// let raycaster = new THREE.Raycaster(); // <<< REMOVED AGAIN <<<
+// let velocityY = 0; // REMOVED - No longer used by input.js or gameLogic.js
+// let isOnGround = false; // REMOVED - gameLogic uses Rapier raycast
 
-console.log("config.js loaded (Rapier - Removed raycaster AGAIN)");
+console.log("config.js loaded (Rapier - Added DASH_DURATION, speeds)");
