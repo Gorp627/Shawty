@@ -1,4 +1,4 @@
-// server/server.js (REGENERATED v2 - Matches previous regeneration)
+// server/server.js (Corrected CORS Origin - Full File v3)
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
@@ -22,9 +22,10 @@ const CONFIG = {
 
 // --- Socket.IO Server Setup ---
 // Configure CORS for allowed origins (Github Pages, localhost for testing)
+// *** CORRECTED TYPO HERE ***
 const allowedOrigins = [
-    "https://gorp627.github.io", // Your Github Pages URL
-    "http://localhost:8080",    // Local dev server (if you use one)
+    "https://gorp54.github.io", // <<< CORRECTED FROM gorp627
+    "http://localhost:8080",    // Keep for local testing if needed
     // Add any other origins if needed
 ];
 const io = new Server(server, {
@@ -33,15 +34,15 @@ const io = new Server(server, {
              // Allow requests with no origin (like mobile apps or curl requests)
              if (!origin) return callback(null, true);
              if (allowedOrigins.indexOf(origin) === -1) {
-                 const msg = `The CORS policy for this server does not allow access from the specified Origin: ${origin}`;
-                 console.warn(msg); // Log CORS denial
+                 const msg = `CORS policy denial for Origin: ${origin}`;
+                 console.warn(msg); // Log CORS denial reason
                  return callback(new Error(msg), false);
              }
+             // Origin is allowed
              return callback(null, true);
         },
         methods: ["GET", "POST"]
     },
-    // Optional: Prioritize WebSocket transport
     transports: ['websocket', 'polling'] // Allow polling as fallback if websocket fails
 });
 
@@ -115,7 +116,6 @@ class Player {
             scheduleRespawn(this.id); // Schedule respawn timer
         } else {
             // Broadcast health update only if not dead (death event handles 0 health)
-            // Could send to specific player, but broadcasting is simpler for now
             io.emit('healthUpdate', { id: this.id, health: this.health });
         }
         return died; // Return true if player died
@@ -366,3 +366,5 @@ function gracefulShutdown(signal) {
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM')); // Signal from Render/Docker/etc.
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));   // Signal from Ctrl+C
+
+console.log("[Server] server.js script fully loaded and running."); // Confirmation log
