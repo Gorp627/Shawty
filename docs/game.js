@@ -1,150 +1,179 @@
-// docs/game.js - Main Game Orchestrator (Manual Physics - Re-added Map Add)
+// docs/gameLogic.js (Manual Physics + Wall Collision + Added Logging)
 
-// --- Global Flags and Data ---
-let networkIsInitialized = false; let assetsAreReady = false; let initializationData = null;
-var currentGameInstance = null;
+// Depends on: config.js, stateMachine.js, entities.js, input.js, network.js, uiManager.js
+// Accesses globals: scene, camera, controls, players, localPlayerId, CONFIG, THREE, Network, Input, UIManager, stateMachine,
+//                   velocityY, isOnGround, raycaster // Back to using these globals
 
-class Game {
-    // --- Constructor ---
-    constructor() {
-        this.scene = null; this.camera = null; this.renderer = null; this.controls = null; this.clock = null;
-        this.players = players; this.keys = keys; this.mapMesh = null;
-        this.lastCallTime = performance.now();
-        console.log("[Game] Instance created.");
+/**
+ * Updates the local player's physics, state, movement, dash, collision, and network sync MANUALLY.
+ * @param {number} deltaTime Time since last frame.
+ * @param {THREE.Object3D} mapMeshParam Reference to the visual map mesh object for raycasting.
+ */
+function updateLocalPlayer(deltaTime, mapMeshParam) {
+    // --- Guard Clause: Ensure active play state and locked controls ---
+    const isPlaying = typeof stateMachine !== 'undefined' && stateMachine.is('playing');
+    const isLocked = typeof controls !== 'undefined' && controls?.isLocked;
+    const localPlayerData = localPlayerId ? players[localPlayerId] : null;
+
+    if (!isPlaying || !isLocked || !localPlayerData) { return; }
+
+    const isAlive = localPlayerData.health > 0;
+    const controlsObject = typeof controls !== 'undefined' ? controls.getObject() : null; // Get controls object
+
+    // Ensure controls object exists
+    if (!controlsObject) { console.error("Controls object missing in updateLocalPlayer!"); return; }
+
+    // <<< START FRAME LOG >>>
+    if (isAlive){ // Only log detailed physics if alive, prevent spam when dead/spectating
+        console.log(`Start Frame: PosY=${controlsObject.position.y.toFixed(2)}, VelY=${window.velocityY?.toFixed(2)}, Grounded=${window.isOnGround}`);
+    }
+    // <<< END LOG >>>
+
+
+    // --- Guard Clause for Map Mesh (Still good practice) ---
+    if (!mapMeshParam && isAlive) { // Check map exists if alive (needed for ground check)
+        console.warn("updateLocalPlayer: mapMeshParam missing for physics update!");
     }
 
-    // --- Start Method ---
-    start() {
-        console.log("[Game] Starting...");
-        networkIsInitialized = false; assetsAreReady = false; initializationData = null;
-        this.mapMesh = null; // Reset map mesh ref
-        this.lastCallTime = performance.now();
+    // --- Store Previous Position for Revert ---
+    const previousPosition = controlsObject.position.clone();
 
-        if (!this.initializeCoreComponents()) { return; } // Initializes Three.js only
-        if (!this.initializeManagers()) { return; }
-        if (!this.initializeNetwork()) { return; }
-
-        this.bindLoadManagerListeners();
-        this.bindOtherStateTransitions();
-        this.addEventListeners();
-
-        if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading'); else console.error("stateMachine missing!");
-        this.startAssetLoading();
-
-        this.animate(); // Start the main loop
-        console.log("[Game] Started successfully setup.");
+    // --- 1. Apply Gravity ---
+    if (isAlive) {
+        // Ensure velocityY is a number before applying gravity
+        if (typeof velocityY !== 'number') window.velocityY = 0; // Use window scope explicitly if needed
+        window.velocityY -= (CONFIG?.GRAVITY || 25.0) * deltaTime; // Use window scope
+    } else {
+        window.velocityY = 0; // Stop vertical movement if dead
     }
 
-    // --- Initialize Core Components (Three.js ONLY) ---
-    initializeCoreComponents() {
-         console.log("[Game] Init Core Components (Three.js)..."); try {
-             this.scene = new THREE.Scene(); scene = this.scene; this.scene.background = new THREE.Color(0x6699cc); this.scene.fog = new THREE.Fog(0x6699cc, 0, 200); this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera = this.camera; this.clock = new THREE.Clock(); clock = this.clock; const canvas = document.getElementById('gameCanvas'); if (!canvas) throw new Error("#gameCanvas missing!"); this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); renderer = this.renderer; this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; this.controls = new THREE.PointerLockControls(this.camera, document.body); controls = this.controls; this.controls.addEventListener('lock', ()=>{console.log('[Controls] Locked');}); this.controls.addEventListener('unlock', ()=>{console.log('[Controls] Unlocked');}); dracoLoader = new THREE.DRACOLoader(); dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); dracoLoader.setDecoderConfig({ type: 'js' }); dracoLoader.preload(); loader = new THREE.GLTFLoader(); loader.setDRACOLoader(dracoLoader); const ambL = new THREE.AmbientLight(0xffffff, 0.7); this.scene.add(ambL); const dirL = new THREE.DirectionalLight(0xffffff, 1.0); dirL.position.set(15, 20, 10); dirL.castShadow = true; dirL.shadow.mapSize.width=1024; dirL.shadow.mapSize.height=1024; this.scene.add(dirL); this.scene.add(dirL.target); console.log("[Game] Core Components OK."); return true;
-         } catch(e) { console.error("!!! Core Init Error:", e); UIManager?.showError(`FATAL: Graphics Init! ${e.message}`, 'loading'); return false; }
-    }
+    // --- 2. Update Vertical Position ---
+    // Ensure velocityY is used from correct scope
+    controlsObject.position.y += window.velocityY * deltaTime;
+    let wasOnGround = typeof isOnGround === 'boolean' ? isOnGround : false; // Store previous state, default false
+    window.isOnGround = false; // Assume not on ground for this frame, assign to global
 
-    // --- Initialize Network ---
-    initializeNetwork() { console.log("Init Network..."); if (Network?.init) { try { Network.init(); console.log("Net init ok."); return true; } catch (e) { console.error("Net Init Err:", e); stateMachine?.transitionTo('loading', { message: `Net Fail! ${e.message}`, error: true }); return false; } } else { console.error("Network missing!"); stateMachine?.transitionTo('loading', { message: `Net Load Fail!`, error: true }); return false; } }
+    // --- 3. Ground Collision Check (Raycast) ---
+    let didHitGround = false; // Track if any ray hit
+    if (mapMeshParam && isAlive) {
+        const feetOffset = 0.1; // Start ray slightly above feet
+        const groundCheckDistance = feetOffset + 0.2; // Max distance to check down
+        const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6; // Camera offset from feet Y=0
 
-    // --- Setup Asset Loading ---
-    bindLoadManagerListeners() {
-        if (!loadManager) { console.error("LoadMgr missing!"); stateMachine?.transitionTo('loading',{message:"Load Mgr Fail!", error:true}); return; }
-        loadManager.on('ready', () => {
-            console.log("[Game] LoadManager 'ready'."); assetsAreReady = true;
-            this.mapMesh = loadManager.getAssetData('map'); // Get data
-            if (!this.mapMesh) { console.error("Map data missing after ready!"); stateMachine?.transitionTo('loading', { message: "Map Data Fail!", error: true }); return; }
-            console.log("[Game] Visual map mesh reference stored.");
+        const rayOrigin = new THREE.Vector3(
+            controlsObject.position.x,
+            controlsObject.position.y - cameraHeight + feetOffset, // Origin near logical feet
+            controlsObject.position.z
+        );
+        const rayDirection = new THREE.Vector3(0, -1, 0); // Straight down
 
-            // ---<<< RE-ADD MAP MESH TO SCENE >>>---
-            if (this.scene && this.mapMesh) {
-                console.log("[Game Ready] Attempting to add mapMesh to scene:", this.mapMesh);
-                this.scene.add(this.mapMesh);
-                console.log("[Game Ready] mapMesh call to scene.add() completed.");
-                // Verification log
-                let foundInScene = this.scene.children.includes(this.mapMesh);
-                console.log("[Game Ready] Is mapMesh in scene.children now?", foundInScene);
-                if(!foundInScene) console.error("!!! Map mesh FAILED to add to scene!");
-            } else {
-                console.error("[Game Ready] Cannot add mapMesh! Scene:", this.scene, "MapMesh:", this.mapMesh);
-            }
-            // ---<<< END RE-ADD >>>---
+        if (!raycaster) raycaster = new THREE.Raycaster(); // Initialize if missing
+        raycaster.set(rayOrigin, rayDirection);
+        raycaster.far = groundCheckDistance;
 
-            this.attemptProceedToGame(); // Check if ready to start/go home
-        });
-        loadManager.on('error', (data) => { console.error("LoadMgr error:", data); assetsAreReady = false; this.mapMesh = null; stateMachine?.transitionTo('loading',{message:`Asset Err!<br/>${data.message||''}`,error:true}); }); console.log("LoadMgr listeners bound.");
-    }
+        const intersects = raycaster.intersectObject(mapMeshParam, true); // Use passed map mesh
 
-     // --- Check if ready ---
-    attemptProceedToGame() { console.log(`Check Proceed: Assets=${assetsAreReady}, NetInit=${networkIsInitialized}, Data=${!!initializationData}`); if (assetsAreReady && networkIsInitialized && initializationData) { console.log("All Ready -> startGamePlay"); if (currentGameInstance?.startGamePlay) { currentGameInstance.startGamePlay(initializationData); } else { console.error("Game instance missing!"); } } else if (assetsAreReady && stateMachine?.is('loading')) { console.log("Assets Ready -> Homescreen"); let pC = '?'; if (UIManager?.playerCountSpan) pC=UIManager.playerCountSpan.textContent??'?'; stateMachine.transitionTo('homescreen', { playerCount: pC }); } else { console.log(`Not ready state: ${stateMachine?.currentState}`); } }
-
-    // --- Initialize Managers ---
-    initializeManagers() { console.log("Init Mgrs..."); if(!UIManager||!Input||!stateMachine||!loadManager||!Network||!Effects) { console.error("Mgr undef!"); UIManager?.showError("FATAL: Mgr Load!", 'loading'); return false; } try { if(!UIManager.initialize()) throw new Error("UI fail"); Input.init(this.controls); Effects.initialize(this.scene); console.log("Mgr Initialized."); return true; } catch (e) { console.error("Mgr Init Err:", e); UIManager?.showError(`FATAL: Mgr Setup! ${e.message}`, 'loading'); return false; } }
-
-    // --- Bind State Transitions ---
-    bindOtherStateTransitions() { if(UIManager?.bindStateListeners) UIManager.bindStateListeners(stateMachine); else console.error("UI binding missing"); if (stateMachine) { stateMachine.on('transition', (data) => { console.log(`Listener State: ${data.from}->${data.to}`); if(data.to==='homescreen'){ networkIsInitialized=false; initializationData=null; if(data.from==='playing'||data.from==='joining'){ console.log(`Cleanup after ${data.from}...`); for(const id in players){if(id!==localPlayerId&&Network?._removePlayer){Network._removePlayer(id);}} if(players?.[localPlayerId]){delete players[localPlayerId];} players={}; localPlayerId=null; if(controls?.isLocked) controls.unlock(); console.log("State cleared.");}} else if(data.to==='playing'){if(UIManager&&localPlayerId&&players?.[localPlayerId]){UIManager.updateHealthBar(players[localPlayerId].health); UIManager.updateInfo(`Playing as ${players[localPlayerId].name}`);}} else if(data.to==='loading'&&data.options?.error){ console.error("Loading error:", data.options.message); if(controls?.isLocked)controls.unlock(); networkIsInitialized=false; assetsAreReady=false; initializationData=null; this.mapMesh=null; players={}; localPlayerId=null; }}); } else { console.error("stateMachine missing!"); } console.log("State Listeners Bound"); }
-
-    // --- Add Event Listeners ---
-    addEventListeners() { console.log("Add listeners..."); if(UIManager?.joinButton && Network?.attemptJoinGame){ UIManager.joinButton.addEventListener('click', ()=>{ if (!assetsAreReady) { UIManager.showError("Assets loading...", 'homescreen'); return; } Network.attemptJoinGame(); }); console.log("Join listener.");} else { console.error("Cannot add join listener!"); } window.addEventListener('resize', this.handleResize.bind(this)); console.log("Global listeners."); }
-
-    // --- Main Update/Animate Loop ---
-     animate() { requestAnimationFrame(() => this.animate()); const dt = this.clock ? this.clock.getDelta() : 0.016;
-         if(stateMachine?.is('playing')){ try{ if(updateLocalPlayer) updateLocalPlayer(dt, this.mapMesh); /* Pass mapMesh */ } catch(e){console.error("Err updateLP:",e);} try{ if(updateRemotePlayers) updateRemotePlayers(dt); } catch(e){console.error("Err updateRP:",e);} try{ if(Effects?.update) Effects.update(dt); } catch(e){console.error("Err Effects:",e);} }
-         if (renderer && scene && camera) { try { renderer.render(scene, camera); } catch (e) { console.error("Render error:", e); } } }
-
-
-    // --- Resize Handler ---
-    handleResize() { if (camera) { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); } if (renderer) { renderer.setSize(window.innerWidth, window.innerHeight); } }
-
-    // --- Start Game Play Method ---
-    startGamePlay(initData) {
-        console.log('[Game] startGamePlay called.');
-        if (!initData?.id) { console.error("Invalid initData"); stateMachine?.transitionTo('homescreen'); UIManager?.showError("Init fail (data).", 'homescreen'); return; }
-        if (stateMachine?.is('playing')) { console.warn("Already playing"); return; }
-        if (!this.mapMesh) { console.error("MapMesh missing for spawn!"); stateMachine?.transitionTo('homescreen'); UIManager?.showError("Init fail (map).", 'homescreen'); return;} // Check instance mapMesh
-
-        localPlayerId = initData.id; console.log(`Local ID: ${localPlayerId}`);
-        console.log("Clearing previous state...");
-        for (const id in players) { if (Network?._removePlayer) Network._removePlayer(id); } players = {};
-
-        // Process players (local player uses simplified spawn logic)
-        for(const id in initData.players){
-            const sPD = initData.players[id];
-            if(id === localPlayerId){ // --- LOCAL PLAYER ---
-                console.log(`Init local: ${sPD.name}`);
-                let spawnX = sPD.x; let spawnY = sPD.y; let spawnZ = sPD.z; // Use server coords directly
-                console.log(`Using server spawn coords: X=${spawnX.toFixed(1)}, Y=${spawnY.toFixed(1)}, Z=${spawnZ.toFixed(1)}`);
-
-                players[id] = { ...sPD, x: spawnX, y: spawnY, z: spawnZ, isLocal: true, mesh: null }; // Store coords
-
-                const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6;
-                const finalVisualY = spawnY + cameraHeight; // Position camera relative to server ground Y
-
-                if(controls?.getObject()){
-                    controls.getObject().position.set(spawnX, finalVisualY, spawnZ);
-                    controls.getObject().rotation.set(0, sPD.rotationY || 0, 0);
-                    console.log(`Set controls pos(${spawnX.toFixed(1)}, ${finalVisualY.toFixed(1)}, ${spawnZ.toFixed(1)})`);
+        if (intersects.length > 0) {
+            const distanceToGround = intersects[0].distance;
+             // console.log(`Ray HIT: Dist=${distanceToGround.toFixed(3)}, PointY=${intersects[0].point.y.toFixed(3)}, FeetOffset=${feetOffset.toFixed(3)}`); // DEBUG LOG
+            if (distanceToGround <= feetOffset + 0.05) { // Allow tiny tolerance
+                didHitGround = true;
+                window.isOnGround = true; // Set global flag
+                if (window.velocityY < 0) { // Check global velocityY - Stop downward velocity on landing
+                    window.velocityY = 0; // Reset global velocityY
+                    controlsObject.position.y = intersects[0].point.y + cameraHeight; // Snap controls Y so feet are on ground + camera height
                 }
-
-                window.velocityY = 0; // Assign to the global
-                window.isOnGround = true; // Assign to the global
-                console.log("Reset initial physics state.");
-
-                if(UIManager){ UIManager.updateHealthBar(sPD.health ?? 100); UIManager.updateInfo(`Playing as ${players[id].name}`); UIManager.clearError('homescreen'); UIManager.clearKillMessage(); }
-
-            } else { // --- REMOTE PLAYER ---
-                 if(Network?._addPlayer) Network._addPlayer(sPD);
             }
-        } // End for loop
+        }
 
-        console.log(`Init complete. ${Object.keys(players).length} players.`);
-        if(stateMachine){ console.log("Transitioning state to 'playing'..."); stateMachine.transitionTo('playing'); } else { console.error("stateMachine missing!"); }
+        // Debug Ray Visualization (Optional)
+        /*
+        if (typeof scene !== 'undefined' && scene) {
+            const existingLine = scene.getObjectByName("debugRayLine");
+            if (existingLine) scene.remove(existingLine);
+            const material = new THREE.LineBasicMaterial({ color: window.isOnGround ? 0x00ff00 : 0xff0000 }); // Use global isOnGround
+            const points = [ rayOrigin.clone(), rayOrigin.clone().addScaledVector(rayDirection, groundCheckDistance) ];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(geometry, material);
+            line.name = "debugRayLine";
+            scene.add(line);
+        }
+        */
+
+    } // End if(mapMeshParam && isAlive)
+
+    // if (wasOnGround && !window.isOnGround) { console.log("Left ground contact."); }
+    // else if (!wasOnGround && window.isOnGround) { console.log("Made ground contact."); } // Less spammy logs
+
+
+    // --- 4. Void Check ---
+    let fellIntoVoid = false;
+    if (isAlive) {
+        const currentFeetY = controlsObject.position.y - (CONFIG?.CAMERA_Y_OFFSET || 1.6);
+        if (currentFeetY < (CONFIG.VOID_Y_LEVEL || -100)) { fellIntoVoid = true; console.log("Fell below Y level"); }
+        if (!fellIntoVoid && (Math.abs(controlsObject.position.x) > (CONFIG.MAP_BOUNDS_X || 100) || Math.abs(controlsObject.position.z) > (CONFIG.MAP_BOUNDS_Z || 100))) { fellIntoVoid = true; console.log("Fell outside bounds"); }
+        if (fellIntoVoid) { console.log("Void death triggered!"); localPlayerData.health = 0; if(UIManager) UIManager.updateHealthBar(0); if(Network) Network.sendVoidDeath(); }
     }
 
-    // --- Start Asset Loading ---
-    startAssetLoading() { console.log("Start asset load..."); if (loadManager) { loadManager.startLoading(); } else { console.error("LoadManager missing!"); stateMachine?.transitionTo('loading', {message:"Asset Manager Fail!", error: true}); } }
+    // --- 5. Calculate Intended Horizontal Movement (Only if Alive and not in void) ---
+    let intendedMove = new THREE.Vector3(0, 0, 0);
+    let horizontalMoveDir = new THREE.Vector3(0, 0, 0);
+    if (isAlive && !fellIntoVoid) {
+        const moveSpeed = Input.keys['ShiftLeft'] ? (CONFIG?.MOVEMENT_SPEED_SPRINTING || 10.5) : (CONFIG?.MOVEMENT_SPEED || 7.0);
+        const deltaSpeed = moveSpeed * deltaTime;
+        const forward = new THREE.Vector3(), right = new THREE.Vector3();
+        if (camera) { camera.getWorldDirection(forward); forward.y=0; forward.normalize(); right.crossVectors(camera.up, forward).normalize(); } else { console.error("Camera missing!"); return; }
+        let moveDirection = new THREE.Vector3(0,0,0);
+        if(Input.keys['KeyW']){moveDirection.add(forward);} if(Input.keys['KeyS']){moveDirection.sub(forward);}
+        if(Input.keys['KeyA']){moveDirection.sub(right);} if(Input.keys['KeyD']){moveDirection.add(right);} // A/D corrected
+        if(moveDirection.lengthSq() > 0.0001){ horizontalMoveDir.copy(moveDirection).normalize(); intendedMove.addScaledVector(horizontalMoveDir, deltaSpeed); }
+    }
 
-} // End Game Class
+     // --- 6. Wall Collision Check ---
+    if (isAlive && !fellIntoVoid && mapMeshParam && intendedMove.lengthSq() > 0.0001) {
+        const playerRadius = CONFIG?.PLAYER_RADIUS || 0.4; const checkDistance = playerRadius + intendedMove.length() + 0.1; const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6; const playerHeight = CONFIG?.PLAYER_HEIGHT || 1.8; const playerCenterY = controlsObject.position.y - cameraHeight + playerHeight / 2.0;
+        const rayOrigins = [ new THREE.Vector3(controlsObject.position.x, controlsObject.position.y - cameraHeight + 0.2, controlsObject.position.z), new THREE.Vector3(controlsObject.position.x, playerCenterY, controlsObject.position.z), new THREE.Vector3(controlsObject.position.x, controlsObject.position.y - 0.2, controlsObject.position.z) ];
+        if (!raycaster) raycaster = new THREE.Raycaster(); raycaster.far = checkDistance; let wallBlocked = false;
+        for(const origin of rayOrigins) { raycaster.set(origin, horizontalMoveDir); const wallIntersects = raycaster.intersectObject(mapMeshParam, true); if (wallIntersects.length > 0 && wallIntersects[0].distance < (intendedMove.length() + playerRadius)) { intendedMove.set(0,0,0); wallBlocked = true; break; } }
+    }
 
-// --- Global Entry Point & DOM Ready ---
-function runGame() { console.log("--- runGame() ---"); try { const gI=new Game(); window.currentGameInstance=gI; gI.start(); window.onresize=()=>gI.handleResize(); } catch(e){console.error("!!Error creating Game:",e);document.body.innerHTML="<p>GAME INIT FAILED.</p>";}}
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Re-added Map Add to Scene)");
+    // --- 7. Apply FINAL Calculated Horizontal Movement ---
+    controlsObject.position.x += intendedMove.x;
+    controlsObject.position.z += intendedMove.z;
+
+    // --- 8. Apply Dash Velocity Additively (Only if Alive) ---
+    if (isAlive && !fellIntoVoid && typeof Input !== 'undefined' && Input.isDashing) {
+        controlsObject.position.addScaledVector(Input.dashDirection, (CONFIG?.DASH_FORCE || 25.0) * deltaTime);
+    }
+
+    // --- 9. Collision (Player-Player - Revert to PREVIOUS frame's position) ---
+    if (isAlive) {
+        const currentPosAfterMove = controlsObject.position; const collisionRadius = CONFIG?.PLAYER_RADIUS || 0.4; const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6; const playerHeightCheck = CONFIG?.PLAYER_HEIGHT || 1.8;
+        for (const id in players) { if (id !== localPlayerId && players[id] instanceof ClientPlayer && players[id].mesh?.visible && players[id].mesh.position && players[id].health > 0) { const otherMesh = players[id].mesh; const otherPos = otherMesh.position; const distanceXZ = new THREE.Vector2(currentPosAfterMove.x - otherPos.x, currentPosAfterMove.z - otherPos.z).length(); if (distanceXZ < collisionRadius * 2) { const currentFeetY = currentPosAfterMove.y - cameraHeight; let otherFeetY = otherPos.y; if (otherMesh.geometry instanceof THREE.CylinderGeometry) { otherFeetY = otherPos.y - playerHeightCheck / 2; } const verticalDistance = Math.abs(currentFeetY - otherFeetY); if (verticalDistance < playerHeightCheck) { controlsObject.position.copy(previousPosition); console.log("Player collision - reverted."); break; } } } }
+    }
+
+    // <<< END FRAME LOG >>>
+    if (isAlive){
+        console.log(`End Frame:   PosY=${controlsObject.position.y.toFixed(2)}, VelY=${window.velocityY?.toFixed(2)}, Grounded=${window.isOnGround}`);
+    }
+    // <<< END LOG >>>
+
+
+    // --- 10. Send Network Updates ---
+    if (isAlive && !fellIntoVoid) {
+        const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6; const logicalPosition = new THREE.Vector3( controlsObject.position.x, controlsObject.position.y - cameraHeight, controlsObject.position.z ); const currentRotation = new THREE.Euler().setFromQuaternion(controlsObject.quaternion,'YXZ'); const currentRotationY = currentRotation.y; const pTSq = CONFIG?.PLAYER_MOVE_THRESHOLD_SQ || 0.0001; const rTh = 0.01; const posChanged = logicalPosition.distanceToSquared(new THREE.Vector3(localPlayerData.x??0, localPlayerData.y??0, localPlayerData.z??0)) > pTSq; const rotChanged = Math.abs(currentRotationY - (localPlayerData.rotationY??0)) > rTh; if (posChanged || rotChanged) { localPlayerData.x = logicalPosition.x; localPlayerData.y = logicalPosition.y; localPlayerData.z = logicalPosition.z; localPlayerData.rotationY = currentRotationY; if (Network) Network.sendPlayerUpdate({ x: localPlayerData.x, y: localPlayerData.y, z: localPlayerData.z, rotationY: localPlayerData.rotationY }); }
+    }
+
+} // End updateLocalPlayer
+
+
+/** Updates remote players interpolation */
+function updateRemotePlayers(deltaTime) {
+    for (const id in players) {
+        if (id !== localPlayerId && players[id] instanceof ClientPlayer) {
+            players[id].interpolate(deltaTime); // Uses ClientPlayer's internal lerping
+        }
+    }
+}
+
+console.log("gameLogic.js loaded (Manual Physics + Added Logging)");
