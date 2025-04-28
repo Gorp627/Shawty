@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (Manual Physics - CORRECTED Spawn Logic)
+// docs/game.js - Main Game Orchestrator (Manual Physics - Re-added State Reset)
 
 // --- Global Flags and Data ---
 let networkIsInitialized = false; let assetsAreReady = false; let initializationData = null;
@@ -37,9 +37,12 @@ class Game {
 
     // --- Initialize Core Components (Three.js ONLY) ---
     initializeCoreComponents() {
-         console.log("[Game] Init Core Components (Three.js)..."); try {
+         console.log("[Game] Init Core Components (Three.js)...");
+         try { // Scene, Camera, Renderer, Controls, Loaders, Lights
              this.scene = new THREE.Scene(); scene = this.scene; this.scene.background = new THREE.Color(0x6699cc); this.scene.fog = new THREE.Fog(0x6699cc, 0, 200); this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera = this.camera; this.clock = new THREE.Clock(); clock = this.clock; const canvas = document.getElementById('gameCanvas'); if (!canvas) throw new Error("#gameCanvas missing!"); this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); renderer = this.renderer; this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; this.controls = new THREE.PointerLockControls(this.camera, document.body); controls = this.controls; this.controls.addEventListener('lock', ()=>{console.log('[Controls] Locked');}); this.controls.addEventListener('unlock', ()=>{console.log('[Controls] Unlocked');}); dracoLoader = new THREE.DRACOLoader(); dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); dracoLoader.setDecoderConfig({ type: 'js' }); dracoLoader.preload(); loader = new THREE.GLTFLoader(); loader.setDRACOLoader(dracoLoader); const ambL = new THREE.AmbientLight(0xffffff, 0.7); this.scene.add(ambL); const dirL = new THREE.DirectionalLight(0xffffff, 1.0); dirL.position.set(15, 20, 10); dirL.castShadow = true; dirL.shadow.mapSize.width=1024; dirL.shadow.mapSize.height=1024; this.scene.add(dirL); this.scene.add(dirL.target); console.log("[Game] Core Components OK."); return true;
-         } catch(e) { console.error("!!! Core Init Error:", e); UIManager?.showError(`FATAL: Graphics Init! ${e.message}`, 'loading'); return false; }
+         } catch(e) {
+             console.error("!!! Core Component Initialization Error:", e); if(typeof UIManager !== 'undefined' && UIManager?.showError) UIManager.showError("FATAL: Graphics Init Error!", 'loading'); else alert("FATAL: Graphics Init Error!"); return false;
+         }
     }
 
     // --- Initialize Network ---
@@ -80,24 +83,15 @@ class Game {
         console.log("Clearing previous state...");
         for (const id in players) { if (Network?._removePlayer) Network._removePlayer(id); } players = {};
 
-        // Process players (local player needs special spawn height)
+        // Process players (local player needs spawn calculation)
         for(const id in initData.players){
             const sPD = initData.players[id];
             if(id === localPlayerId){ // --- LOCAL PLAYER ---
                 console.log(`Init local: ${sPD.name}`);
-
-                let spawnX = sPD.x; // Use server X/Z
-                let spawnY = sPD.y; // Use server Y as the *target ground height*
-                let spawnZ = sPD.z;
-
-                // --- <<< CORRECTED/SIMPLIFIED Spawn Height Logic >>> ---
-                // We'll trust the server's Y is *mostly* correct for ground level now,
-                // and place the player directly based on that + camera offset.
-                // The runtime ground check in gameLogic will handle snapping/adjusting.
+                let spawnX = sPD.x; let spawnY = sPD.y; let spawnZ = sPD.z; // Use server coords directly now (simplification)
                 console.log(`Using server spawn coords: X=${spawnX.toFixed(1)}, Y=${spawnY.toFixed(1)}, Z=${spawnZ.toFixed(1)}`);
-                // --- End Simplified Spawn Height ---
 
-                // Store potentially modified position (though XZ aren't modified here now)
+                // Store final position in local cache
                 players[id] = { ...sPD, x: spawnX, y: spawnY, z: spawnZ, isLocal: true, mesh: null };
 
                 const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6;
@@ -109,12 +103,15 @@ class Game {
                     console.log(`Set controls pos(${spawnX.toFixed(1)}, ${finalVisualY.toFixed(1)}, ${spawnZ.toFixed(1)})`);
                 }
 
-                velocityY = 0; isOnGround = true; // Reset manual physics state assuming spawn is valid
-                console.log("Reset initial physics state.");
+                // <<< RE-ADD PHYSICS STATE RESET >>>
+                velocityY = 0; // Assign to the global
+                isOnGround = true; // Assign to the global
+                console.log("Reset initial physics state (vy=0, onGround=true).");
+                // <<< END RE-ADD >>>
 
                 if(UIManager){ UIManager.updateHealthBar(sPD.health ?? 100); UIManager.updateInfo(`Playing as ${players[id].name}`); UIManager.clearError('homescreen'); UIManager.clearKillMessage(); }
 
-            } else { // --- REMOTE PLAYER --- Use server coords directly
+            } else { // --- REMOTE PLAYER ---
                  if(Network?._addPlayer) Network._addPlayer(sPD);
             }
         } // End for loop
@@ -131,4 +128,4 @@ class Game {
 // --- Global Entry Point & DOM Ready ---
 function runGame() { console.log("--- runGame() ---"); try { const gI=new Game(); window.currentGameInstance=gI; gI.start(); window.onresize=()=>gI.handleResize(); } catch(e){console.error("!!Error creating Game:",e);document.body.innerHTML="<p>GAME INIT FAILED.</p>";}}
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Reverted Spawn Logic)");
+console.log("game.js loaded (Re-added Physics State Reset)");
