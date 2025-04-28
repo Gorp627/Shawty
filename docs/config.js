@@ -1,4 +1,4 @@
-// docs/config.js (Config for Rapier)
+// docs/config.js (Config for Rapier - Remove raycaster)
 
 const CONFIG = {
     SERVER_URL: 'https://gametest-psxl.onrender.com',
@@ -48,6 +48,6 @@ let mapMesh = null; // Visual map mesh
 // --- Removed Manual Physics/Raycaster State ---
 // let velocityY = 0;
 // let isOnGround = false;
-// let raycaster = new THREE.Raycaster(); // <<< REMOVED
+// let raycaster = new THREE.Raycaster(); // <<< REMOVED AGAIN <<<
 
-console.log("config.js loaded (Rapier - Removed raycaster)");
+console.log("config.js loaded (Rapier - Removed raycaster AGAIN)");
