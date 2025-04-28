@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. (Rapier Physics Retry)</title> <!-- Updated title -->
+    <title>Shawty. (Rapier Physics)</title> <!-- Updated title -->
     <link rel="stylesheet" href="style.css">
+    <!-- Favicon links (optional) -->
+    <!-- <link rel="icon" href="/favicon.ico" sizes="any"> -->
+    <!-- <link rel="icon" href="/favicon.svg" type="image/svg+xml"> -->
 </head>
 <body>
     <!-- UI Screens -->
@@ -18,11 +21,11 @@
              <input type="text" id="playerPhraseInput" placeholder="..............." maxlength="20">
         </div>
         <button id="joinButton">Join Game</button>
-        <p id="homeScreenError" class="error-message"></p>
+        <p id="homeScreenError" class="error-message"></p> <!-- Error message placeholder -->
     </div>
 
     <!-- In-Game UI -->
-    <div id="gameUI">
+    <div id="gameUI"> <!-- Hidden by default -->
         <div id="info"></div> <!-- Player Name/Status -->
         <div id="healthBarContainer">
             <div id="healthBarFill"></div>
@@ -32,32 +35,33 @@
     </div>
 
     <!-- Game Canvas -->
-    <canvas id="gameCanvas"></canvas>
+    <canvas id="gameCanvas"></canvas> <!-- Hidden by default via CSS -->
 
     <!-- Libraries -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Draco and GLTF Loaders must come AFTER three.min.js -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- <<< Rapier Physics Engine Init >>> -->
+    <!-- Rapier Physics Engine Init (as module) -->
+    <!-- This MUST come before game logic that depends on RAPIER -->
     <script type="module" src="rapier_init.js"></script>
-    <!-- <<< END Rapier >>> -->
 
     <!-- Core & Game Logic - ORDER MATTERS -->
-    <script src="config.js"></script> <!-- Load config first -->
-    <script src="utils.js"></script> <!-- Utilities -->
-    <script src="stateMachine.js"></script> <!-- State management -->
-    <script src="loadManager.js"></script> <!-- Asset loading -->
-    <script src="entities.js"></script> <!-- Player class -->
-    <script src="uiManager.js"></script> <!-- UI interaction -->
-    <script src="input.js"></script> <!-- Keyboard/Mouse input -->
-    <script src="effects.js"></script> <!-- Simplified Effects -->
-    <script src="network.js"></script> <!-- Server communication -->
-    <script src="gameLogic.js"></script> <!-- Core game loop logic -->
-    <script src="game.js"></script> <!-- Main Init/Loop last -->
+    <script src="config.js"></script>         <!-- Global config -->
+    <script src="utils.js"></script>          <!-- Utility functions -->
+    <script src="stateMachine.js"></script>    <!-- State management -->
+    <script src="loadManager.js"></script>     <!-- Asset loading -->
+    <script src="entities.js"></script>       <!-- Player class (remote) -->
+    <script src="uiManager.js"></script>       <!-- UI interaction -->
+    <script src="input.js"></script>          <!-- Keyboard/Mouse input -->
+    <script src="effects.js"></script>        <!-- Simplified Effects -->
+    <script src="network.js"></script>        <!-- Server communication -->
+    <script src="gameLogic.js"></script>      <!-- Player update logic -->
+    <script src="game.js"></script>           <!-- Main Init/Loop (MUST BE LAST or after dependencies) -->
 
 </body>
 </html>
