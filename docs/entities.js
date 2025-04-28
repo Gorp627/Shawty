@@ -1,4 +1,4 @@
-// docs/entities.js (Reverted to Manual Physics)
+// docs/entities.js (Client-side representation for REMOTE players - Kinematic)
 
 // Needs access to globals: scene, THREE, CONFIG, loadManager
 
@@ -7,8 +7,6 @@ class ClientPlayer {
     constructor(playerData) {
         this.id = playerData.id;
         this.mesh = null;           // Three.js visual mesh
-        this.targetPosition = new THREE.Vector3(); // For interpolation
-        this.targetRotationY = 0;                 // For interpolation
         this.name = 'Player';
         this.phrase = '...';
         this.health = CONFIG?.PLAYER_DEFAULT_HEALTH || 100;
@@ -16,38 +14,33 @@ class ClientPlayer {
         // Store initial data needed for mesh loading/setup
         this.initialData = { ...playerData }; // Copy initial state
 
-        this.updateData(playerData); // Set initial name, phrase, health, AND targets
+        // --- REMOVED Interpolation targets - Positions now set directly from Rapier kinematic body ---
+        // this.targetPosition = new THREE.Vector3();
+        // this.targetRotationY = 0;
+
+        this.updateData(playerData); // Set initial name, phrase, health
         this.loadMesh(); // Load visual mesh
     }
 
-    // Updates state from server data AND sets interpolation targets
+    // Updates internal state cache from server data (for non-physics properties)
     updateData(serverData) {
-        // Update internal state cache (server sends feet Y)
-        this.x = serverData.x ?? this.x ?? 0;
-        this.y = serverData.y ?? this.y ?? 0; // Store feet Y
-        this.z = serverData.z ?? this.z ?? 0;
-        this.rotationY = serverData.r ?? serverData.rotationY ?? this.rotationY ?? 0;
+        // Cache non-positional data received from server
         this.health = serverData.h ?? serverData.health ?? this.health;
         this.name = serverData.n ?? serverData.name ?? this.name;
         this.phrase = serverData.phrase ?? serverData.phrase ?? this.phrase;
-        // Set targets for smooth visual interpolation
-        this.setInterpolationTargets();
+
+        // Position/Rotation are handled by syncing the Rapier kinematic body in game.js/network.js
+        // Server data (sPD) is directly used to set the kinematic body's next position/rotation
+        // this.x = serverData.x ?? this.x ?? 0; // No longer need local cache
+        // this.y = serverData.y ?? this.y ?? 0;
+        // this.z = serverData.z ?? this.z ?? 0;
+        // this.rotationY = serverData.r ?? serverData.rotationY ?? this.rotationY ?? 0;
+
+        // --- REMOVED setInterpolationTargets - Not needed with direct Rapier body syncing ---
+        // this.setInterpolationTargets();
     }
 
-    // Calculate the target visual position based on mesh type and server Y (feet)
-    setInterpolationTargets() {
-        const playerHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
-        let visualTargetY = this.y; // Assume visual mesh origin is at feet (server Y)
-
-        // Adjust visual Y if the mesh origin is known to be different (e.g., center)
-        if (this.mesh && this.mesh.geometry instanceof THREE.CylinderGeometry) {
-            visualTargetY = this.y + playerHeight / 2; // Cylinder origin is center
-        }
-        // If GLTF model origin is center, add: else if (this.mesh) { visualTargetY = this.y + playerHeight / 2; }
-
-        this.targetPosition.set(this.x, visualTargetY, this.z);
-        this.targetRotationY = this.rotationY;
-    }
+    // --- REMOVED setInterpolationTargets() method ---
 
     loadMesh() {
         console.log(`[Entities] Loading mesh for remote player ${this.id}`);
@@ -58,12 +51,13 @@ class ClientPlayer {
                 this.mesh = playerModelData.clone();
                 const scale = 0.3; this.mesh.scale.set(scale, scale, scale);
                 this.mesh.traverse(c=>{if(c.isMesh){c.castShadow=true; c.receiveShadow=true;}});
-                // Set initial visual position based on initial data
-                let initialVY = this.initialData.y; // Assume feet origin
-                this.mesh.position.set(this.initialData.x, initialVY, this.initialData.z);
-                this.mesh.rotation.y = this.initialData.rotationY || 0;
-                // Set initial interpolation targets based on this position
-                this.setInterpolationTargets();
+
+                // Initial position/rotation will be set by the Rapier body creation in game.js
+                // or the first gameStateUpdate sync for players joining later.
+                // We don't set initial mesh position here anymore.
+                // let initialVY = this.initialData.y;
+                // this.mesh.position.set(this.initialData.x, initialVY, this.initialData.z);
+                // this.mesh.rotation.y = this.initialData.rotationY || 0;
 
                 if (scene) { scene.add(this.mesh); console.log(`[Entities] Added remote model mesh ${this.id}`); }
                 else { console.error("[Entities] Scene missing!"); }
@@ -76,29 +70,21 @@ class ClientPlayer {
         try {
             const r=CONFIG.PLAYER_RADIUS||0.4; const h=CONFIG.PLAYER_HEIGHT||1.8;
             const geo=new THREE.CylinderGeometry(r,r,h,8); const mat=new THREE.MeshStandardMaterial({color:0xff00ff,roughness:0.7}); this.mesh=new THREE.Mesh(geo,mat); this.mesh.castShadow=true; this.mesh.receiveShadow=true;
-            // Cylinder origin is center, use initial server feet Y + half height
-            const initialVY=this.initialData.y + h/2;
-            this.mesh.position.set(this.initialData.x, initialVY, this.initialData.z);
-            this.mesh.rotation.y=this.initialData.rotationY || 0;
-            // Set initial interpolation targets based on this position
-            this.setInterpolationTargets();
+
+            // Initial position/rotation set by Rapier body.
+            // Cylinder origin is center, game.js sync logic accounts for this offset if needed.
+            // const initialVY=this.initialData.y + h/2;
+            // this.mesh.position.set(this.initialData.x, initialVY, this.initialData.z);
+            // this.mesh.rotation.y=this.initialData.rotationY || 0;
 
             if(scene) { scene.add(this.mesh); console.log(`[Entities] Added remote fallback mesh ${this.id}`); }
             else { console.error("[Entities] Scene missing!"); }
         } catch (e) { console.error(`[Entities] Fallback error ${this.id}:`, e); }
     }
 
-    // Interpolate visual mesh towards target position/rotation
-    interpolate(dT) {
-        if (!this.mesh || !this.targetPosition) return;
-        const lerpFactor = dT * 15; // Interpolation speed factor
-        this.mesh.position.lerp(this.targetPosition, lerpFactor);
-        if (this.targetRotationY !== undefined) {
-            const targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, this.targetRotationY, 0, 'YXZ'));
-            this.mesh.quaternion.slerp(targetQuaternion, lerpFactor);
-        }
-    }
-
+    // --- REMOVED interpolate() method ---
+    // Interpolation is replaced by direct syncing of the Rapier kinematic body's position/rotation
+    // to the Three.js mesh in the game loop (game.js)
 
     setVisible(v) { if(this.mesh)this.mesh.visible=v; }
 
@@ -108,4 +94,4 @@ class ClientPlayer {
 
 } // End ClientPlayer Class
 
-console.log("entities.js loaded (Reverted to Manual Physics / Interpolation)");
+console.log("entities.js loaded (Rapier - Kinematic, No Interpolation)");
