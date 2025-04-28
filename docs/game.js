@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (Manual Physics - Re-added State Reset)
+// docs/game.js - Main Game Orchestrator (Manual Physics - Explicit Globals)
 
 // --- Global Flags and Data ---
 let networkIsInitialized = false; let assetsAreReady = false; let initializationData = null;
@@ -88,13 +88,13 @@ class Game {
             const sPD = initData.players[id];
             if(id === localPlayerId){ // --- LOCAL PLAYER ---
                 console.log(`Init local: ${sPD.name}`);
-                let spawnX = sPD.x; let spawnY = sPD.y; let spawnZ = sPD.z; // Use server coords directly
+                let spawnX = sPD.x; let spawnY = sPD.y; let spawnZ = sPD.z;
                 console.log(`Using server spawn coords: X=${spawnX.toFixed(1)}, Y=${spawnY.toFixed(1)}, Z=${spawnZ.toFixed(1)}`);
 
-                players[id] = { ...sPD, x: spawnX, y: spawnY, z: spawnZ, isLocal: true, mesh: null }; // Store coords
+                players[id] = { ...sPD, x: spawnX, y: spawnY, z: spawnZ, isLocal: true, mesh: null };
 
                 const cameraHeight = CONFIG?.CAMERA_Y_OFFSET || 1.6;
-                const finalVisualY = spawnY + cameraHeight; // Position camera relative to server ground Y
+                const finalVisualY = spawnY + cameraHeight;
 
                 if(controls?.getObject()){
                     controls.getObject().position.set(spawnX, finalVisualY, spawnZ);
@@ -102,12 +102,12 @@ class Game {
                     console.log(`Set controls pos(${spawnX.toFixed(1)}, ${finalVisualY.toFixed(1)}, ${spawnZ.toFixed(1)})`);
                 }
 
-                // <<< RE-ADD PHYSICS STATE RESET >>>
-                // These assign values to the global variables declared in config.js
-                velocityY = 0;
-                isOnGround = true;
+                // <<< CORRECTED: Explicitly use window scope >>>
+                // Assign values to the global variables declared in config.js
+                window.velocityY = 0;
+                window.isOnGround = true;
                 console.log("Reset initial physics state (vy=0, onGround=true).");
-                // <<< END RE-ADD >>>
+                // <<< END CORRECTION >>>
 
                 if(UIManager){ UIManager.updateHealthBar(sPD.health ?? 100); UIManager.updateInfo(`Playing as ${players[id].name}`); UIManager.clearError('homescreen'); UIManager.clearKillMessage(); }
 
@@ -128,4 +128,4 @@ class Game {
 // --- Global Entry Point & DOM Ready ---
 function runGame() { console.log("--- runGame() ---"); try { const gI=new Game(); window.currentGameInstance=gI; gI.start(); window.onresize=()=>gI.handleResize(); } catch(e){console.error("!!Error creating Game:",e);document.body.innerHTML="<p>GAME INIT FAILED.</p>";}}
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runGame);}else{runGame();}
-console.log("game.js loaded (Re-added Physics State Reset CORRECTLY)");
+console.log("game.js loaded (Explicit Global Physics Reset)");
