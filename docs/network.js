@@ -1,4 +1,4 @@
-// docs/network.js (Adapted for Rapier - Corrected EulerAngles Rotation)
+// docs/network.js (Adapted for Rapier - Corrected fromAxisAngle Usage)
 
 // Depends on: config.js, stateMachine.js, entities.js, input.js, uiManager.js, game.js
 // Accesses globals: players, localPlayerId, socket, controls, CONFIG, RAPIER, rapierWorld,
@@ -16,14 +16,19 @@ const Network = {
         try { if(!io) throw new Error("Socket.IO missing!"); socket = io(CONFIG.SERVER_URL, { transports: ['websocket'], autoConnect: true }); console.log("Socket init..."); }
         catch (e) { console.error("Socket.IO Err:", e); stateMachine?.transitionTo('loading',{message:`Net Init Err! ${e.message}`,error:true}); return; }
 
+        // Event Listeners
         socket.on('connect', () => { console.log('Socket Connected! ID:', socket.id); networkIsInitialized = true; currentGameInstance?.attemptProceedToGame(); });
         socket.on('disconnect', (reason) => { console.warn('Disconnected:', reason); networkIsInitialized = false; initializationData = null; stateMachine?.transitionTo('homescreen', { playerCount: 0 }); if(UIManager) { UIManager.updatePlayerCount(0); UIManager.showError("Disconnected.", 'homescreen'); } if(infoDiv) infoDiv.textContent='Disc.'; if(controls?.isLocked) controls.unlock(); });
         socket.on('connect_error', (err) => { console.error('Net Conn Err:', err.message); networkIsInitialized = false; if(stateMachine?.is('loading')||stateMachine?.is('joining')) stateMachine.transitionTo('loading',{message:`Conn Fail!<br/>${err.message}`,error:true}); else { stateMachine?.transitionTo('homescreen'); UIManager?.showError(`Conn Fail: ${err.message}`, 'homescreen');} });
         socket.on('playerCountUpdate', (count) => { if (UIManager) UIManager.updatePlayerCount(count); });
-        socket.on('initialize', (data) => Network.handleInitialize(data) ); socket.on('playerJoined', (data) => Network.handlePlayerJoined(data) ); socket.on('playerLeft', (id) => Network.handlePlayerLeft(id) ); socket.on('gameStateUpdate', (data) => Network.handleGameStateUpdate(data) ); socket.on('healthUpdate', (data) => Network.handleHealthUpdate(data) ); socket.on('playerDied', (data) => Network.handlePlayerDied(data) ); socket.on('playerRespawned', (data) => Network.handlePlayerRespawned(data) ); socket.on('serverFull', () => Network.handleServerFull() );
-        console.log("Network listeners attached.");
-    },
 
+        // Game Listeners
+        socket.on('initialize', (data) => Network.handleInitialize(data) ); socket.on('playerJoined', (data) => Network.handlePlayerJoined(data) ); socket.on('playerLeft', (id) => Network.handlePlayerLeft(id) ); socket.on('gameStateUpdate', (data) => Network.handleGameStateUpdate(data) ); socket.on('healthUpdate', (data) => Network.handleHealthUpdate(data) ); socket.on('playerDied', (data) => Network.handlePlayerDied(data) ); socket.on('playerRespawned', (data) => Network.handlePlayerRespawned(data) ); socket.on('serverFull', () => Network.handleServerFull() );
+
+        console.log("Network listeners attached.");
+    }, // End setupSocketIO
+
+    // Handlers
     _getPlayer: function(id) { return players?.[id] || null; },
     _addPlayer: function(playerData) { if(!ClientPlayer||!players) return null; if(playerData?.id && !players[playerData.id]){ console.log(`Creating ClientPlayer visual: ${playerData.name || '??'}`); players[playerData.id] = new ClientPlayer(playerData); return players[playerData.id]; } return null; },
     _removePlayer: function(playerId) { const player = this._getPlayer(playerId); const bodyHandle = currentGameInstance?.playerRigidBodyHandles?.[playerId]; if (player || bodyHandle !== undefined) { console.log(`Removing player/body: ${player?.name || playerId} (Handle: ${bodyHandle})`); if (player instanceof ClientPlayer) player.remove?.(); if (bodyHandle !== undefined && rapierWorld) { rapierWorld.removeRigidBody(bodyHandle); console.log(`Removed Rapier body handle ${bodyHandle}`); } if (players?.[playerId]) delete players[playerId]; if (currentGameInstance?.playerRigidBodyHandles) delete currentGameInstance.playerRigidBodyHandles[playerId]; } },
@@ -33,22 +38,21 @@ const Network = {
     handlePlayerJoined: function(playerData) {
         if (playerData?.id !== localPlayerId && !this._getPlayer(playerData.id)) {
             const name = playerData.name || 'Player'; console.log(`Player joined event: ${name}`);
-            const newPlayer = this._addPlayer(playerData); // Adds visual
+            const newPlayer = this._addPlayer(playerData);
             if (newPlayer instanceof ClientPlayer && RAPIER && rapierWorld && currentGameInstance) {
                  try {
                      const playerHeight=CONFIG?.PLAYER_HEIGHT||1.8; const playerRadius=CONFIG?.PLAYER_RADIUS||0.4; const capHalfHeight=Math.max(0.01, playerHeight/2.0-playerRadius); const bodyCenterY=playerData.y+playerHeight/2.0;
                      const playerColliderDesc=RAPIER.ColliderDesc.capsule(capHalfHeight, playerRadius).setFriction(0.7).setRestitution(0.1);
                      const rotY = playerData.rotationY || 0;
-                     // ---<<< CORRECTED Rotation using fromEulerAngles >>>---
-                     const initialRot = RAPIER.Quaternion.fromEulerAngles(0, rotY, 0);
-                     const rigidBodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(playerData.x, bodyCenterY, playerData.z).setRotation(initialRot); // Pass quat
+                     // ---<<< CORRECTED ROTATION using fromAxisAngle >>>---
+                     const initialRot = RAPIER.Quaternion.fromAxisAngle({ x: 0, y: 1, z: 0 }, rotY);
                      // ---<<< END CORRECTION >>>---
-                     const body = rapierWorld.createRigidBody(rigidBodyDesc); if (!body) throw new Error("Joined body fail.");
+                     const rigidBodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(playerData.x, bodyCenterY, playerData.z).setRotation(initialRot); // Apply quat
+                     const body = rapierWorld.createRigidBody(rigidBodyDesc); if (!body) throw new Error("Joined player body fail.");
                      const collider = rapierWorld.createCollider(playerColliderDesc, body.handle);
-                     currentGameInstance.playerRigidBodyHandles[playerData.id] = body.handle;
-                     console.log(`Created KINEMATIC handle ${body.handle} for joined ${playerData.id}`);
-                 } catch (e) { console.error(`Failed physics body for joined ${playerData.id}: ${e}`); if(players?.[playerData.id]){ console.error(`-> Removing visual ${playerData.id}`); players[playerData.id].remove?.(); delete players[playerData.id]; } }
-             } else { console.warn("Deps missing for joined physics creation?");}
+                     currentGameInstance.playerRigidBodyHandles[playerData.id] = body.handle; console.log(`Created KINEMATIC handle ${body.handle} for joined ${playerData.id}`);
+                 } catch (e) { console.error(`Failed physics body for joined ${playerData.id}: ${e}`); if(players?.[playerData.id]){ console.error(`--> Removing visual ${playerData.id}`); players[playerData.id].remove?.(); delete players[playerData.id]; } }
+             } else { console.warn("Deps missing for joined physics?");}
             if(UIManager?.showKillMessage) UIManager.showKillMessage(`${name} joined.`);
         }
     },
@@ -64,7 +68,7 @@ const Network = {
                  rb.setNextKinematicTranslation({ x: sPD.x, y: bodyCenterY, z: sPD.z }, true);
                  // --- CORRECTED ROTATION Update ---
                  const rotY = sPD.r || 0;
-                 const nextQ = RAPIER.Quaternion.fromEulerAngles(0, rotY, 0); // Use fromEulerAngles
+                 const nextQ = RAPIER.Quaternion.fromAxisAngle({ x: 0, y: 1, z: 0 }, rotY); // Use fromAxisAngle
                  rb.setNextKinematicRotation(nextQ, true);
                  // --- END CORRECTION ---
              } if (rp instanceof ClientPlayer && sPD.h !== undefined) rp.health = sPD.h;
@@ -77,7 +81,7 @@ const Network = {
          if(!playerData?.id || !RAPIER || !rapierWorld || !currentGameInstance) return; console.log(`Respawn: ${playerData.name}`); let player=this._getPlayer(playerData.id); let playerBodyHandle = currentGameInstance.playerRigidBodyHandles?.[playerData.id]; let playerBody = playerBodyHandle !== undefined ? rapierWorld.getRigidBody(playerBodyHandle) : null; const playerHeight=CONFIG?.PLAYER_HEIGHT||1.8; const bodyCenterY=playerData.y + playerHeight / 2.0;
          const rotY = playerData.rotationY || 0;
          // --- CORRECTED ROTATION Calculation ---
-         const q = RAPIER.Quaternion.fromEulerAngles(0, rotY, 0); // Use Euler method
+         const q = RAPIER.Quaternion.fromAxisAngle({x:0, y:1, z:0}, rotY); // Use fromAxisAngle
          // --- END CORRECTION ---
 
          if (playerData.id === localPlayerId) { console.log("LOCAL respawn."); if (!player){player={isLocal: true}; players[localPlayerId]=player;} if (!playerBody){ console.error("Local body missing!"); return; }
@@ -103,4 +107,4 @@ const Network = {
 }; // End Network object
 
 window.Network = Network;
-console.log("network.js loaded (Rapier - Fixed Euler Rotation)");
+console.log("network.js loaded (Rapier - fromAxisAngle Rotation Attempt)");
