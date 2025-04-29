@@ -161,9 +161,7 @@ const Network = {
              const capsuleHalfHeight = Math.max(0.01, playerHeight / 2.0 - playerRadius); // Cylinder part half-height
              const bodyCenterY = playerData.y + playerHeight / 2.0; // Calculate center Y
 
-             // ********************************************************
-             // *** FIX: Use RAPIER.ColliderDesc.capsule(halfHeight, radius) ***
-             // ********************************************************
+             // Use RAPIER.ColliderDesc.capsule(halfHeight, radius)
              const collDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, playerRadius)
                  .setFriction(0.7)
                  .setRestitution(0.1)
