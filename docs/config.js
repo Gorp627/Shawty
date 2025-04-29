@@ -17,7 +17,7 @@ const CONFIG = {
 
     // --- Physics Config (Rapier) ---
     // *** DEBUG: Reduced Gravity ***
-    GRAVITY: -9.8, // Temporarily reduced from -25.0
+    GRAVITY: -9.8, // Temporarily reduced from -25.0 // <<< You might want to revert this to -25 or higher later
     // *** END DEBUG ***
     JUMP_IMPULSE: 300,
     VOID_Y_LEVEL: -100,
