@@ -1,41 +1,45 @@
-// docs/game.js - Main Game Orchestrator (v11 - Ensure Correct Rapier CapsuleDesc)
+// docs/game.js - Main Game Orchestrator (v12 - Truly Complete File)
 
 // --- Global Flags and Data ---
-let networkIsInitialized = false;
-let assetsAreReady = false;
-let initializationData = null;
-var currentGameInstance = null;
-var RAPIER = window.RAPIER || null;
+let networkIsInitialized = false; // Set true by Network.js on 'connect'
+let assetsAreReady = false; // Set true by loadManager 'ready' callback
+let initializationData = null; // Set by Network.js 'initialize' handler
+var currentGameInstance = null; // Holds the single Game instance
+var RAPIER = window.RAPIER || null; // Will be populated by rapier_init.js
 var rapierWorld = null;
 var rapierEventQueue = null;
-window.isRapierReady = window.isRapierReady || false;
+window.isRapierReady = window.isRapierReady || false; // Flag set by rapier_init.js
 
-// Debug flags
-const USE_SIMPLE_GROUND = false;
-const DEBUG_FORCE_SIMPLE_GROUND_COLLIDER = false;
-const DEBUG_FIXED_CAMERA = false;
-const DEBUG_MINIMAL_RENDER_LOOP = false;
-const DEBUG_FORCE_SPAWN_POS = false;
-const DEBUG_FORCE_SPAWN_Y = 20.0;
-const DEBUG_SHOW_PLAYER_COLLIDERS = false; // Set true to visualize physics shapes
+// Debug flags (Set these for testing)
+const USE_SIMPLE_GROUND = false; // <<< Keep false to use actual map VISUALLY
+const DEBUG_FORCE_SIMPLE_GROUND_COLLIDER = false; // <<< SET TO false TO USE MAP COLLIDER, true TO DEBUG WITH FLAT PLANE
+const DEBUG_FIXED_CAMERA = false; // <<< Use dynamic camera linked to player
+const DEBUG_MINIMAL_RENDER_LOOP = false; // <<< Run full game loop
+const DEBUG_FORCE_SPAWN_POS = false; // <<< Force specific spawn position (Use server default)
+const DEBUG_FORCE_SPAWN_Y = 20.0; // <<< Additive Y value if DEBUG_FORCE_SPAWN_POS is true
+const DEBUG_SHOW_PLAYER_COLLIDERS = false; // <<< Show wireframe colliders for players
 
 class Game {
     // --- Constructor ---
     constructor() {
         console.log("[Game Constructor] Running...");
         console.log("[Game Constructor] BEFORE assignment: this.players:", this.players, "window.players:", window.players, "window.ClientPlayer:", typeof window.ClientPlayer);
+
+        // Core Three.js components
         this.scene = null;
         this.camera = null;
         this.renderer = null;
         this.controls = null;
         this.clock = null;
-        this.cssRenderer = null;
+        this.cssRenderer = null; // For optional labels
+        // Game state references (using globals defined in config.js)
         this.players = window.players || {};
         this.keys = window.keys || {};
-        this.mapMesh = null;
-        this.playerRigidBodyHandles = {};
-        this.debugMeshes = {};
-        this.mapColliderCreated = false;
+        this.mapMesh = null; // Reference to loaded map mesh
+        this.playerRigidBodyHandles = {}; // Rapier rigid body handles
+        this.debugMeshes = {}; // Debug meshes for rigid bodies
+        this.mapColliderCreated = false; // Flag to ensure map collider is made only once
+
         console.log("[Game Constructor] AFTER assignment: this.players type:", typeof this.players, "Value:", this.players);
         console.log("[Game Constructor] FINISHED.");
     }
@@ -46,7 +50,7 @@ class Game {
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene();
         window.scene = this.scene;
-        this.scene.background = new THREE.Color(0x87CEEB); // Sky blue
+        this.scene.background = new THREE.Color(0x87CEEB); // Sky blue color
 
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
         window.camera = this.camera;
@@ -58,6 +62,8 @@ class Game {
         this.renderer.shadowMap.enabled = true;
         window.renderer = this.renderer;
 
+
+        // *** Physics World Init ***
         if (!window.isRapierReady) {
             console.error("Rapier not initialized. Aborting.");
             UIManager?.showError("Physics Engine Failed!", "loading");
@@ -86,16 +92,22 @@ class Game {
         dirLight.shadow.mapSize.height = 2048;
         this.scene.add(dirLight);
 
+
+        // --- Loaders Init (Global Scope) ---
         window.dracoLoader = new THREE.DRACOLoader();
         window.dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
         window.loader = new THREE.GLTFLoader();
         window.loader.setDRACOLoader(window.dracoLoader);
         console.log("[Game] Three.js Loaders initialized.");
 
+        // --- Add Event Listeners Early ---
         this.addEventListeners();
         Input.init(this.controls);
+
+        // --- Start Network Connection ---
         this.initNetwork();
 
+        // --- Start Asset Loading ---
         try {
              await this.loadAssets();
              console.log("[Game] Asset loading phase finished.");
@@ -181,7 +193,7 @@ class Game {
 
             const initialCenterPos = {
                  x: initialFeetPos.x,
-                 y: initialFeetPos.y + h / 2.0,
+                 y: initialFeetPos.y + h / 2.0, // Calculate center Y from feet Y
                  z: initialFeetPos.z
             };
 
@@ -192,9 +204,7 @@ class Game {
                 .lockRotations();
             let body = this.rapierWorld.createRigidBody(bd);
 
-            // ********************************************************
-            // *** FIX: Use RAPIER.ColliderDesc.capsule(halfHeight, radius) ***
-            // ********************************************************
+            // Use RAPIER.ColliderDesc.capsule(halfHeight, radius)
             let cd = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, r)
                  .setFriction(0.7)
                  .setRestitution(0.1)
@@ -205,10 +215,11 @@ class Game {
             console.log(`[Game] Created DYNAMIC Rapier body for player ${playerId} (handle: ${body.handle}) at center`, initialCenterPos);
 
             if (DEBUG_SHOW_PLAYER_COLLIDERS) {
-                const debugGeo = new THREE.CylinderGeometry(r, r, h, 8); // Use Cylinder for debug
+                // Use Cylinder for debug mesh
+                const debugGeo = new THREE.CylinderGeometry(r, r, h, 8);
                 const wireframeMat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
                 const wireframeMesh = new THREE.Mesh(debugGeo, wireframeMat);
-                wireframeMesh.position.set(initialCenterPos.x, initialCenterPos.y, initialCenterPos.z);
+                wireframeMesh.position.set(initialCenterPos.x, initialCenterPos.y, initialCenterPos.z); // Position center
                 this.scene.add(wireframeMesh);
                 this.debugMeshes[playerId] = wireframeMesh;
                 console.log(`[Game] Added debug CYLINDER wireframe for player ${playerId}`);
@@ -290,7 +301,7 @@ class Game {
                 const bodyDesc = RAPIER.RigidBodyDesc.fixed();
                 const mapBody = this.rapierWorld.createRigidBody(bodyDesc);
                 this.rapierWorld.createCollider(colliderDesc, mapBody);
-                console.log(`[Game] === Successfully created Trimesh collider: ${collisionObject.name} ===`);
+                console.log(`[Game] === Successfully created Trimesh map collider: ${collisionObject.name} ===`);
             } catch (e) {
                  console.error(`!!! FAILED Trimesh creation: ${collisionObject.name}:`, e);
                  this.createSimpleGroundCollider();
@@ -349,6 +360,8 @@ class Game {
         } catch (e) { console.error("!!! FAILED simple ground creation:", e); }
     }
 
+
+    // Called by Network.js when 'initialize' event is received
     attemptProceedToGame() {
         console.log(`[Game] attemptProceedToGame called.`);
         console.log(` - AssetsReady: ${assetsAreReady}, NetworkInit: ${networkIsInitialized}, RapierReady: ${window.isRapierReady}, InitData received: ${!!initializationData}`);
@@ -369,6 +382,7 @@ class Game {
         }
     }
 
+    // Setup game state based on server initialization data
      startGamePlay(initData) {
          console.log("[startGamePlay] Start. window.players type:", typeof window.players, "window.ClientPlayer type:", typeof window.ClientPlayer);
          if (!initData || !initData.id || !initData.players) {
@@ -448,11 +462,11 @@ class Game {
                  try {
                      const body = this.rapierWorld.getRigidBody(bodyHandle);
                      if (body) {
-                         const pos = body.translation();
+                         const pos = body.translation(); // Rapier body center
                          const rot = body.rotation();
                          const h = CONFIG.PLAYER_HEIGHT || 1.8;
 
-                         // Assuming mesh origin is center (like Cylinder fallback)
+                         // Sync Visual Mesh - Assuming mesh origin is center
                          player.mesh.position.set(pos.x, pos.y, pos.z);
                          // If mesh origin is at FEET, use:
                          // player.mesh.position.set(pos.x, pos.y - h / 2.0, pos.z);
@@ -521,7 +535,7 @@ class Game {
      cleanupAllPlayers() {
          console.log("[cleanupAllPlayers] Start. window.players type:", typeof window.players, "this.players type:", typeof this.players, "window.ClientPlayer type:", typeof window.ClientPlayer);
          if (typeof window.players !== 'object' || window.players === null) {
-             console.warn("Global window.players invalid. Resetting. Value:", window.players);
+             console.warn("Global window.players invalid during cleanup. Resetting to {}. Value was:", window.players);
              window.players = {};
          }
          this.players = window.players;
@@ -560,18 +574,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-function waitForRapier() { /* ... (keep same as before) ... */
+function waitForRapier() {
     return new Promise((resolve, reject) => {
-        if (window.isRapierReady) { resolve(); }
-        else {
-             const readyListener = () => { window.removeEventListener('rapier-error', errorListener); resolve(); };
-             const errorListener = (event) => { window.removeEventListener('rapier-ready', readyListener); reject(event.detail || new Error("Rapier failed")); };
+        if (window.isRapierReady) {
+             console.log("[waitForRapier] Rapier already initialized.");
+             resolve();
+        } else {
+             console.log("[waitForRapier] Waiting for 'rapier-ready' event...");
+             const readyListener = () => {
+                 console.log("[waitForRapier] 'rapier-ready' event received.");
+                 window.removeEventListener('rapier-error', errorListener); // Clean up error listener
+                 resolve();
+             };
+             const errorListener = (event) => {
+                 console.error("[waitForRapier] 'rapier-error' event received:", event.detail);
+                 window.removeEventListener('rapier-ready', readyListener); // Clean up ready listener
+                 reject(event.detail || new Error("Rapier failed to load"));
+             };
              window.addEventListener('rapier-ready', readyListener, { once: true });
              window.addEventListener('rapier-error', errorListener, { once: true });
         }
     });
 }
-async function startGame() { /* ... (keep same as before) ... */
+
+async function startGame() {
     console.log("[startGame] Attempting Game start...");
     if (!currentGameInstance) {
         stateMachine.transitionTo('loading', {message: "Loading Game..."});
@@ -580,9 +606,13 @@ async function startGame() { /* ... (keep same as before) ... */
         console.log("[startGame] Game instance start() finished.");
     } else { console.warn("[startGame] Instance exists."); }
 }
-function addStateCleanupListener() { /* ... (keep same as before) ... */
+
+function addStateCleanupListener() {
     stateMachine.on('transition', (data) => {
-        if ((data.to === 'homescreen' || (data.to === 'loading' && data.options?.error)) && (data.from === 'playing' || data.from === 'joining')) {
+        // Cleanup when going back to homescreen or loading (with error) from playing/joining
+        if ((data.to === 'homescreen' || (data.to === 'loading' && data.options?.error)) &&
+            (data.from === 'playing' || data.from === 'joining'))
+        {
             console.log(`[State Listener] Cleanup on ${data.from} -> ${data.to}`);
             if (currentGameInstance) { currentGameInstance.cleanupAllPlayers(); }
             if (controls?.isLocked) { controls.unlock(); }
