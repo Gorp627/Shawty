@@ -1,4 +1,4 @@
-// docs/stateMachine.js (REGENERATED v2)
+// docs/stateMachine.js (REGENERATED v2 - No changes needed)
 
 const stateMachine = {
     currentState: 'uninitialized',
@@ -13,11 +13,17 @@ const stateMachine = {
         }
 
         // Prevent redundant transitions, EXCEPT for 'loading' state if new options indicate an error
-        if (newState === this.currentState && !(newState === 'loading' && options.error && !this.options.error)) {
+        // Or if transitioning TO homescreen (allow resetting UI even if technically already 'homescreen')
+        if (newState === this.currentState &&
+            !(newState === 'loading' && options.error && !this.options.error) &&
+            !(newState === 'homescreen') )
+        {
             // Allow re-transition to loading if new error occurs while already loading without error
+            // Allow re-transition TO homescreen to ensure UI reset logic runs
             // console.log(`[StateMachine] State already '${newState}'. Skipping transition.`);
             return;
         }
+
 
         const oldState = this.currentState;
         console.log(`[StateMachine] Transitioning: ${oldState} -> ${newState}`, options); // Log transition and options
