@@ -46,6 +46,7 @@ class Game {
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene();
         window.scene = this.scene; // Make scene global for entities etc.
+        this.scene.background = new THREE.Color(0x87CEEB); // Sky blue color
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
         window.camera = this.camera; // Make camera global
         this.renderer = new THREE.WebGLRenderer({
