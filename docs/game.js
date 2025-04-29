@@ -1,49 +1,51 @@
-// docs/game.js - Main Game Orchestrator (v12 - Truly Complete File)
+// docs/game.js - Main Game Orchestrator (v13 - Pre-Instance Check)
 
 // --- Global Flags and Data ---
-let networkIsInitialized = false; // Set true by Network.js on 'connect'
-let assetsAreReady = false; // Set true by loadManager 'ready' callback
-let initializationData = null; // Set by Network.js 'initialize' handler
-var currentGameInstance = null; // Holds the single Game instance
-var RAPIER = window.RAPIER || null; // Will be populated by rapier_init.js
+let networkIsInitialized = false;
+let assetsAreReady = false;
+let initializationData = null;
+var currentGameInstance = null;
+var RAPIER = window.RAPIER || null;
 var rapierWorld = null;
 var rapierEventQueue = null;
-window.isRapierReady = window.isRapierReady || false; // Flag set by rapier_init.js
+window.isRapierReady = window.isRapierReady || false;
 
-// Debug flags (Set these for testing)
-const USE_SIMPLE_GROUND = false; // <<< Keep false to use actual map VISUALLY
-const DEBUG_FORCE_SIMPLE_GROUND_COLLIDER = false; // <<< SET TO false TO USE MAP COLLIDER, true TO DEBUG WITH FLAT PLANE
-const DEBUG_FIXED_CAMERA = false; // <<< Use dynamic camera linked to player
-const DEBUG_MINIMAL_RENDER_LOOP = false; // <<< Run full game loop
-const DEBUG_FORCE_SPAWN_POS = false; // <<< Force specific spawn position (Use server default)
-const DEBUG_FORCE_SPAWN_Y = 20.0; // <<< Additive Y value if DEBUG_FORCE_SPAWN_POS is true
-const DEBUG_SHOW_PLAYER_COLLIDERS = false; // <<< Show wireframe colliders for players
+// Debug flags
+const USE_SIMPLE_GROUND = false;
+const DEBUG_FORCE_SIMPLE_GROUND_COLLIDER = false; // <<< Set TRUE to test player physics without map collider
+const DEBUG_FIXED_CAMERA = false;
+const DEBUG_MINIMAL_RENDER_LOOP = false;
+const DEBUG_FORCE_SPAWN_POS = false;
+const DEBUG_FORCE_SPAWN_Y = 20.0;
+const DEBUG_SHOW_PLAYER_COLLIDERS = false;
 
 class Game {
-    // --- Constructor ---
+    // Constructor remains the same
     constructor() {
         console.log("[Game Constructor] Running...");
+        // ---> Check global state right at the start <---
+        if (typeof window.players !== 'object' || window.players === null) {
+             console.warn("[Game Constructor] window.players is invalid! Forcing {}. Check config.js load order.");
+             window.players = {};
+        }
+        if (typeof window.keys !== 'object' || window.keys === null) {
+             console.warn("[Game Constructor] window.keys is invalid! Forcing {}. Check config.js load order.");
+             window.keys = {};
+        }
         console.log("[Game Constructor] BEFORE assignment: this.players:", this.players, "window.players:", window.players, "window.ClientPlayer:", typeof window.ClientPlayer);
 
-        // Core Three.js components
-        this.scene = null;
-        this.camera = null;
-        this.renderer = null;
-        this.controls = null;
-        this.clock = null;
-        this.cssRenderer = null; // For optional labels
-        // Game state references (using globals defined in config.js)
-        this.players = window.players || {};
-        this.keys = window.keys || {};
-        this.mapMesh = null; // Reference to loaded map mesh
-        this.playerRigidBodyHandles = {}; // Rapier rigid body handles
-        this.debugMeshes = {}; // Debug meshes for rigid bodies
-        this.mapColliderCreated = false; // Flag to ensure map collider is made only once
+        this.scene = null; this.camera = null; this.renderer = null; this.controls = null;
+        this.clock = null; this.cssRenderer = null;
+        this.players = window.players; // Assign AFTER ensuring window.players is valid
+        this.keys = window.keys;       // Assign AFTER ensuring window.keys is valid
+        this.mapMesh = null; this.playerRigidBodyHandles = {}; this.debugMeshes = {};
+        this.mapColliderCreated = false;
 
         console.log("[Game Constructor] AFTER assignment: this.players type:", typeof this.players, "Value:", this.players);
         console.log("[Game Constructor] FINISHED.");
     }
 
+    // start() method remains the same
     async start() {
         console.log("--- Game Start ---");
         currentGameInstance = this;
@@ -62,8 +64,6 @@ class Game {
         this.renderer.shadowMap.enabled = true;
         window.renderer = this.renderer;
 
-
-        // *** Physics World Init ***
         if (!window.isRapierReady) {
             console.error("Rapier not initialized. Aborting.");
             UIManager?.showError("Physics Engine Failed!", "loading");
@@ -84,30 +84,23 @@ class Game {
         this.controls = new THREE.PointerLockControls(this.camera, this.renderer.domElement);
         window.controls = this.controls;
 
-        this.scene.add(new THREE.AmbientLight(0x606060)); // Slightly brighter ambient
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9); // Slightly less intense directional
+        this.scene.add(new THREE.AmbientLight(0x606060));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
         dirLight.position.set(30, 40, 20);
         dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 2048;
-        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
         this.scene.add(dirLight);
 
-
-        // --- Loaders Init (Global Scope) ---
         window.dracoLoader = new THREE.DRACOLoader();
         window.dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
         window.loader = new THREE.GLTFLoader();
         window.loader.setDRACOLoader(window.dracoLoader);
         console.log("[Game] Three.js Loaders initialized.");
 
-        // --- Add Event Listeners Early ---
         this.addEventListeners();
         Input.init(this.controls);
-
-        // --- Start Network Connection ---
         this.initNetwork();
 
-        // --- Start Asset Loading ---
         try {
              await this.loadAssets();
              console.log("[Game] Asset loading phase finished.");
@@ -123,6 +116,7 @@ class Game {
         this.update();
     }
 
+    // loadAssets() method remains the same
     async loadAssets() {
         return new Promise((resolve, reject) => {
             console.log("[Game] Starting asset loading...");
@@ -165,12 +159,13 @@ class Game {
         });
     }
 
-
+    // initNetwork() method remains the same
     initNetwork() {
         if (typeof Network?.init === 'function') { Network.init(); }
         else { console.error("Network.init is not a function!"); }
     }
 
+    // addEventListeners() method remains the same
     addEventListeners() {
         window.addEventListener('resize', () => {
             if (this.camera && this.renderer) {
@@ -181,6 +176,7 @@ class Game {
         }, false);
     }
 
+    // createPlayerPhysicsBody() method remains the same
     createPlayerPhysicsBody(playerId, initialFeetPos) {
         if (!this.rapierWorld || !RAPIER) {
             console.error(`!!! Cannot create physics body for ${playerId}: Physics missing!`);
@@ -229,7 +225,7 @@ class Game {
         }
     }
 
-
+    // createMapCollider() method remains the same
     createMapCollider(mapSceneObject) {
         if (!this.rapierWorld || !RAPIER || !mapSceneObject) {
             console.error("!!! Cannot create map collider: Physics/Map missing!");
@@ -345,6 +341,7 @@ class Game {
         }
     }
 
+    // createSimpleGroundCollider() method remains the same
     createSimpleGroundCollider() {
         if (!this.rapierWorld || !RAPIER) { console.error("!!! Physics missing for simple ground!"); return; }
         try {
@@ -360,8 +357,7 @@ class Game {
         } catch (e) { console.error("!!! FAILED simple ground creation:", e); }
     }
 
-
-    // Called by Network.js when 'initialize' event is received
+    // attemptProceedToGame() method remains the same
     attemptProceedToGame() {
         console.log(`[Game] attemptProceedToGame called.`);
         console.log(` - AssetsReady: ${assetsAreReady}, NetworkInit: ${networkIsInitialized}, RapierReady: ${window.isRapierReady}, InitData received: ${!!initializationData}`);
@@ -382,7 +378,7 @@ class Game {
         }
     }
 
-    // Setup game state based on server initialization data
+    // startGamePlay() method remains the same
      startGamePlay(initData) {
          console.log("[startGamePlay] Start. window.players type:", typeof window.players, "window.ClientPlayer type:", typeof window.ClientPlayer);
          if (!initData || !initData.id || !initData.players) {
@@ -432,8 +428,9 @@ class Game {
          }
          stateMachine?.transitionTo('playing');
          console.log("[Game] Transitioned to 'playing' state.");
-     } // End startGamePlay
+     }
 
+    // update() method remains the same
     update() {
         requestAnimationFrame(this.update.bind(this));
         const deltaTime = this.clock.getDelta();
@@ -500,8 +497,9 @@ class Game {
                   this.renderer.render(this.scene, this.camera);
             }
         }
-    } // End update()
+    }
 
+    // getPlayerIdByHandle() method remains the same
     getPlayerIdByHandle(handle) {
         for (const id in this.playerRigidBodyHandles) {
             if (this.playerRigidBodyHandles[id] === handle) { return id; }
@@ -509,6 +507,7 @@ class Game {
         return null;
     }
 
+     // cleanupPlayer() method remains the same
      cleanupPlayer(playerId) {
          console.log(`[Game] Cleaning up player: ${playerId}`);
          const player = this.players[playerId];
@@ -532,6 +531,7 @@ class Game {
          }
      }
 
+     // cleanupAllPlayers() method remains the same
      cleanupAllPlayers() {
          console.log("[cleanupAllPlayers] Start. window.players type:", typeof window.players, "this.players type:", typeof this.players, "window.ClientPlayer type:", typeof window.ClientPlayer);
          if (typeof window.players !== 'object' || window.players === null) {
@@ -556,6 +556,7 @@ class Game {
      }
 } // End Game Class
 
+// --- Global Initialization (Revised Flow) ---
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("[DOM Ready] Initializing...")
     if (!UIManager.initialize()) { console.error("!!! UIManager init failed."); return; }
@@ -564,6 +565,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     UIManager.bindStateListeners(stateMachine);
     addStateCleanupListener();
     try {
+        // ---> ADD Check for globals from config.js before Rapier/Game init <---
+        if (typeof window.players === 'undefined' || typeof window.keys === 'undefined') {
+             console.error("!!! Globals 'players' or 'keys' from config.js not defined BEFORE DOMContentLoaded! Check script order/defer attributes.");
+             throw new Error("Core config globals missing.");
+        } else {
+             console.log("[DOM Ready] Core globals 'players' and 'keys' seem to be defined.");
+        }
+
         await waitForRapier();
         console.log("[DOM Ready] Rapier ready.");
         await startGame();
@@ -574,6 +583,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+// Promisified Rapier initialization wait
 function waitForRapier() {
     return new Promise((resolve, reject) => {
         if (window.isRapierReady) {
@@ -597,16 +607,28 @@ function waitForRapier() {
     });
 }
 
+// Function to actually start the game class instance
 async function startGame() {
     console.log("[startGame] Attempting Game start...");
+    // ---> Add check for globals again right before creating Game instance <---
+     if (typeof window.players !== 'object' || window.players === null) {
+         console.error("!!! window.players invalid RIGHT BEFORE new Game()!");
+         window.players = {}; // Force fix
+     }
+     if (typeof window.keys !== 'object' || window.keys === null) {
+         console.error("!!! window.keys invalid RIGHT BEFORE new Game()!");
+         window.keys = {}; // Force fix
+     }
+
     if (!currentGameInstance) {
         stateMachine.transitionTo('loading', {message: "Loading Game..."});
-        const game = new Game();
+        const game = new Game(); // <<< This relies on global players/keys
         await game.start();
         console.log("[startGame] Game instance start() finished.");
     } else { console.warn("[startGame] Instance exists."); }
 }
 
+// Add listener for state transitions to cleanup on disconnect/error
 function addStateCleanupListener() {
     stateMachine.on('transition', (data) => {
         // Cleanup when going back to homescreen or loading (with error) from playing/joining
