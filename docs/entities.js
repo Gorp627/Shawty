@@ -1,5 +1,5 @@
 // entities.js
-// (Modified to sync with Rapier - Added position cache)
+// (Modified to sync with Rapier - Added position cache & Explicit Global)
 class ClientPlayer {
     constructor(playerData) {
         this.id = playerData.id;
@@ -148,3 +148,9 @@ class ClientPlayer {
         }
     }
 }
+
+// ---> ADD THIS LINE <---
+window.ClientPlayer = ClientPlayer;
+// ---> END ADDITION <---
+
+console.log("entities.js loaded and ClientPlayer assigned to window."); // Add log
