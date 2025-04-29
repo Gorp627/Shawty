@@ -355,4 +355,7 @@ class Game {
         const maxToi = 200; // Max distance to check
         const hit = this.rapierWorld.castRay(origin, maxToi, true, null, null, null);
 
-        if (hit
+        if (hit && hit.toi > 0) {
+            return new THREE.Vector3(origin.origin.x, origin.origin.y - hit.toi, origin.origin.z);
+        } else {
+            console.warn("[Game] No safe spawn found via ray
