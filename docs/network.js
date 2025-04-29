@@ -376,6 +376,7 @@ const Network = {
         stateMachine?.transitionTo('homescreen', { errorMessage: `Server is Full!` });
     },
 
+
     // --- Actions ---
     attemptJoinGame: function() {
          console.log("Attempting join...");
