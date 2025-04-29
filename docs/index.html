@@ -32,7 +32,13 @@
             <div id="healthText"></div>
         </div>
         <div id="killMessage"></div> <!-- Kill Messages -->
+        <!-- Crosshair -->
+        <div id="crosshair">+</div>
     </div>
+
+    <!-- CSS2D Renderer Container (for labels - optional) -->
+    <div id="css2dContainer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5;"></div>
+
 
     <!-- Game Canvas -->
     <canvas id="gameCanvas"></canvas> <!-- Hidden by default via CSS -->
@@ -45,6 +51,9 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+    <!-- Optional: CSS2DRenderer for labels -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS2DRenderer.js"></script> -->
+
 
     <!-- Rapier Physics Engine Init (as module) -->
     <!-- This MUST come before game logic that depends on RAPIER -->
