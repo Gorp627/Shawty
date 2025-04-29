@@ -22,6 +22,8 @@ const DEBUG_SHOW_PLAYER_COLLIDERS = false; // <<< Show wireframe colliders for p
 class Game {
     // --- Constructor ---
     constructor() {
+           console.log("[Game Constructor] Running...");
+        console.log("[Game Constructor] BEFORE assignment: this.players:", this.players, "window.players:", window.players, "window.ClientPlayer:", typeof window.ClientPlayer);
         // Core Three.js components
         this.scene = null;
         this.camera = null;
