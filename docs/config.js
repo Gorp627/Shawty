@@ -1,4 +1,4 @@
-// docs/config.js (Added Shooting/Effect Constants - Reduced Gravity Debug)
+// docs/config.js (Ensure Global Flags Declared ONCE Here - v3)
 
 const CONFIG = {
     SERVER_URL: 'https://gametest-psxl.onrender.com', // Ensure this points to your Render server URL
@@ -47,21 +47,20 @@ const CONFIG = {
     PLAYER_MOVE_THRESHOLD_SQ: 0.0001 // Min distance squared to trigger network update
 };
 
-// --- Global Game Variables ---
-// Keep these as they are used across modules
-let players = {}; // Stores ClientPlayer instances (visuals) or local player data object
-let keys = {}; // Input state
+// --- Global Game Variables / Objects ---
+// Declare variables that will be assigned objects/values by other scripts
+let players = {};
+let keys = {};
 let localPlayerId = null;
 let localPlayerName = 'Anonymous';
 let localPlayerPhrase = '...';
 let lastDashTime = 0;
-let lastShootTime = 0; // Added for shoot cooldown
+let lastShootTime = 0;
 
-// These will be assigned by game.js or other init scripts
 let scene, camera, renderer, controls, clock, loader, dracoLoader;
-var RAPIER = window.RAPIER || null; // Will be populated by rapier_init.js
-var rapierWorld = null; // Will be populated by game.js
-var rapierEventQueue = null; // Will be populated by game.js
+var RAPIER = window.RAPIER || null; // Use var or let, check window first
+var rapierWorld = null;
+var rapierEventQueue = null;
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
 let mapMesh = null; // Reference to the visual map Object3D
@@ -69,10 +68,11 @@ let gunMesh = null; // Reference to the local player's gun model
 let gunSoundBuffer = null; // Loaded gunshot sound
 let listener; // THREE.AudioListener
 
-// Flags used by game.js / network.js
+// --- Global State Flags ---
+// Declare state flags ONCE here using 'let'
 let assetsAreReady = false;
-let networkIsInitialized = false;
+let networkIsInitialized = false; // <<< DECLARED HERE
 let physicsIsReady = false;
-let initializationData = null; // From server
+let initializationData = null; // Data from server
 
-console.log("config.js loaded (Using Global THREE/RAPIER)");
+console.log("config.js loaded (Declares Globals)");
