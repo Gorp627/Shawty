@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (CORRECTED Map Collider v7 - Fixed Startup Flow)
+// docs/game.js - Main Game Orchestrator (CORRECTED Map Collider v8 - Robust Cleanup)
 
 // --- Global Flags and Data ---
 let networkIsInitialized = false; // Set true by Network.js on 'connect'
@@ -30,12 +30,14 @@ class Game {
         this.clock = null;
         this.cssRenderer = null; // For optional labels
         // Game state references (using globals defined in config.js)
-        this.players = window.players; // Reference global players object
-        this.keys = window.keys; // Reference global keys object
+        // Initialize the instance property, but always re-sync with global in critical functions
+        this.players = window.players || {};
+        this.keys = window.keys || {};
         this.mapMesh = null; // Reference to loaded map mesh
         this.playerRigidBodyHandles = {}; // Rapier rigid body handles
         this.debugMeshes = {}; // Debug meshes for rigid bodies
         this.mapColliderCreated = false; // Flag to ensure map collider is made only once
+        console.log("[Game Constructor] Initializing game instance. Initial window.players type:", typeof window.players);
     }
 
     async start() {
@@ -478,13 +480,16 @@ class Game {
          localPlayerId = initData.id;
          console.log(`[Game] Local player ID set to: ${localPlayerId}`);
 
-         // Clear any existing players/bodies from previous sessions (important!)
-         this.cleanupAllPlayers();
+         // --- Call cleanup *before* processing new players ---
+         this.cleanupAllPlayers(); // <<< Moved before the loop
 
          // Process all players from the initialization data
          for (const playerId in initData.players) {
              const playerData = initData.players[playerId];
-             if (!playerData) continue;
+             if (!playerData) {
+                 console.warn(`[Game Init] Skipping invalid player data for ID: ${playerId}`);
+                 continue;
+             };
 
              console.log(`[Game] Processing init player: ${playerData.name} (${playerId})`);
 
@@ -587,38 +592,41 @@ class Game {
 
             // *** Synchronize THREE.js Meshes with Rapier Bodies ***
             for (const playerId in this.players) {
-                const player = this.players[playerId];
-                const bodyHandle = this.playerRigidBodyHandles[playerId];
+                 // Ensure player exists before accessing mesh/handle
+                 const player = this.players[playerId];
+                 if (!player) continue;
 
-                if (player?.mesh && bodyHandle !== undefined && bodyHandle !== null) {
-                    try {
-                        const body = this.rapierWorld.getRigidBody(bodyHandle);
-                        if (body) {
-                            const position = body.translation(); // This is the CENTER of the Rapier body
-                            const rotation = body.rotation(); // This is a Quaternion
+                 const bodyHandle = this.playerRigidBodyHandles[playerId];
 
-                            // Adjust position for THREE mesh based on capsule height
-                            // THREE mesh origin should be at the base/feet typically
-                            const playerHeight = CONFIG.PLAYER_HEIGHT || 1.8;
-                            player.mesh.position.set(position.x, position.y - playerHeight / 2.0, position.z);
+                 if (player.mesh && bodyHandle !== undefined && bodyHandle !== null) {
+                     try {
+                         const body = this.rapierWorld.getRigidBody(bodyHandle);
+                         if (body) {
+                             const position = body.translation(); // This is the CENTER of the Rapier body
+                             const rotation = body.rotation(); // This is a Quaternion
 
-                            // Apply Rapier rotation quaternion directly to THREE mesh
-                            player.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+                             // Adjust position for THREE mesh based on capsule height
+                             // THREE mesh origin should be at the base/feet typically
+                             const playerHeight = CONFIG.PLAYER_HEIGHT || 1.8;
+                             player.mesh.position.set(position.x, position.y - playerHeight / 2.0, position.z);
 
-                            // Update debug mesh if it exists
-                            if (DEBUG_SHOW_PLAYER_COLLIDERS && this.debugMeshes[playerId]) {
-                                // Debug mesh center should match Rapier body center
-                                this.debugMeshes[playerId].position.set(position.x, position.y, position.z);
-                                this.debugMeshes[playerId].quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
-                            }
-                        } else {
-                             // console.warn(`[Game Sync] Rapier body not found for player ${playerId} (handle ${bodyHandle}) during sync.`);
-                        }
-                    } catch (e) {
-                        console.error(`[Game Sync] Error updating mesh for player ${playerId}:`, e);
-                    }
-                }
-            }
+                             // Apply Rapier rotation quaternion directly to THREE mesh
+                             player.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+
+                             // Update debug mesh if it exists
+                             if (DEBUG_SHOW_PLAYER_COLLIDERS && this.debugMeshes[playerId]) {
+                                 // Debug mesh center should match Rapier body center
+                                 this.debugMeshes[playerId].position.set(position.x, position.y, position.z);
+                                 this.debugMeshes[playerId].quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+                             }
+                         } else {
+                              // console.warn(`[Game Sync] Rapier body not found for player ${playerId} (handle ${bodyHandle}) during sync.`);
+                         }
+                     } catch (e) {
+                         console.error(`[Game Sync] Error updating mesh for player ${playerId}:`, e);
+                     }
+                 }
+             }
 
 
             // *** Camera Update (Follow Local Player) ***
@@ -673,10 +681,19 @@ class Game {
      cleanupPlayer(playerId) {
          console.log(`[Game] Cleaning up player: ${playerId}`);
          // Remove visual mesh
-         if (this.players[playerId]) {
-             this.players[playerId].remove(); // Calls scene.remove and dispose
-             delete this.players[playerId];
+         const player = this.players[playerId]; // Get reference from instance property
+         if (player) {
+             player.remove(); // Calls scene.remove and dispose
+             // Delete from the global object that this.players references
+             if (window.players && window.players[playerId]) {
+                  delete window.players[playerId];
+             } else {
+                  console.warn(`[Game cleanupPlayer] window.players[${playerId}] was already missing?`);
+             }
+         } else {
+              console.warn(`[Game cleanupPlayer] Player object for ${playerId} not found in this.players`);
          }
+
          // Remove debug mesh
          if (this.debugMeshes[playerId]) {
              this.scene.remove(this.debugMeshes[playerId]);
@@ -694,35 +711,62 @@ class Game {
                       // console.log(`[Game] Removed Rapier body for ${playerId} (handle: ${bodyHandle})`);
                   }
               } catch (e) {
+                  // Log error but continue cleanup
                   console.error(`[Game] Error removing Rapier body for ${playerId} (handle: ${bodyHandle}):`, e);
               }
+              // Still delete the handle reference even if removal failed
               delete this.playerRigidBodyHandles[playerId];
          }
-     }
+     } // End cleanupPlayer
 
+     // *** MODIFIED cleanupAllPlayers ***
      cleanupAllPlayers() {
-         console.log("[Game] Cleaning up ALL players..."); 
-         if (!this.players || typeof this.players !== 'object') {
-             console.warn("[Game] cleanupAllPlayers called but this.players is not a valid object. Resetting. Value:", this.players);
-             // Attempt to recover by ensuring window.players is an object
+         console.log("[Game] Cleaning up ALL players...");
+
+         // ---> Ensure window.players is an object <---
+         if (typeof window.players !== 'object' || window.players === null) {
+             console.warn("[Game] Global window.players was invalid during cleanup. Resetting to {}. Value was:", window.players);
              window.players = {};
-             this.players = window.players; // Re-link the reference in this instance
-             // Handles are cleared below anyway, so just preventing the Object.keys error is key.
          }
+         // ---> Always re-link this.players to the global object within this function's scope <---
+         this.players = window.players;
+
+         // Optional Debug Log:
+         console.log("[Game] cleanupAllPlayers: typeof this.players is now:", typeof this.players, "Value:", this.players);
+
+         // Now, this check should be redundant if the above worked, but keep for safety:
+         if (!this.players) { // Simplified check now, just needs to not be null/undefined
+              console.error("!!! [Game] CRITICAL: Failed to ensure this.players is an object in cleanupAllPlayers!");
+              // Avoid proceeding if it's still broken
+              this.playerRigidBodyHandles = {}; // Clear handles anyway
+              this.debugMeshes = {}; // Clear meshes anyway
+              return; // Exit early
+         }
+
          // Iterate over a copy of keys to avoid issues while modifying the object
-         const playerIds = Object.keys(this.players);
-         playerIds.forEach(id => this.cleanupPlayer(id));
-         // Ensure handles are also cleared if somehow out of sync
+         const playerIds = Object.keys(this.players); // Line 706 - should be safe now
+         console.log(`[Game cleanupAllPlayers] Found player IDs to clean: [${playerIds.join(', ')}]`);
+         playerIds.forEach(id => {
+              // Add extra check inside the loop too? Paranoia level high.
+              if (this.players && this.players[id]) {
+                 this.cleanupPlayer(id); // Call the cleanup function for each player
+              } else {
+                 console.warn(`[Game] cleanupAllPlayers: Player ID ${id} became invalid during iteration? Skipping cleanupPlayer.`);
+              }
+         });
+
+         // Ensure handles and debug meshes are also cleared if somehow out of sync
          this.playerRigidBodyHandles = {};
          this.debugMeshes = {};
-         console.log("[Game] All players cleaned up.");
-     }
+         console.log("[Game] All players and related data cleaned up.");
+     } // End cleanupAllPlayers
 
 
 } // End Game Class
 
 // --- Global Initialization (Revised Flow) ---
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log("[DOM Ready] Initializing...")
     // Initialize UI Manager first
     if (!UIManager.initialize()) {
          console.error("!!! UIManager initialization failed. Aborting game setup.");
