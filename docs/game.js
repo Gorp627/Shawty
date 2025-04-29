@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (v14 - Defer Init Reliably - COMPLETE FILE)
+// docs/game.js - Main Game Orchestrator (v15 - Truly Complete File with Deferred Init)
 
 // --- Global Flags and Data ---
 let networkIsInitialized = false; // Set true by Network.js on 'connect'
