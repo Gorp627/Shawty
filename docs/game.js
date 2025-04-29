@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (Uses Global Scope - v10 Complete and Verified)
+// docs/game.js - Main Game Orchestrator (Uses Global Scope - v11 Complete and Verified)
 
 // --- Global variables like networkIsInitialized, assetsAreReady, etc., ---
 // --- are DECLARED in config.js and accessed directly here. ---
@@ -41,6 +41,7 @@ class Game {
         // Ensure THREE is loaded globally before proceeding
         if (typeof THREE === 'undefined') {
             console.error("!!! CRITICAL: THREE.js library not loaded before Game.init()!");
+            // Display fatal error to user
             document.body.innerHTML = "<p style='color:red; text-align:center;'>FATAL ERROR: Graphics Library (THREE.js) failed to load. Check index.html script order.</p>";
             return; // Stop initialization
         }
@@ -145,7 +146,7 @@ class Game {
         // 12. Start the Render Loop
         this.update();
 
-        console.log("--- Game Init Sequence Complete (Now waiting for Assets/Network Initialization) ---");
+        console.log("--- Game Init Sequence Complete (Waiting for Assets/Network/InitData) ---");
     }
 
     // --- Setup Sub-functions ---
@@ -193,7 +194,7 @@ class Game {
         console.log("[Game] Asset Load Manager reported 'ready'.");
         assetsAreReady = true; // Set global flag
         this.createMapCollider(); // Create collider now map asset is loaded and Rapier is ready
-        this.attemptProceedToGame(); // Check if network is also ready
+        this.attemptProceedToGame(); // Check prerequisites again
     }
 
     onLoadError(errorData) {
@@ -202,26 +203,44 @@ class Game {
         stateMachine.transitionTo('loading', { message: `Asset Load Failed!<br/>${errorData.message}`, error: true });
     }
 
-    // --- Network Callback Trigger ---
-    // This function is called when Assets, Physics, OR Network becomes ready
+    // --- Check Prerequisites & Transition Logic ---
     attemptProceedToGame() {
+        // This is called whenever Assets, Physics, or Network state might have changed.
         // Uses global flags: assetsAreReady, physicsIsReady, networkIsInitialized, initializationData
+
         console.log(`[Game] Checking prerequisites: Assets=${assetsAreReady}, Physics=${physicsIsReady}, Network=${networkIsInitialized}, InitData=${!!initializationData}`);
+
+        // Condition 1: Everything ready for ACTUAL GAMEPLAY?
         if (assetsAreReady && physicsIsReady && networkIsInitialized && initializationData) {
-            console.log("[Game] All prerequisites met! Starting gameplay...");
-            this.startGamePlay(initializationData); // Pass data to start function
-            initializationData = null; // Consume the init data (clear global)
-        } else {
-            // Update loading message based on what's missing
-            let waitMsg = "Initializing...";
-            if (!assetsAreReady) waitMsg = "Loading Assets...";
-            else if (!physicsIsReady) waitMsg = "Loading Physics...";
-            else if (!networkIsInitialized) waitMsg = "Connecting...";
-            else if (!initializationData) waitMsg = "Waiting for Server Data...";
-            // Use global stateMachine safely
-            if (typeof stateMachine !== 'undefined' && !stateMachine.is('error')) { // Don't overwrite error messages
-                 stateMachine.transitionTo('loading', { message: waitMsg });
-             }
+            // Prevent starting gameplay multiple times if somehow called again after starting
+            if (!stateMachine.is('playing')) {
+                console.log("[Game] All prerequisites met! Starting gameplay...");
+                this.startGamePlay(initializationData); // Pass data to start function
+                initializationData = null; // Consume the init data (clear global)
+            } else {
+                 console.log("[Game] Already in playing state, ignoring redundant attemptProceedToGame for gameplay start.");
+            }
+        }
+        // Condition 2: Ready for HOMESCREEN, but not gameplay yet?
+        // Need Assets, Physics, and a Network connection established. Don't need InitData yet.
+        // Also check if we are currently in the 'loading' state to prevent unnecessary transitions.
+        else if (assetsAreReady && physicsIsReady && networkIsInitialized && !initializationData && stateMachine.is('loading')) {
+            console.log("[Game] Core components ready, transitioning to Homescreen...");
+            stateMachine.transitionTo('homescreen'); // <<< TRANSITION TO HOMESCREEN
+            // UIManager listener for 'homescreen' will handle showing the UI elements.
+        }
+        // Condition 3: Still waiting for something...
+        else {
+            // Update loading message if still in loading state and not showing an error
+            if (stateMachine.is('loading') && !stateMachine.options.error) {
+                let waitMsg = "Initializing...";
+                if (!assetsAreReady) waitMsg = "Loading Assets...";
+                else if (!physicsIsReady) waitMsg = "Loading Physics...";
+                else if (!networkIsInitialized) waitMsg = "Connecting...";
+                // No need to mention InitData here, user needs homescreen first
+                stateMachine.transitionTo('loading', { message: waitMsg }); // Re-transition to update message
+            }
+            // console.log("[Game] Prerequisites not yet fully met. Waiting..."); // Less spammy log
         }
     }
 
@@ -305,7 +324,7 @@ class Game {
                 }
             }
         }
-         console.log("[Game] Finished processing initial player data.");
+         console.log("[Game] Finished initial player processing.");
     }
 
     // --- Physics Body Creation ---
@@ -472,7 +491,8 @@ class Game {
         // Remove visual mesh
         if (player && player.mesh && scene) {
              scene.remove(player.mesh);
-             // TODO: Consider more thorough disposal if needed, depends on cloning strategy
+             // Consider more thorough disposal here if performance becomes an issue
+             // player.mesh.traverse(c => { if(c.geometry) c.geometry.dispose(); if(c.material) c.material.dispose(); });
              player.mesh = null; // Clear reference
         }
         if (players[playerId]) delete players[playerId]; // Remove from client state map
@@ -518,7 +538,7 @@ class Game {
     // --- Main Update Loop ---
     update() {
         requestAnimationFrame(this.update.bind(this));
-        // Use global clock, renderer, scene, camera, stateMachine, rapierWorld, RAPIER, etc.
+        // Use global clock, renderer, scene, camera, stateMachine, rapierWorld, RAPIER, players, localPlayerId, updateLocalPlayer, Effects, CONFIG, THREE
         if (!this.clock || !this.renderer || !this.scene || !this.camera) return; // Core components missing
 
         const deltaTime = this.clock.getDelta();
@@ -655,4 +675,4 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { once: true });
     }
 });
-console.log("game.js loaded (Uses Global Scope - v10 Complete)");
+console.log("game.js loaded (Uses Global Scope - v11 Complete)");
