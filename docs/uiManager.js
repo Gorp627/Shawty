@@ -1,4 +1,4 @@
-// docs/uiManager.js (With Debugging Logs and Fixes - REGENERATED)
+// docs/uiManager.js (With Debugging Logs and Fixes - REGENERATED - Added Join Button Listener)
 
 const UIManager = {
      loadingScreen: null,
@@ -66,6 +66,20 @@ const UIManager = {
          if (!this.healthBarFill || !this.healthText) console.warn("[UIManager] Health bar elements ('healthBarFill' or 'healthText') not found.");
          if (!this.killMessageDiv) console.warn("[UIManager] Optional element 'killMessage' not found.");
 
+         // Add event listener for the join button
+         if (this.joinButton) {
+              this.joinButton.addEventListener('click', () => {
+                  if (Network && typeof Network.attemptJoinGame === 'function') {
+                      Network.attemptJoinGame();
+                  } else {
+                       console.error("!!! Join button clicked, but Network.attemptJoinGame is not available!");
+                       this.showError("Network system error.", "homescreen");
+                  }
+              });
+         } else {
+              console.error("!!! Join button element not found during init!");
+         }
+
 
          console.log("[UIManager] Initialized successfully.");
          return true; // Indicate success
@@ -80,11 +94,15 @@ const UIManager = {
          // Add logging to each state handler
          stateMachine.on('loading', (opts = {}) => {
              console.log("[UIManager Listener] >> 'loading' State Triggered. Options:", opts);
-             this.showLoading(opts.message, opts.error);
+             this.showLoading(opts.message || "Loading...", opts.error || false); // Provide defaults
          });
          stateMachine.on('homescreen', (opts = {}) => {
              console.log("[UIManager Listener] >> 'homescreen' State Triggered. Options:", opts);
              this.showHomescreen(opts.playerCount);
+             // Handle potential error message passed from disconnect etc.
+             if(opts.errorMessage) {
+                 this.showError(opts.errorMessage, 'homescreen');
+             }
          });
          stateMachine.on('joining', (opts = {}) => {
              console.log("[UIManager Listener] >> 'joining' State Triggered. Options:", opts);
@@ -146,15 +164,18 @@ const UIManager = {
 
          // Reset join button state (important when returning to homescreen)
          if (this.joinButton) {
-             this.joinButton.disabled = false;
-             this.joinButton.textContent = "Join Game";
+             // Enable button only if network seems okay (or let network connect handler enable it)
+             this.joinButton.disabled = !(Network?.isConnected() || !networkIsInitialized); // Disable if explicitly disconnected, enable otherwise/initially
+             this.joinButton.textContent = Network?.isConnected() ? "Join Game" : "Connecting..."; // Reflect status
+             if(!Network?.isConnected() && networkIsInitialized) { this.joinButton.textContent = "Disconnected"; } // Specific message if known disconnected
          }
          // Update player count display
          if (this.playerCountSpan) {
              this.playerCountSpan.textContent = displayCount;
          }
          // Clear any previous error message *before* showing the screen
-         this.clearError('homescreen');
+         // Don't clear if an error message was passed specifically for homescreen display (handled in listener)
+          this.clearError('homescreen'); // Clear previous errors when showing homescreen
 
          // Show the homescreen
          this.homeScreen.classList.add('visible');
@@ -170,11 +191,11 @@ const UIManager = {
          console.log(`[UIManager] showJoining called.`);
          // Ensure homescreen is technically visible if called directly
          // Note: This doesn't hide other screens, assumes already on homescreen
-         this.homeScreen.classList.add('visible');
+         this.homeScreen.classList.add('visible'); // Make sure it's visible
          this.joinButton.disabled = true;
          // Set text based on network status (handled in Network.attemptJoinGame)
-         // this.joinButton.textContent = "Joining..."; // Or "Connecting..."
-         console.log("[UIManager] Join button state should be updated by Network.attemptJoinGame.");
+         this.joinButton.textContent = Network?.isConnected() ? "Joining..." : "Connecting...";
+         console.log("[UIManager] Join button state updated for joining/connecting.");
      },
 
      showGame: function() {
@@ -202,6 +223,12 @@ const UIManager = {
          // Optionally clear kill messages on game start
          this.clearKillMessage();
 
+         // Attempt to lock pointer automatically
+         if(controls && !controls.isLocked) {
+              console.log("[UIManager] Attempting Pointer Lock on entering game...");
+              controls.lock(); // Input listener will handle UI changes (.locked class)
+         }
+
          // *** ADDED: Verification Logs ***
          console.log("--- UI State Verification After showGame ---");
          console.log("LoadingScreen hidden? Classes:", this.loadingScreen.className, "Visible:", window.getComputedStyle(this.loadingScreen).display);
@@ -225,6 +252,7 @@ const UIManager = {
              const fillWidth = `${hp}%`;
              const backgroundPos = `${100 - hp}% 0%`; // Gradient position
              this.healthBarFill.style.width = fillWidth;
+             // Only change background position if using gradient fill, otherwise width is enough
              this.healthBarFill.style.backgroundPosition = backgroundPos;
              this.healthText.textContent = `${hp}%`;
          } else {
@@ -246,9 +274,22 @@ const UIManager = {
          console.warn(`[UIManager] showError called for screen '${screen}': "${text}"`);
 
          if (screen === 'homescreen' && this.homeScreenError) {
-             this.homeScreenError.textContent = text;
+             this.homeScreenError.innerHTML = text; // Use innerHTML for <br/>
              this.homeScreenError.style.display = 'block'; // Ensure error is visible
              console.log("[UIManager] Displayed error on homescreen.");
+             // Also ensure join button reflects error state if applicable
+             if(this.joinButton) {
+                  this.joinButton.disabled = true; // Usually disable on error
+                  if (text.toLowerCase().includes("connect")) {
+                      this.joinButton.textContent = "Connection Failed";
+                  } else if (text.toLowerCase().includes("full")) {
+                       this.joinButton.textContent = "Server Full";
+                  } else if (text.toLowerCase().includes("network system error")) {
+                       this.joinButton.textContent = "System Error";
+                  } else {
+                       this.joinButton.textContent = "Error"; // Generic error text
+                  }
+             }
          } else if (screen === 'loading' && this.loadingScreen) {
              // Loading screen error handled within showLoading
              this.showLoading(text, true); // Call showLoading with error flag
@@ -294,6 +335,7 @@ const UIManager = {
 
              this.killMessageTimeout = setTimeout(() => {
                  if (this.killMessageDiv) this.killMessageDiv.classList.remove('visible'); // Hide after duration
+                 this.killMessageTimeout = null; // Clear timeout ID
              }, duration);
          } else {
              console.warn("[UIManager] killMessageDiv not found, cannot show message:", message);
@@ -302,6 +344,7 @@ const UIManager = {
 
      clearKillMessage: function() {
          if (this.killMessageTimeout) clearTimeout(this.killMessageTimeout);
+         this.killMessageTimeout = null;
          if (this.killMessageDiv) this.killMessageDiv.classList.remove('visible');
      }
 };
