@@ -1,4 +1,4 @@
-// docs/uiManager.js (With Debugging Logs and Fixes - Uses Global Scope - REGEN v4 - Explicit Hide - FULL CODE)
+// docs/uiManager.js (With Debugging Logs and Fixes - Uses Global Scope - REGEN v5 - Added Join Button Listener - FULL CODE)
 
 const UIManager = {
      // Declare properties
@@ -59,6 +59,28 @@ const UIManager = {
              return false; // Indicate failure
          }
 
+         // --- *** ADDED: Attach Event Listener to Join Button *** ---
+         if (this.joinButton) {
+             this.joinButton.addEventListener('click', () => {
+                 console.log("[UIManager] Join Game button clicked!");
+                 // Ensure Network object and attemptJoinGame function exist before calling
+                 // Access global Network object safely
+                 if (typeof Network !== 'undefined' && typeof Network.attemptJoinGame === 'function') {
+                     Network.attemptJoinGame(); // Call the function to start joining process
+                 } else {
+                     console.error("!!! Cannot attempt join: Network object or attemptJoinGame function not found!");
+                     // Optionally show an error to the user via UIManager
+                     this.showError("Internal Error - Cannot initiate join.", "homescreen");
+                 }
+             });
+             console.log("[UIManager] Attached click listener to joinButton.");
+         } else {
+              console.error("!!! UIManager: Could not attach listener, joinButton element not found during init!");
+              // This case should have been caught by essentialFound check, but added safety.
+         }
+         // --- *** END Added Listener *** ---
+
+
          // Check optional elements and log warnings if missing
          if (!this.playerCountSpan) console.warn("[UIManager] Optional element 'playerCount' not found.");
          if (!this.playerNameInput) console.warn("[UIManager] Optional element 'playerNameInput' not found.");
@@ -82,19 +104,19 @@ const UIManager = {
          console.log("[UIManager] Binding state listeners...");
          // Add logging to each state handler
          sm.on('loading', (opts = {}) => {
-             console.log("[UIManager Listener] >> 'loading' State Triggered. Options:", opts);
+             // console.log("[UIManager Listener] >> 'loading' State Triggered. Options:", opts); // Less spammy log
              this.showLoading(opts.message, opts.error);
          });
          sm.on('homescreen', (opts = {}) => {
-             console.log("[UIManager Listener] >> 'homescreen' State Triggered. Options:", opts);
+             // console.log("[UIManager Listener] >> 'homescreen' State Triggered. Options:", opts); // Less spammy log
              this.showHomescreen(opts.playerCount);
          });
          sm.on('joining', (opts = {}) => {
-             console.log("[UIManager Listener] >> 'joining' State Triggered. Options:", opts);
+             // console.log("[UIManager Listener] >> 'joining' State Triggered. Options:", opts); // Less spammy log
              this.showJoining(); // Updates button text on homescreen
          });
          sm.on('playing', () => {
-             console.log("[UIManager Listener] >> 'playing' State Triggered.");
+             // console.log("[UIManager Listener] >> 'playing' State Triggered."); // Less spammy log
              this.showGame();
          });
          console.log("[UIManager] State listeners bound successfully.");
@@ -134,20 +156,20 @@ const UIManager = {
          // Make loading screen visible using both style and class
          this.loadingScreen.style.display = 'flex'; // Use flex as defined in CSS for .visible
          this.loadingScreen.classList.add('visible');
-         console.log("[UIManager] Loading screen shown.");
+         // console.log("[UIManager] Loading screen shown."); // Less spammy log
      },
 
      showHomescreen: function(pCount = '?') {
          if (!this.loadingScreen || !this.homeScreen || !this.gameUI || !this.canvas) { console.error("!!! UIManager: Cannot showHomescreen - elements missing."); return; }
          const displayCount = pCount ?? '?';
-         console.log(`[UIManager] showHomescreen called. PlayerCount: ${displayCount}`);
+         // console.log(`[UIManager] showHomescreen called. PlayerCount: ${displayCount}`); // Less spammy log
 
          // --- Explicitly Hide Other Screens ---
-         console.log("[UIManager] Hiding loadingScreen...");
+         // console.log("[UIManager] Hiding loadingScreen..."); // Less spammy log
          this.loadingScreen.classList.remove('visible');
          this.loadingScreen.style.display = 'none'; // FORCE display: none
 
-         console.log("[UIManager] Hiding gameUI and canvas...");
+         // console.log("[UIManager] Hiding gameUI and canvas..."); // Less spammy log
          this.gameUI.classList.remove('visible');
          this.gameUI.style.display = 'none'; // Explicit hide
          this.canvas.style.visibility = 'hidden';
@@ -160,16 +182,16 @@ const UIManager = {
          this.clearError('homescreen');
 
          // --- Explicitly Show Homescreen ---
-         console.log("[UIManager] Showing homeScreen...");
+         // console.log("[UIManager] Showing homeScreen..."); // Less spammy log
          this.homeScreen.style.display = 'flex'; // Use flex as defined in CSS for .visible
          this.homeScreen.classList.add('visible');
 
          // Verification log
-         setTimeout(() => {
-             const loadingStyle = window.getComputedStyle(this.loadingScreen).display;
-             const homeStyle = window.getComputedStyle(this.homeScreen).display;
-             console.log(`[UI Check After showHomescreen] Loading display: ${loadingStyle}, Home display: ${homeStyle}`);
-         }, 50); // Short delay to allow rendering potentially
+         // setTimeout(() => {
+         //     const loadingStyle = window.getComputedStyle(this.loadingScreen).display;
+         //     const homeStyle = window.getComputedStyle(this.homeScreen).display;
+         //     console.log(`[UI Check After showHomescreen] Loading display: ${loadingStyle}, Home display: ${homeStyle}`);
+         // }, 50); // Short delay to allow rendering potentially
      },
 
      showJoining: function() {
@@ -179,8 +201,7 @@ const UIManager = {
          this.homeScreen.style.display = 'flex';
          this.homeScreen.classList.add('visible');
          this.joinButton.disabled = true;
-         // Text set by Network.attemptJoinGame based on connection status
-         // e.g., Network sets this.joinButton.textContent = "Connecting..." or "Joining..."
+         // Text ("Connecting..." or "Joining...") is set by Network.attemptJoinGame
      },
 
      showGame: function() {
@@ -188,10 +209,8 @@ const UIManager = {
          console.log("[UIManager] showGame called.");
 
          // Hide other screens explicitly
-         this.loadingScreen.classList.remove('visible');
-         this.loadingScreen.style.display = 'none';
-         this.homeScreen.classList.remove('visible');
-         this.homeScreen.style.display = 'none';
+         this.loadingScreen.classList.remove('visible'); this.loadingScreen.style.display = 'none';
+         this.homeScreen.classList.remove('visible'); this.homeScreen.style.display = 'none';
 
          // Show game UI overlay and canvas explicitly
          this.gameUI.style.display = 'block'; // Or 'flex' if needed, assuming block default for overlay container
@@ -208,11 +227,11 @@ const UIManager = {
          this.clearKillMessage(); // Clear on entering game
 
          // Verification log
-         setTimeout(() => {
-             const gameUIVis = window.getComputedStyle(this.gameUI).visibility;
-             const canvasVis = window.getComputedStyle(this.canvas).visibility;
-             console.log(`[UI Check After showGame] GameUI visible: ${gameUIVis}, Canvas visible: ${canvasVis}`);
-         }, 100);
+         // setTimeout(() => {
+         //     const gameUIVis = window.getComputedStyle(this.gameUI).visibility;
+         //     const canvasVis = window.getComputedStyle(this.canvas).visibility;
+         //     console.log(`[UI Check After showGame] GameUI: ${gameUIVis}, Canvas: ${canvasVis}`);
+         // }, 100);
      },
 
      // --- UI Element Updates ---
@@ -253,11 +272,11 @@ const UIManager = {
          if (screen === 'homescreen' && this.homeScreenError) {
              this.homeScreenError.innerHTML = text; // Use innerHTML to allow basic formatting like <br>
              this.homeScreenError.style.display = 'block'; // Ensure error is visible
-             console.log("[UIManager] Displayed error on homescreen.");
+             // console.log("[UIManager] Displayed error on homescreen."); // Less spammy
          } else if (screen === 'loading' && this.loadingScreen) {
              // Use the dedicated showLoading function which handles error styling
              this.showLoading(text, true);
-             console.log("[UIManager] Displayed error on loading screen via showLoading.");
+             // console.log("[UIManager] Displayed error on loading screen via showLoading."); // Less spammy
          } else {
              console.error(`!!! UIManager: Error display target screen '${screen}' not handled or element missing for message: ${text}`);
              // Fallback? Maybe a general alert for critical errors?
@@ -273,7 +292,7 @@ const UIManager = {
              if (this.homeScreenError.style.display !== 'none') {
                  this.homeScreenError.textContent = ''; // Clear text content
                  this.homeScreenError.style.display = 'none'; // Hide error element
-                 // console.log("[UIManager] Cleared homescreen error text and hid element."); // Less spammy
+                 // console.log("[UIManager] Cleared homescreen error text and hid element."); // Less spammy log
              }
          } else if (screen === 'loading' && this.loadingScreen) {
              // Clearing loading error means removing the 'error' class and resetting text color
@@ -281,7 +300,7 @@ const UIManager = {
                   this.loadingScreen.classList.remove('error');
                   const pElement = this.loadingScreen.querySelector('p');
                   if (pElement) pElement.style.color = ''; // Reset text color to default
-                  // console.log("[UIManager] Cleared loading screen error style."); // Less spammy
+                  // console.log("[UIManager] Cleared loading screen error style."); // Less spammy log
              }
          }
          // No need to log if nothing was actually cleared
@@ -316,4 +335,4 @@ const UIManager = {
 if (typeof window !== 'undefined') {
     window.UIManager = UIManager;
 }
-console.log("uiManager.js loaded (Using Global Scope - v4 Explicit Hide - FULL)");
+console.log("uiManager.js loaded (Using Global Scope - v5 Added Join Listener - FULL)");
