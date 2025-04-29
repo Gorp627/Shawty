@@ -1,4 +1,4 @@
-// docs/utils.js (REGENERATED v2)
+// docs/utils.js (REGENERATED v2 - No changes needed)
 
 // Linear interpolation
 function lerp(a, b, t) {
@@ -38,9 +38,8 @@ function randomInt(min, max) {
     // Ensure min is less than or equal to max after ceil/floor
     if (min > max) {
         // console.warn("randomInt: min value is greater than max value after ceil/floor.");
-        // Swap them? Return min?
         // Let's swap them for robustness, though input should ideally be correct.
-        [min, max] = [max, min];
+        [min, max] = [max, min]; // Swap using array destructuring
         // console.warn(`Swapped min/max for randomInt. New min=${min}, max=${max}`);
     }
     return Math.floor(Math.random() * (max - min + 1)) + min;
