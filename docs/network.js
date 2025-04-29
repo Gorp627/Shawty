@@ -1,4 +1,4 @@
-// docs/network.js (REGENERATED with Debug Logs & Robustness Checks v3 - Added Kinematic Body Creation)
+// docs/network.js (REGENERATED with Debug Logs & Robustness Checks v4 - Fixed Auto-Proceed)
 
 // Depends on: config.js, stateMachine.js, entities.js, input.js, uiManager.js, game.js
 // Accesses globals: players, localPlayerId, socket, controls, CONFIG, RAPIER, rapierWorld,
@@ -46,23 +46,38 @@ const Network = {
             console.log('[Network] Socket Connected! ID:', socket.id);
             networkIsInitialized = true; // Set flag
 
+            // --- !!! CHANGE HERE !!! ---
+            // DO NOT automatically try to proceed to game on connect.
+            // Instead, ensure the UI reflects the connected state, likely on the homescreen.
+            // currentGameInstance?.attemptProceedToGame(); // <<< REMOVED THIS LINE
+
             // Update UI state on successful connection
             if (typeof UIManager !== 'undefined') {
                  UIManager.clearError('homescreen'); // Clear previous connection errors
-                 // If we were trying to join when connection succeeded
-                 if (stateMachine?.is('joining')) {
-                     console.log("[Network Connect] Was in 'joining' state, sending details now.");
-                      if (UIManager.joinButton) UIManager.joinButton.textContent = "Joining..."; // Ensure text is correct
-                     Network.sendJoinDetails();
-                 } else if (stateMachine?.is('homescreen') && UIManager.joinButton) {
-                     // If just connected while on homescreen, enable join button
+
+                 // If we are on the homescreen, update the join button state
+                 if (stateMachine?.is('homescreen') && UIManager.joinButton) {
                      UIManager.joinButton.disabled = false;
                      UIManager.joinButton.textContent = "Join Game";
-                     console.log("[Network Connect] Reset Join Button state on homescreen.");
+                     console.log("[Network Connect] Enabled Join Button on homescreen.");
+                 }
+                 // If we were trying to join when connection (re)succeeded
+                 else if (stateMachine?.is('joining')) {
+                     console.log("[Network Connect] Was in 'joining' state, re-sending details now.");
+                      if (UIManager.joinButton) UIManager.joinButton.textContent = "Joining..."; // Ensure text is correct
+                     Network.sendJoinDetails(); // Try sending details again
                  }
             }
-            // Check if ready to proceed (e.g., if assets/physics finished while disconnected)
-            currentGameInstance?.attemptProceedToGame();
+             // If assets/physics are ready, transition to homescreen state
+             // This should ideally be handled after asset loading promise resolves in game.js
+             if (assetsAreReady && window.isRapierReady && !stateMachine?.is('playing')) {
+                if(!stateMachine?.is('homescreen')) { // Avoid redundant transitions
+                    console.log("[Network Connect] Assets/Physics ready, transitioning to homescreen.");
+                    // Pass current player count from UI if available
+                    const currentCount = UIManager?.playerCountSpan?.textContent;
+                    stateMachine?.transitionTo('homescreen', {playerCount: currentCount === '?' ? undefined : currentCount});
+                }
+             }
         });
 
         socket.on('disconnect', (reason) => {
@@ -72,21 +87,23 @@ const Network = {
 
             // Only transition back to homescreen if currently playing or joining
             if (stateMachine?.is('playing') || stateMachine?.is('joining')) {
-                stateMachine?.transitionTo('homescreen', { playerCount: 0 }); // Reset player count
-                 if(UIManager) {
-                     UIManager.updatePlayerCount(0);
-                     let errorMsg = "Disconnected.";
-                     if (reason === 'io server disconnect') errorMsg = "Kicked or server shut down.";
-                     else if (reason === 'io client disconnect') errorMsg = "Left the game."; // Manual disconnect
-                     else if (reason === 'ping timeout' || reason === 'transport close' || reason === 'transport error') errorMsg = "Connection lost.";
-                     UIManager.showError(errorMsg, 'homescreen');
-                 }
+                // Pass error message option for UIManager listener
+                let errorMsg = "Disconnected.";
+                 if (reason === 'io server disconnect') errorMsg = "Kicked or server shut down.";
+                 else if (reason === 'io client disconnect') errorMsg = "Left the game."; // Manual disconnect
+                 else if (reason === 'ping timeout' || reason === 'transport close' || reason === 'transport error') errorMsg = "Connection lost.";
+
+                stateMachine?.transitionTo('homescreen', {
+                    playerCount: 0,
+                    errorMessage: errorMsg // Pass error message
+                }); // UIManager listener will handle showing error
+
                  if(infoDiv) infoDiv.textContent='Disconnected';
                  if(controls?.isLocked) controls.unlock();
                  // Cleanup game state (bodies, players) is handled by the state transition listener in game.js
              } else {
                   console.log("[Network] Disconnected while not in playing/joining state.");
-                  // If on homescreen, maybe disable join button until reconnected
+                  // If on homescreen, update button state
                   if (stateMachine?.is('homescreen') && UIManager?.joinButton) {
                       UIManager.joinButton.disabled = true;
                       UIManager.joinButton.textContent = "Disconnected";
@@ -99,16 +116,11 @@ const Network = {
             networkIsInitialized = false;
             // Transition back to loading/homescreen with error message
             const errorMsg = `Connection Failed!<br/>${err.message}`;
-            if (stateMachine?.is('loading') || stateMachine?.is('joining')) {
-                 stateMachine.transitionTo('loading', { message: errorMsg, error: true });
-            } else {
-                 stateMachine?.transitionTo('homescreen'); // Ensure on homescreen
-                 UIManager?.showError(errorMsg, 'homescreen');
-                 if (UIManager?.joinButton) { // Disable join on connection failure
-                      UIManager.joinButton.disabled = true;
-                      UIManager.joinButton.textContent = "Connection Failed";
-                 }
-            }
+            // Transition to homescreen and let its handler show the error
+            stateMachine?.transitionTo('homescreen', {
+                 errorMessage: errorMsg
+            });
+            // UIManager handles button state in showHomescreen based on connection status
         });
 
         socket.on('playerCountUpdate', (count) => {
@@ -126,7 +138,7 @@ const Network = {
         socket.on('serverFull', () => Network.handleServerFull() );
 
         console.log("[Network] Core socket event listeners attached.");
-    },
+    }, // End setupSocketIO
 
     // --- Helper Functions ---
     _getPlayer: function(id) { return window.players?.[id] || null; }, // Access global players
@@ -165,7 +177,12 @@ const Network = {
          // Avoid creating if handle already exists
          if (currentGameInstance.playerRigidBodyHandles[playerData.id] !== undefined) {
             // console.warn(`[Network] Kinematic body handle already exists for ${playerData.id}. Skipping creation.`);
-            return rapierWorld.getRigidBody(currentGameInstance.playerRigidBodyHandles[playerData.id]);
+            try { // Still try to return the existing body if handle exists
+                return rapierWorld.getRigidBody(currentGameInstance.playerRigidBodyHandles[playerData.id]);
+            } catch (e) {
+                console.error(`[Network] Error getting existing kinematic body ${playerData.id}:`, e);
+                delete currentGameInstance.playerRigidBodyHandles[playerData.id]; // Clear potentially invalid handle
+            }
          }
 
          try {
@@ -251,19 +268,17 @@ const Network = {
         console.log('[Network] RX initialize');
         if (!data?.id || typeof data.players !== 'object') {
              console.error("!!! Invalid initialization data received from server:", data);
-             // Attempt to go back to homescreen safely
-             if(stateMachine && !stateMachine.is('homescreen')) stateMachine.transitionTo('homescreen');
-             UIManager?.showError("Server Init Invalid!", "homescreen");
+             stateMachine?.transitionTo('homescreen',{errorMessage:"Server Init Invalid!"}); // Go back home
              return;
         }
         initializationData = data; // Store the data
         networkIsInitialized = true; // Ensure flag is set
         console.log("[Network] Initialization data stored. Attempting to proceed to game...");
         // This triggers the check in game.js which calls startGamePlay if all ready
-        currentGameInstance?.attemptProceedToGame();
+        currentGameInstance?.attemptProceedToGame(); // <<< THIS IS THE CORRECT PLACE TO CALL IT
     },
 
-    handlePlayerJoined: function(playerData) {
+     handlePlayerJoined: function(playerData) {
         if (playerData?.id === localPlayerId) return; // Ignore self-join event
 
         // Only add player if we are currently in the 'playing' state
@@ -377,7 +392,7 @@ const Network = {
         if (!data?.targetId) { console.warn("Invalid playerDied data received:", data); return; }
 
         const targetPlayer = this._getPlayer(data.targetId); // Check global players
-        const targetName = targetPlayer?.name || 'Player';
+        const targetName = data.targetName || targetPlayer?.name || 'Player'; // Use name from data if available
         const killerName = data.killerName || 'Unknown';
         const killerPhrase = data.killerPhrase || 'eliminated';
 
@@ -411,13 +426,6 @@ const Network = {
                  const bodyHandle = currentGameInstance?.playerRigidBodyHandles?.[data.targetId];
                  if (bodyHandle && rapierWorld) {
                       try {
-                          // Option: Remove body completely (will be recreated on respawn)
-                          // let body = rapierWorld.getRigidBody(bodyHandle);
-                          // if (body) rapierWorld.removeRigidBody(body);
-                          // delete currentGameInstance.playerRigidBodyHandles[data.targetId];
-                          // console.log(`[Network] Removed physics body for dead remote player ${data.targetId}.`);
-
-                          // Option 2: Disable collider (simpler, might be less clean if many players die/respawn)
                            let body = rapierWorld.getRigidBody(bodyHandle);
                            let colliderHandle = body?.collider(0); // Assuming one collider per body
                            if (colliderHandle !== undefined && colliderHandle !== null) {
@@ -473,7 +481,7 @@ const Network = {
             if (!playerBody) {
                  // Attempt to recreate the physics body if missing
                  console.error("!!! Local player physics body missing during respawn! Attempting to recreate...");
-                 currentGameInstance.createPlayerPhysicsBody(localPlayerId, {x: playerData.x, y: bodyCenterY - playerHeight/2.0, z: playerData.z }); // Pass feet pos to helper
+                 currentGameInstance.createPlayerPhysicsBody(localPlayerId, {x: playerData.x, y: playerData.y, z: playerData.z }); // Pass feet pos to helper
                  playerBodyHandle = currentGameInstance.playerRigidBodyHandles?.[localPlayerId];
                  try { playerBody = rapierWorld.getRigidBody(playerBodyHandle); } catch(e){ console.error("Error getting recreated body:", e); }
                  if (!playerBody) {
@@ -489,6 +497,9 @@ const Network = {
             player.x = playerData.x; player.y = playerData.y; player.z = playerData.z; // Feet position cache
             player.rotationY = rotY;
             player.name = playerData.name; player.phrase = playerData.phrase;
+            // Reset last sent data
+            player.lastSentX = null; player.lastSentY = null; player.lastSentZ = null; player.lastSentRotationY = null;
+
 
             // Teleport the physics body AND reset velocities
             try {
@@ -507,6 +518,11 @@ const Network = {
                 UIManager.updateInfo(`Playing as ${player.name}`);
                 UIManager.clearKillMessage(); // Clear death message
             }
+             // Attempt to re-lock pointer if controls exist
+             if(controls && !controls.isLocked) {
+                 console.log("[Network] Attempting pointer lock after local respawn.");
+                 controls.lock();
+             }
             // Re-enable input processing by setting health > 0 (handled by gameLogic.js)
 
         }
@@ -557,15 +573,13 @@ const Network = {
     handleServerFull: function() {
         console.warn("[Network] Received 'serverFull' message from server.");
         if (socket) socket.disconnect(); // Disconnect the client
-        // Transition to loading screen with error OR homescreen with error
-        stateMachine?.transitionTo('loading', { message: `Server is Full!`, error: true });
-        // Alternatively, show error on homescreen:
-        // if(stateMachine && !stateMachine.is('homescreen')) stateMachine.transitionTo('homescreen');
-        // UIManager?.showError("Server is full!", 'homescreen');
+        // Transition to homescreen with error
+        stateMachine?.transitionTo('homescreen', { errorMessage: `Server is Full!` });
     },
 
-     // --- Actions ---
-     attemptJoinGame: function() {
+
+    // --- Actions ---
+    attemptJoinGame: function() {
          console.log("[Network] Attempting to join game...");
 
          // 1. Get Player Details from UI
@@ -605,23 +619,17 @@ const Network = {
          console.log("[Network Attempt Join] Prerequisites met.");
 
          // 4. Transition to 'Joining' State & Update UI Button
-         stateMachine?.transitionTo('joining');
-         if (UIManager.joinButton) {
-             UIManager.joinButton.disabled = true; // Disable button immediately
-             // Text will be set based on connection status below
-         }
+         stateMachine?.transitionTo('joining'); // UIManager listener updates button text/state
 
          // 5. Handle Connection & Send Details
          if (Network.isConnected()) {
              // Already connected, just send details
              console.log("[Network Attempt Join] Already connected -> Sending player details...");
-             if (UIManager.joinButton) UIManager.joinButton.textContent = "Joining...";
              Network.sendJoinDetails();
          } else {
              // Not connected, initiate connection (or wait for existing attempt)
              console.log("[Network Attempt Join] Not connected -> Triggering connection...");
-             if (UIManager.joinButton) UIManager.joinButton.textContent = "Connecting...";
-             // The 'connect' event handler will call sendJoinDetails if state is 'joining'
+             // UI already updated to "Connecting..." by UIManager listener for 'joining' state
              if (socket && !socket.active) { // If socket exists but isn't trying to connect/connected
                   console.log("[Network Attempt Join] Manually calling socket.connect().");
                   socket.connect();
@@ -629,9 +637,9 @@ const Network = {
                   console.error("!!! Cannot connect: Socket object doesn't exist! Network init likely failed.");
                   UIManager.showError("Network Init Failed!", 'homescreen');
                   stateMachine?.transitionTo('homescreen'); // Go back if connection can't even start
-                  if (UIManager.joinButton) {UIManager.joinButton.disabled=false; UIManager.joinButton.textContent="Join Game";} // Re-enable button
              }
              // If socket.active is true, it means it's already trying to connect, just wait.
+             // The 'connect' event handler will call sendJoinDetails if state is 'joining'
          }
      }, // End attemptJoinGame
 
@@ -639,14 +647,16 @@ const Network = {
          // Double-check state and connection before sending
          if (!stateMachine?.is('joining')) {
              console.warn("[Network] Tried to send join details but not in 'joining' state. Aborting.");
+             // If not joining, maybe go back to homescreen?
+              if (!stateMachine?.is('playing')) {
+                 stateMachine?.transitionTo('homescreen');
+              }
              return;
          }
          if (!Network.isConnected()) {
              console.error("[Network] Cannot send join details: Disconnected.");
              // Don't transition here, disconnect handler should manage state
-             if(!stateMachine?.is('homescreen')) stateMachine?.transitionTo('homescreen'); // Go back if disconnected
-             UIManager?.showError('Connection lost.', 'homescreen'); // Show error if possible
-             if(UIManager.joinButton){ UIManager.joinButton.disabled=false; UIManager.joinButton.textContent="Join Game"; }
+             stateMachine?.transitionTo('homescreen', {errorMessage:'Connection lost.'}); // Go back home with error
              return;
          }
          console.log(`[Network] TX setPlayerDetails | Name: ${window.localPlayerName}, Phrase: ${window.localPlayerPhrase}`);
@@ -682,4 +692,4 @@ const Network = {
 }; // End Network object
 
 window.Network = Network; // Export globally
-console.log("network.js loaded (REGENERATED v3 - Added Kinematic Body Creation)");
+console.log("network.js loaded (REGENERATED v4 - Fixed Auto-Proceed)");
