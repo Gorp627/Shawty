@@ -19,7 +19,7 @@ const CONFIG = {
     SPAWN_AREA_X_MAX: 45.0, // Example: If client map bounds are 100x100
     SPAWN_AREA_Z_MAX: 45.0, // Example: Spawn within +/- 45 units
     // Define an initial spawn height. Client physics (raycast down) should find the ground.
-    INITIAL_SPAWN_Y: 30.0, // Start players relatively high up
+    INITIAL_SPAWN_Y: 5.0, // Start players relatively high up
 };
 
 // --- Socket.IO Server Setup ---
