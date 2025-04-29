@@ -46,3 +46,4 @@ let killMessageTimeout = null;
 let mapMesh = null; // Visual map mesh
 
 console.log("config.js loaded (Reduced Gravity Debug)");
+console.log("[Config] config.js executed. window.players type:", typeof window.players, "Value:", window.players);
