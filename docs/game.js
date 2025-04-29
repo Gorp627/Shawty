@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (FORCE Simple Ground Collider, Spawn Higher, Log Dims - FULL FILE v5)
+// docs/game.js - Main Game Orchestrator (FORCE Simple Ground Collider, Spawn Higher, Log Dims - FULL FILE v5 - COMPLETE)
 
 // --- Global Flags and Data ---
 let networkIsInitialized = false;
@@ -17,6 +17,7 @@ const DEBUG_FIXED_CAMERA = false; // <<< Use dynamic camera linked to player
 const DEBUG_MINIMAL_RENDER_LOOP = false; // <<< Run full game loop
 const DEBUG_FORCE_SPAWN_POS = true; // <<< Force spawn position
 const DEBUG_FORCE_SPAWN_Y = 20.0; // <<< Spawn higher Y value
+const DEBUG_SHOW_PLAYER_COLLIDERS = false; // <<< Show wireframe colliders for players
 
 class Game {
     // --- Constructor ---
@@ -137,8 +138,8 @@ class Game {
         // *** Debug: Add a simple visual representation (e.g., a wireframe capsule) ***
         if (DEBUG_SHOW_PLAYER_COLLIDERS) {
             const capsuleGeom = new THREE.CapsuleGeometry(r, h - 2 * r, 4, 8);
-            const wireframeMat = new THREE.WireframeGeometry(capsuleGeom);
-            const wireframeMesh = new THREE.LineSegments(wireframeMat);
+            const wireframeMat = new THREE.WireframeBasicMaterial({ color: 0xffff00, wireframe: true });
+            const wireframeMesh = new THREE.Mesh(capsuleGeom, wireframeMat);
             this.scene.add(wireframeMesh);
             this.debugMeshes[playerId] = wireframeMesh;
         }
@@ -151,37 +152,57 @@ class Game {
             return;
         }
 
-        // *** This is highly dependent on your map's structure ***
-        // *** You'll need to adapt this to extract the collision mesh(es) ***
-        let collisionMesh;
+        let collisionObject;
         scene.traverse(child => {
-            if (child.isMesh) {
-                collisionMesh = child; // ASSUMPTION: First mesh is the ground
+            if (child.isMesh && child.name.toLowerCase().includes('collision')) {
+                collisionObject = child;
+            } else if (child.isMesh && !collisionObject) {
+                collisionObject = child; // Fallback to the first mesh if no "collision" tagged mesh
             }
         });
 
-        if (!collisionMesh) {
-            console.error("No collision mesh found in map scene!");
+        if (!collisionObject) {
+            console.error("No suitable collision mesh found in map scene!");
             return;
         }
 
-        // *** Simplified Convex Hull (for testing) - Replace with Trimesh for complex maps ***
-        const vertices = [];
-        const positionAttribute = collisionMesh.geometry.attributes.position;
-        for (let i = 0; i < positionAttribute.count; i++) {
-            const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
-            vertices.push({
-                x: vertex.x,
-                y: vertex.y,
-                z: vertex.z
-            });
-        }
-        let trimesh = RAPIER.triMesh(vertices);
-        let cd = RAPIER.ColliderDesc.trimesh(trimesh);
-        this.rapierWorld.createCollider(cd, this.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed()), );
+        const geometry = collisionObject.geometry;
+        if (geometry.index) {
+            const vertices = geometry.attributes.position.array;
+            const indices = geometry.index.array;
 
-        console.log("[Game] Map collider created.");
+            const rapierVertices = [];
+            for (let i = 0; i < vertices.length; i += 3) {
+                rapierVertices.push({ x: vertices[i], y: vertices[i + 1], z: vertices[i + 2] });
+            }
+
+            const rapierIndices = [];
+            for (let i = 0; i < indices.length; i += 3) {
+                rapierIndices.push([indices[i], indices[i + 1], indices[i + 2]]);
+            }
+
+            const trimesh = new RAPIER.TriMesh(rapierVertices, rapierIndices);
+            const colliderDesc = RAPIER.ColliderDesc.trimesh(trimesh);
+            this.rapierWorld.createCollider(colliderDesc, this.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed()));
+            console.log("[Game] Trimesh map collider created from:", collisionObject.name);
+        } else if (geometry.attributes.position) {
+            // Fallback to convex hull if no index buffer (less performant for complex shapes)
+            const points = [];
+            const positionAttribute = geometry.attributes.position;
+            for (let i = 0; i < positionAttribute.count; i++) {
+                points.push({ x: positionAttribute.getX(i), y: positionAttribute.getY(i), z: positionAttribute.getZ(i) });
+            }
+            if (points.length > 0) {
+                const convexHull = RAPIER.convexHull(points);
+                const colliderDesc = RAPIER.ColliderDesc.convexHull(convexHull);
+                this.rapierWorld.createCollider(colliderDesc, this.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed()));
+                console.warn("[Game] Convex hull map collider created (consider providing indexed geometry).");
+            } else {
+                console.error("[Game] No vertices found for map collider.");
+            }
+        }
     }
+
 
     // *** Physics: Simple Ground Collider (for testing) ***
     createSimpleGroundCollider() {
@@ -205,7 +226,25 @@ class Game {
             // *** Handle Collision Events ***
             this.rapierEventQueue.drainCollisionEvents((handle1, handle2, started) => {
                 // *** Basic collision logging (expand as needed) ***
-                console.log(`[Game] Collision: ${handle1} vs ${handle2} (Started: ${started})`);
+                // console.log(`[Game] Collision: ${handle1} vs ${handle2} (Started: ${started})`);
+                const body1 = this.rapierWorld.getRigidBody(handle1);
+                const body2 = this.rapierWorld.getRigidBody(handle2);
+
+                if (body1 && body2) {
+                    const playerId1 = this.getPlayerIdByHandle(body1.handle);
+                    const playerId2 = this.getPlayerIdByHandle(body2.handle);
+
+                    if (playerId1 && playerId2) {
+                        // Player-player collision
+                        // console.log(`[Game] Player ${playerId1} collided with Player ${playerId2}`);
+                    } else if (playerId1 && body2.isFixed()) {
+                        // Player-map collision
+                        // console.log(`[Game] Player ${playerId1} collided with the map`);
+                    } else if (playerId2 && body1.isFixed()) {
+                        // Player-map collision
+                        // console.log(`[Game] Player ${playerId2} collided with the map`);
+                    }
+                }
             });
 
             // *** Update Player Positions/Rotations ***
@@ -284,6 +323,16 @@ class Game {
         }
     }
 
+    // *** Helper function to get player ID from Rapier body handle ***
+    getPlayerIdByHandle(handle) {
+        for (const id in this.playerRigidBodyHandles) {
+            if (this.playerRigidBodyHandles[id] === handle) {
+                return id;
+            }
+        }
+        return null;
+    }
+
     // *** Physics: Raycast for Safe Spawn Position ***
     findSafeSpawnPosition() {
         if (!this.rapierWorld || !RAPIER) {
@@ -306,79 +355,4 @@ class Game {
         const maxToi = 200; // Max distance to check
         const hit = this.rapierWorld.castRay(origin, maxToi, true, null, null, null);
 
-        if (hit) {
-            return new THREE.Vector3(origin.origin.x, origin.origin.y + hit.toi, origin.origin.z);
-        } else {
-            console.warn("[Game] No safe spawn found, using default.");
-            return new THREE.Vector3(0, 10, 0); // Default, but handle better
-        }
-    }
-
-    // --- Server Initialization/Spawn ---
-    initializePlayer(initData) {
-        if (!initData || typeof initData !== 'object') {
-            console.error("Invalid player initialization data:", initData);
-            return;
-        }
-
-        localPlayerId = initData.id; // Store local player's ID
-        window.localPlayerId = localPlayerId; // Make it globally accessible (if needed)
-
-        // *** Physics: Create Player Rigid Body ***
-        const spawnPos = DEBUG_FORCE_SPAWN_POS ?
-            new THREE.Vector3(0, DEBUG_FORCE_SPAWN_Y, 0) :
-            this.findSafeSpawnPosition();
-        this.createPlayerPhysicsBody(localPlayerId, spawnPos);
-
-        // Create player object (local or remote)
-        for (const id in initData.players) {
-            const playerData = initData.players[id];
-            if (id === localPlayerId) {
-                // *** Local Player Setup (if needed) ***
-            } else {
-                this.players[id] = new ClientPlayer(playerData);
-            }
-        }
-        console.log("[Game] Player initialization complete.");
-    }
-
-    // --- Server Spawn ---
-    spawnPlayer(spawnData) {
-        if (!spawnData || typeof spawnData !== 'object' || !spawnData.id) {
-            console.error("Invalid spawn data:", spawnData);
-            return;
-        }
-
-        // *** Physics: Create Player Rigid Body ***
-        const spawnPos = DEBUG_FORCE_SPAWN_POS ?
-            new THREE.Vector3(0, DEBUG_FORCE_SPAWN_Y, 0) :
-            this.findSafeSpawnPosition();
-        this.createPlayerPhysicsBody(spawnData.id, spawnPos);
-
-        // Create player object (local or remote)
-        if (spawnData.id === localPlayerId) {
-            // *** Local Player Spawn (if needed) ***
-        } else {
-            this.players[spawnData.id] = new ClientPlayer(spawnData);
-        }
-        console.log(`[Game] Player spawned: ${spawnData.id}`);
-    }
-
-    // --- Server Despawn ---
-    despawnPlayer(despawnId) {
-        if (!despawnId) {
-            console.error("Invalid despawn ID:", despawnId);
-            return;
-        }
-        this.cleanupPlayer(despawnId);
-        console.log(`[Game] Player despawned: ${despawnId}`);
-    }
-
-    // --- Clear All Players ---
-    cleanupAllPlayers() {
-        console.warn("[Game Cleanup] Cleaning up all players...");
-        for (const playerId in this.players) {
-            this.cleanupPlayer(playerId);
-        }
-        this.players = {};
-        localPlayerId
+        if (hit
