@@ -448,7 +448,7 @@ class Game {
         if (renderer) { renderer.setSize(window.innerWidth, window.innerHeight); console.log(`[Game] Resized renderer`); }
     }
 
-    // --- Start Game Play Method (Called by Network 'initialize' handler) ---
+       // --- Start Game Play Method (Called by Network 'initialize' handler) ---
     startGamePlay(initData) {
         console.log('[Game] startGamePlay...'); console.log('Init data:', JSON.stringify(initData));
         if (!initData?.id || typeof initData.players !== 'object') { console.error("Invalid init data"); stateMachine?.transitionTo('homescreen'); UIManager?.showError("Server Init Invalid!", "homescreen"); return; }
@@ -461,27 +461,31 @@ class Game {
         const ch = Math.max(0.01, ph/2.0-pr); // capsuleHalfHeight
         let localCreated = false;
 
-        // Log capsule dimensions calculated from config
+        // *** Log capsule dimensions ***
         console.log(`[Player Create Debug] Radius (pr): ${pr}, Height (ph): ${ph}, Capsule Half Height (ch): ${ch}`);
-        if (pr <= 0 || ch < 0) { // Allow ch to be 0 for very short capsules, but not negative
+        if (pr <= 0 || ch <= 0) {
              console.error(`!!! Invalid Player Dimensions! Radius: ${pr}, Capsule Half-Height: ${ch}. Aborting player creation.`);
              stateMachine?.transitionTo('homescreen'); UIManager?.showError("FATAL: Invalid Player Config!", 'homescreen'); return;
         }
+        // *** End Log ***
 
         for (const id in initData.players) {
             const playerDataForLoop = initData.players[id];
             if (playerDataForLoop.x === undefined || playerDataForLoop.y === undefined || playerDataForLoop.z === undefined) { console.warn(`Invalid pos ${id}. Skipping.`); continue; }
 
-            // Force spawn position if flag is set
-            let spawnX = playerDataForLoop.x; let spawnY = playerDataForLoop.y; let spawnZ = playerDataForLoop.z;
+            // *** DEBUG: Force spawn position if flag is set ***
+            let spawnX = playerDataForLoop.x;
+            let spawnY = playerDataForLoop.y; // Use server Y as base
+            let spawnZ = playerDataForLoop.z;
             if (DEBUG_FORCE_SPAWN_POS && id === localPlayerId) {
                 spawnX = 0;
-                spawnY = DEBUG_FORCE_SPAWN_Y; // Use the higher spawn Y
+                spawnY = DEBUG_FORCE_SPAWN_Y; // Use the higher spawn Y from flag
                 spawnZ = 5;
                 console.log(`[DEBUG] Forcing local player spawn Y to ${spawnY}`);
             }
+            // *** END DEBUG ***
 
-            const bodyCenterY = spawnY + ph / 2.0;
+            const bodyCenterY = spawnY + ph / 2.0; // Calculate center based on potentially overridden spawnY
             console.log(`Player ${id} calculated spawn center Y: ${bodyCenterY} (Base Y: ${spawnY})`);
 
             try { // Start try block for this player
@@ -492,29 +496,40 @@ class Game {
                 if (id === localPlayerId) {
                     console.log(`Init LOCAL: ${playerDataForLoop.name} (${id})`);
                     window.players[id]={...playerDataForLoop, isLocal:true, mesh:null};
+                    // Use potentially overridden spawn coords
                     rbD=RAPIER.RigidBodyDesc.dynamic().setTranslation(spawnX, bodyCenterY, spawnZ).setRotation(iRE).setLinvel(0,0,0).setAngvel({x:0,y:0,z:0}).setLinearDamping(0.5).setAngularDamping(1.0).lockRotations().setCanSleep(false);
                     rb=rapierWorld.createRigidBody(rbD); if(!rb) throw new Error("Fail local body.");
                     this.playerRigidBodyHandles[id]=rb.handle; console.log(`Created DYNAMIC body. H: ${rb.handle}`);
                     rapierWorld.createCollider(pCD,rb.handle);
                     if(!DEBUG_FIXED_CAMERA) { this.syncCameraToBody(rb); }
-                    if(UIManager) { UIManager.updateHealthBar(playerDataForLoop.health??100); UIManager.updateInfo(`Playing as ${playerDataForLoop.name || 'P'}`); UIManager.clearError('homescreen'); UIManager.clearKillMessage(); }
+                    if(UIManager) {
+                        UIManager.updateHealthBar(playerDataForLoop.health??100); // Use local loop var
+                        UIManager.updateInfo(`Playing as ${playerDataForLoop.name || 'P'}`); // Use local loop var
+                        UIManager.clearError('homescreen'); UIManager.clearKillMessage();
+                    }
                     localCreated = true;
                 }
                 // --- REMOTE PLAYER ---
                 else {
                     console.log(`Init REMOTE: ${playerDataForLoop.name} (${id})`);
                     let rpI=Network?._addPlayer(playerDataForLoop); if(!rpI) { console.warn(`Fail ClientPlayer ${id}.`); continue; }
-                    // Use original server x/z for remote players, but calculated bodyCenterY based on *their* server Y
-                    const remoteBodyCenterY = playerDataForLoop.y + ph / 2.0;
-                    rbD=RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(playerDataForLoop.x, remoteBodyCenterY, playerDataForLoop.z).setRotation(iRE);
+                    // Use original server x/z for remote players, but calculated bodyCenterY
+                    rbD=RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(playerDataForLoop.x, bodyCenterY, playerDataForLoop.z).setRotation(iRE);
                     rb=rapierWorld.createRigidBody(rbD); if(!rb) throw new Error(`Fail remote body ${id}.`);
                     this.playerRigidBodyHandles[id]=rb.handle; console.log(`Created KINEMATIC body. H: ${rb.handle}`);
                     rapierWorld.createCollider(pCD,rb.handle);
                 }
             } catch (bodyError) { // Catch errors specific to this player
                  console.error(`!!! Body/collider error creating player ${id}:`, bodyError);
-                 this.cleanupPlayer(id);
-                 if (id === localPlayerId) { console.error("CRITICAL: Failed local player."); stateMachine?.transitionTo('homescreen'); UIManager?.showError("FATAL: Player Init Fail!", 'homescreen'); return; }
+                 this.cleanupPlayer(id); // Attempt cleanup for the player that failed
+                 // If the *local* player failed, this is critical
+                 if (id === localPlayerId) {
+                     console.error("CRITICAL: Failed to create local player body/collider.");
+                     stateMachine?.transitionTo('homescreen'); // Go back home
+                     UIManager?.showError("FATAL: Player Init Fail!", 'homescreen');
+                     return; // Stop the entire startGamePlay process
+                 }
+                 // If a remote player failed, log it but continue processing others
             }
         } // End loop through players
 
