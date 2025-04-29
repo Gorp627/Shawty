@@ -1,4 +1,4 @@
-// docs/gameLogic.js (Rapier - With Debug Logs & Robustness)
+// docs/gameLogic.js (Rapier - Debug Movement/Jump/Dash)
 
 // Accesses globals: camera, controls, players, localPlayerId, CONFIG, THREE, RAPIER, rapierWorld, Network, Input, UIManager, stateMachine
 
@@ -6,7 +6,7 @@
 const JUMP_IMPULSE_VALUE = CONFIG?.JUMP_IMPULSE || 300;
 const DASH_IMPULSE_MAGNITUDE = CONFIG?.DASH_IMPULSE_MAGNITUDE || 450;
 const DASH_UP_FACTOR = 0.1; // How much upward impulse to add during dash
-const GROUND_CHECK_BUFFER = CONFIG?.GROUND_CHECK_DISTANCE || 0.25; // Extra distance below capsule bottom for ground check
+const GROUND_CHECK_DISTANCE = CONFIG?.GROUND_CHECK_DISTANCE || 0.25; // Extra distance below capsule bottom for ground check
 
 /**
  * Updates the local player's physics BODY based on input and handles void checks.
@@ -21,16 +21,17 @@ function updateLocalPlayer(deltaTime, playerBody) {
     const localPlayerData = localPlayerId ? players[localPlayerId] : null;
 
     // Only run logic if playing, controls locked, and data exists
-    if (!isPlaying || !isLocked || !localPlayerData) { return; }
+    if (!isPlaying || !isLocked || !localPlayerData) {
+        // console.log(`updateLocalPlayer skipped: isPlaying=${isPlaying}, isLocked=${isLocked}, hasData=${!!localPlayerData}`); // Debug skip reason
+        return;
+    }
 
-    // *** ADDED: Log entry and body position ***
-    // console.log("updateLocalPlayer running for:", localPlayerId); // Very spammy, enable if needed
-    let currentPos;
+    let currentPos, currentVel;
     try {
         currentPos = playerBody.translation();
-        // console.log(`  Player Body Pos: x=${currentPos.x.toFixed(2)}, y=${currentPos.y.toFixed(2)}, z=${currentPos.z.toFixed(2)}`); // Spammy
+        currentVel = playerBody.linvel(); // Get current linear velocity
     } catch(e) {
-        console.error("!!! Error accessing playerBody at start of updateLocalPlayer:", e);
+        console.error("!!! Error accessing playerBody properties at start of updateLocalPlayer:", e);
         return; // Stop if body access fails
     }
 
@@ -40,212 +41,171 @@ function updateLocalPlayer(deltaTime, playerBody) {
     let isGrounded = false;
     if (isAlive) { // Only check ground if alive
         try {
-            const bodyPos = playerBody.translation(); // Get current body center position
+            const bodyPos = currentPos; // Use position fetched earlier
 
-            // Calculate ray origin: Bottom center of the capsule shape
             const playerHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
             const playerRadius = CONFIG?.PLAYER_RADIUS || 0.4;
-            // Height of the cylindrical part of the capsule
             const capsuleHalfHeight = Math.max(0.01, playerHeight / 2.0 - playerRadius);
-            // The actual bottom of the capsule collider is center Y - capsuleHalfHeight
-            // Note: Capsule origin in Rapier is its center.
             const capsuleBottomCenterY = bodyPos.y - capsuleHalfHeight;
-
-            // Start ray slightly *below* the capsule's bottom center point to avoid starting inside ground
-            // but *above* where the ground check buffer distance starts.
             const rayOriginY = capsuleBottomCenterY - 0.01; // Start just below the capsule bottom
             const rayOrigin = { x: bodyPos.x, y: rayOriginY, z: bodyPos.z };
             const rayDirection = { x: 0, y: -1, z: 0 }; // Straight down
 
             const ray = new RAPIER.Ray(rayOrigin, rayDirection);
-            // Max distance: Check from slightly below the capsule down to the buffer distance
-            const maxToi = GROUND_CHECK_BUFFER + 0.01; // Total distance to check downwards
-            const solid = true; // Check against solid objects
-            const groups = undefined; // Collision groups (optional, null/undefined for all)
+            const maxToi = GROUND_CHECK_DISTANCE + 0.01; // Total distance to check downwards
+            const solid = true;
+            const groups = undefined;
             const colliderToExclude = playerBody.collider(0); // Exclude the player's own collider
 
-             // Cast the ray
-            const hit = rapierWorld.castRay(
-                 ray,
-                 maxToi,
-                 solid,
-                 undefined, // query_filter_flags
-                 groups,    // query_groups
-                 colliderToExclude // exclude collider
-            );
+            const hit = rapierWorld.castRay(ray, maxToi, solid, undefined, groups, colliderToExclude);
 
-
-            if (hit != null && hit.toi > 0) { // Ray hit something within the distance (toi > 0 ensures not hitting self immediately)
-                // console.log(`Ground Hit! TOI: ${hit.toi.toFixed(3)} Collider: ${hit.collider.handle}`); // DEBUG: Log ground hit distance
+            if (hit != null && hit.toi > 0) {
                 isGrounded = true;
+                // console.log(`Ground Hit! TOI: ${hit.toi.toFixed(3)}`); // DEBUG
             } else {
-                 // console.log("Not Grounded"); // DEBUG: Log when not grounded
+                 // console.log("Not Grounded"); // DEBUG
             }
         } catch(e) {
             console.error("!!! Rapier ground check raycast error:", e);
-            isGrounded = false; // Assume not grounded on error
+            isGrounded = false;
         }
-    } // End if(isAlive) for ground check
+    }
+    // console.log("IsGrounded:", isGrounded); // DEBUG: Log ground status every frame
+
 
     // --- Apply Input Forces/Impulses (Only if Alive) ---
     if (isAlive) {
         try {
-            const currentVel = playerBody.linvel(); // Get current linear velocity
-
             // --- Horizontal Movement ---
-            const isSprinting = Input.keys['ShiftLeft'] && (Input.keys['KeyW'] || Input.keys['KeyS'] || Input.keys['KeyA'] || Input.keys['KeyD']); // Only sprint if moving
+            const isSprinting = Input.keys['ShiftLeft'] && (Input.keys['KeyW'] || Input.keys['KeyS'] || Input.keys['KeyA'] || Input.keys['KeyD']);
             const moveSpeed = isSprinting ? (CONFIG?.MOVEMENT_SPEED_SPRINTING || 10.5) : (CONFIG?.MOVEMENT_SPEED || 7.0);
 
-
-            // Get camera direction for movement relative to view
             const forward = new THREE.Vector3(), right = new THREE.Vector3();
-            const moveDirectionInput = new THREE.Vector3(0, 0, 0); // Input direction vector
-            if (camera && controls && controls.isLocked) { // Ensure camera and controls are active
-                // Get direction from the PointerLockControls object, which holds the camera
-                controls.getDirection(forward); // Gets the direction the camera is looking
-                forward.y = 0; // Ignore vertical component for horizontal movement
+            const moveDirectionInput = new THREE.Vector3(0, 0, 0);
+
+            if (camera && controls && controls.isLocked) {
+                controls.getDirection(forward); // Gets the direction the camera is looking (-Z local axis)
+                forward.y = 0;
                 forward.normalize();
-                // Calculate right vector relative to world UP, not camera UP, for consistent horizontal plane movement
-                right.crossVectors(new THREE.Vector3(0,1,0), forward).normalize().negate(); // Cross world up with forward, negate for standard right
+
+                // Calculate right vector based on world UP and camera FORWARD
+                right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize(); // Right = Forward x WorldUp
+                // console.log(`Forward: ${forward.x.toFixed(2)}, ${forward.z.toFixed(2)} | Right: ${right.x.toFixed(2)}, ${right.z.toFixed(2)}`); // DEBUG VECTORS
             } else {
-                 if(!camera) console.error("!!! Camera missing for movement calculation!");
-                 // Don't move if controls aren't locked
-                 // return; // Or just allow no movement input
+                // No movement if camera/controls invalid or not locked
             }
 
             // Calculate input direction based on keys
             if (Input.keys['KeyW']) { moveDirectionInput.add(forward); }
             if (Input.keys['KeyS']) { moveDirectionInput.sub(forward); }
-            if (Input.keys['KeyA']) { moveDirectionInput.sub(right); }
-            if (Input.keys['KeyD']) { moveDirectionInput.add(right); }
+            if (Input.keys['KeyA']) { moveDirectionInput.add(right); } // Add right for left movement (A)
+            if (Input.keys['KeyD']) { moveDirectionInput.sub(right); } // Subtract right for right movement (D)
+
+             // DEBUG Input Keys
+             // if (Input.keys['KeyW'] || Input.keys['KeyS'] || Input.keys['KeyA'] || Input.keys['KeyD'] ) {
+             //      console.log(`Keys: W=${Input.keys['KeyW']} S=${Input.keys['KeyS']} A=${Input.keys['KeyA']} D=${Input.keys['KeyD']}`);
+             // }
+
 
             // Calculate target velocity based on input
-            let targetVelocityX = currentVel.x; // Start with current velocity
-            let targetVelocityZ = currentVel.z;
+            let targetVelocityX = 0; // Default to zero if no input
+            let targetVelocityZ = 0;
 
             if (moveDirectionInput.lengthSq() > 0.0001) { // If there is movement input
-                moveDirectionInput.normalize(); // Normalize the direction vector
+                moveDirectionInput.normalize();
                 targetVelocityX = moveDirectionInput.x * moveSpeed;
                 targetVelocityZ = moveDirectionInput.z * moveSpeed;
-                // console.log(`Moving: TargetVel X=${targetVelocityX.toFixed(2)}, Z=${targetVelocityZ.toFixed(2)}`); // DEBUG
-            } else {
-                // If no input, let damping handle slowdown. Setting to 0 directly can feel abrupt.
-                 targetVelocityX = 0; // Set target horizontal velocity to 0 if no input
-                 targetVelocityZ = 0;
+                // console.log(`Moving: TargetVel X=${targetVelocityX.toFixed(2)}, Z=${targetVelocityZ.toFixed(2)} | Input Dir: ${moveDirectionInput.x.toFixed(2)}, ${moveDirectionInput.z.toFixed(2)}`); // DEBUG
             }
 
-             // Apply velocity change using forces/impulses might feel smoother or allow better interaction with slopes
-             // Method 1: Direct velocity setting (more responsive, less "physics-y")
-             playerBody.setLinvel({ x: targetVelocityX, y: currentVel.y, z: targetVelocityZ }, true); // `true` = wake body if sleeping
-
-             // Method 2: Applying force (might feel smoother but needs tuning)
-             // const forceFactor = 20.0; // Adjust this multiplier
-             // const force = {
-             //     x: (targetVelocityX - currentVel.x) * forceFactor,
-             //     y: 0, // Don't apply horizontal force vertically
-             //     z: (targetVelocityZ - currentVel.z) * forceFactor
-             // };
-             // playerBody.applyImpulse(force, true); // Or applyForce
+            // Set linear velocity directly (keeping current Y velocity)
+            playerBody.setLinvel({ x: targetVelocityX, y: currentVel.y, z: targetVelocityZ }, true);
 
             // --- Handle Jump ---
             if (Input.keys['Space'] && isGrounded) {
-                 // Apply an upward impulse for jumping
-                 // Check if already moving upwards significantly to prevent double-jumps while ascending
                  if (currentVel.y < 1.0) { // Allow jump even if slightly moving up
+                    console.log("Applying Jump Impulse:", JUMP_IMPULSE_VALUE); // DEBUG JUMP
                     playerBody.applyImpulse({ x: 0, y: JUMP_IMPULSE_VALUE, z: 0 }, true);
-                    // console.log("Jump Impulse Applied!"); // DEBUG
                     isGrounded = false; // Assume we left the ground
+                 } else {
+                     console.log("Jump blocked: Already moving upwards significantly (velY:", currentVel.y.toFixed(2), ")"); // DEBUG JUMP BLOCKED
                  }
-                 // Prevent default space behavior (scrolling) - handled in Input.js
+            } else if (Input.keys['Space'] && !isGrounded) {
+                // console.log("Jump key pressed but not grounded."); // DEBUG JUMP FAIL
             }
 
             // --- Handle Dash ---
-            // Input.js now sets `requestingDash` and `dashDirection`
             if (Input.requestingDash) {
-                 // Calculate impulse vector based on direction from Input.js
+                console.log("Applying Dash Impulse:", DASH_IMPULSE_MAGNITUDE, "Direction:", Input.dashDirection); // DEBUG DASH
                  const impulse = {
                      x: Input.dashDirection.x * DASH_IMPULSE_MAGNITUDE,
-                     y: DASH_IMPULSE_MAGNITUDE * DASH_UP_FACTOR, // Add slight upward boost (removed direction factor here)
+                     y: DASH_IMPULSE_MAGNITUDE * DASH_UP_FACTOR,
                      z: Input.dashDirection.z * DASH_IMPULSE_MAGNITUDE
                  };
                  playerBody.applyImpulse(impulse, true);
-                 // console.log("Dash Impulse Applied!", impulse); // DEBUG
                  Input.requestingDash = false; // Consume the dash request
             }
 
         } catch (e) {
             console.error("!!! Error applying input physics:", e);
-             // Attempt to reset velocity to prevent runaway errors?
              try { playerBody.setLinvel({ x: 0, y: 0, z: 0 }, true); } catch (resetErr) { console.error("Failed to reset velocity after error:", resetErr); }
         }
 
     } else { // If Dead
-        // Optional: Apply strong damping or set velocity to zero if dead
-        try {
-             // playerBody.setLinearDamping(50.0); // Very high damping when dead
-             // playerBody.setLinvel({x:0, y: playerBody.linvel().y, z:0}, true); // Stop horizontal movement
-             // Keep gravity acting
-        } catch(e) { console.error("Error setting dead player physics:", e); }
+        // Optional: Stop movement completely if dead
+         try {
+             if (Math.abs(currentVel.x) > 0.1 || Math.abs(currentVel.z) > 0.1 ) { // Only set if moving horizontally
+                 playerBody.setLinvel({x:0, y: currentVel.y, z:0}, true);
+             }
+         } catch(e) { console.error("Error setting dead player physics:", e); }
     }
 
-    // --- Void Check ---
+    // --- Void Check (Keep as before) ---
     let fellIntoVoid = false;
     try {
-        const currentBodyPos = playerBody.translation(); // Use position fetched at start if still valid
-        if (currentBodyPos.y < (CONFIG.VOID_Y_LEVEL || -100)) {
+        // Use position fetched at start if still valid
+        if (currentPos.y < (CONFIG.VOID_Y_LEVEL || -100)) {
             fellIntoVoid = true;
-             // console.log("Player fell below void level."); // DEBUG
         }
-        // Optional: Add X/Z bounds check
-        if (!fellIntoVoid && (Math.abs(currentBodyPos.x) > (CONFIG.MAP_BOUNDS_X || 100) || Math.abs(currentBodyPos.z) > (CONFIG.MAP_BOUNDS_Z || 100))) {
+        if (!fellIntoVoid && (Math.abs(currentPos.x) > (CONFIG.MAP_BOUNDS_X || 100) || Math.abs(currentPos.z) > (CONFIG.MAP_BOUNDS_Z || 100))) {
              fellIntoVoid = true;
-             // console.log("Player went out of map bounds (X/Z)."); // DEBUG
         }
 
-        if (fellIntoVoid && isAlive) { // Only trigger void death if currently alive
+        if (fellIntoVoid && isAlive) {
             console.log(`Player ${localPlayerId} fell into the void or out of bounds.`);
-            localPlayerData.health = 0; // Set health to 0 locally
+            localPlayerData.health = 0;
             if (UIManager) UIManager.updateHealthBar(0);
-            if (Network) Network.sendVoidDeath(); // Notify server
-
-            // Optional: Stop the body completely upon void death
-            // playerBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
-            // playerBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            if (Network) Network.sendVoidDeath();
         }
     } catch (e) {
         console.error("!!! Error during void check:", e);
     }
 
-    // --- Send Network Updates ---
-    // Send updates based on position/rotation changes
+    // --- Send Network Updates (Keep as before) ---
     let controlsObject = null;
     try { controlsObject = controls?.getObject(); } catch (e) { console.error("Error getting controls object:", e); }
 
-    if (playerBody && controlsObject && localPlayerData && isAlive) { // Only send updates if alive
+    if (playerBody && controlsObject && localPlayerData && isAlive) {
          try {
              const playerHeight = CONFIG?.PLAYER_HEIGHT || 1.8;
              const bodyPos = playerBody.translation(); // Center position from Rapier
 
-             // Server expects position at the FEET
              const feetPosX = bodyPos.x;
              const feetPosY = bodyPos.y - playerHeight / 2.0;
              const feetPosZ = bodyPos.z;
 
-             // Get camera rotation (Y-axis only is usually needed for server)
-             // Use camera's world quaternion directly for more robustness
              const cameraWorldQuaternion = new THREE.Quaternion();
              camera.getWorldQuaternion(cameraWorldQuaternion);
-             const cameraRotation = new THREE.Euler().setFromQuaternion(cameraWorldQuaternion, 'YXZ'); // Use YXZ order
+             const cameraRotation = new THREE.Euler().setFromQuaternion(cameraWorldQuaternion, 'YXZ');
              const currentRotationY = cameraRotation.y;
 
-             // Check thresholds for sending update against last *sent* or initial data
              const positionThresholdSq = CONFIG?.PLAYER_MOVE_THRESHOLD_SQ || 0.0001;
-             const rotationThreshold = 0.01; // Radians (~0.6 degrees)
+             const rotationThreshold = 0.01;
 
-             const lastSentX = localPlayerData.lastSentX ?? localPlayerData.x ?? 0;
-             const lastSentY = localPlayerData.lastSentY ?? localPlayerData.y ?? 0;
-             const lastSentZ = localPlayerData.lastSentZ ?? localPlayerData.z ?? 0;
-             const lastSentRotY = localPlayerData.lastSentRotationY ?? localPlayerData.rotationY ?? 0;
+             const lastSentX = localPlayerData.lastSentX ?? feetPosX; // Use current if first time
+             const lastSentY = localPlayerData.lastSentY ?? feetPosY;
+             const lastSentZ = localPlayerData.lastSentZ ?? feetPosZ;
+             const lastSentRotY = localPlayerData.lastSentRotationY ?? currentRotationY;
 
              const positionChanged = (
                  (feetPosX - lastSentX) ** 2 +
@@ -253,33 +213,22 @@ function updateLocalPlayer(deltaTime, playerBody) {
                  (feetPosZ - lastSentZ) ** 2
              ) > positionThresholdSq;
 
-              // Calculate shortest angle difference for rotation
              let rotationDiff = currentRotationY - lastSentRotY;
-             rotationDiff = Math.atan2(Math.sin(rotationDiff), Math.cos(rotationDiff)); // Normalize to [-PI, PI]
+             rotationDiff = Math.atan2(Math.sin(rotationDiff), Math.cos(rotationDiff));
              const rotationChanged = Math.abs(rotationDiff) > rotationThreshold;
 
-
-             // If position or rotation changed enough, send update
              if (positionChanged || rotationChanged) {
-                 // Update local cache of *last sent* data
                  localPlayerData.lastSentX = feetPosX;
                  localPlayerData.lastSentY = feetPosY;
                  localPlayerData.lastSentZ = feetPosZ;
                  localPlayerData.lastSentRotationY = currentRotationY;
 
-                  // Also update the main position cache if needed elsewhere (though network shouldn't rely on this)
-                  // localPlayerData.x = feetPosX;
-                  // localPlayerData.y = feetPosY;
-                  // localPlayerData.z = feetPosZ;
-                  // localPlayerData.rotationY = currentRotationY;
-
-                 // Send update to server
                  if (Network) {
                      Network.sendPlayerUpdate({
                          x: feetPosX,
                          y: feetPosY,
                          z: feetPosZ,
-                         rotationY: currentRotationY // Send Y rotation
+                         rotationY: currentRotationY
                      });
                  }
                  // console.log("Sent Player Update"); // DEBUG
@@ -291,4 +240,4 @@ function updateLocalPlayer(deltaTime, playerBody) {
 
 } // End updateLocalPlayer
 
-console.log("gameLogic.js loaded (Rapier - Added Debug Logs & Robustness)");
+console.log("gameLogic.js loaded (Rapier - Debug Movement/Jump/Dash)");
