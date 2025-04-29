@@ -1,5 +1,5 @@
 // entities.js
-// (Modified to sync with Rapier - Added position cache & Explicit Global)
+// (Modified to sync with Rapier - Use Cylinder fallback, Explicit Global)
 class ClientPlayer {
     constructor(playerData) {
         this.id = playerData.id;
@@ -40,27 +40,44 @@ class ClientPlayer {
 
     loadMesh() {
         // Attempt to load the actual player model (optional)
-        // const playerModelData = loadManager?.getAssetData('playerModel');
-        // if (playerModelData) {
-        //     this.mesh = playerModelData.clone(); // Clone the loaded model scene
-        //     // Adjust scale, orientation if necessary
-        //     // this.mesh.scale.set(0.5, 0.5, 0.5);
-        //     // Apply shadows etc.
-        //     this.mesh.traverse(child => {
-        //         if (child.isMesh) {
-        //             child.castShadow = true;
-        //             child.receiveShadow = true;
-        //         }
-        //     });
-        //     console.log(`[Entities] Cloned actual player model for ${this.id}`);
-        // } else {
-            // Fallback to simple capsule if model fails or isn't ready
-            // console.warn(`[Entities] Player model not loaded or failed for ${this.id}. Using fallback capsule.`);
+        const playerModelData = loadManager?.getAssetData('playerModel');
+        if (playerModelData && playerModelData instanceof THREE.Object3D) { // Check if data is valid
+            try {
+                this.mesh = playerModelData.clone(); // Clone the loaded model scene
+                // Adjust scale, orientation if necessary based on your model
+                // this.mesh.scale.set(0.5, 0.5, 0.5);
+                // this.mesh.rotation.y = Math.PI; // Example: Rotate if model faces wrong way
+
+                // Apply shadows etc.
+                this.mesh.traverse(child => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+                 // Add mesh to scene if not already added by cloning
+                 if (scene && !this.mesh.parent) {
+                    scene.add(this.mesh);
+                 }
+                 console.log(`[Entities] Cloned actual player model for ${this.id}`);
+            } catch (e) {
+                console.error(`[Entities] Error cloning player model for ${this.id}:`, e);
+                this.mesh = null; // Ensure mesh is null if cloning fails
+            }
+        }
+
+        // Fallback to simple CYLINDER if model fails, isn't ready, or mesh is still null
+        if (!this.mesh) {
+            console.warn(`[Entities] Player model not loaded or failed for ${this.id}. Using fallback CYLINDER.`);
             try {
                 const h = CONFIG.PLAYER_HEIGHT || 1.8;
                 const r = CONFIG.PLAYER_RADIUS || 0.4;
-                 // THREE.CapsuleGeometry uses (radius, length of cylinder part, ...)
-                const geo = new THREE.CapsuleGeometry(r, h - 2 * r, 4, 8);
+
+                // *********************************************************
+                // *** FIX: Use CylinderGeometry instead of CapsuleGeometry ***
+                // *********************************************************
+                const geo = new THREE.CylinderGeometry(r, r, h, 8); // radiusTop, radiusBottom, height, radialSegments
+
                 const mat = new THREE.MeshStandardMaterial({
                      color: this.id === localPlayerId ? 0x00ff00 : 0xff00ff, // Green for local, magenta for remote
                      roughness: 0.7
@@ -69,77 +86,44 @@ class ClientPlayer {
                 this.mesh.castShadow = true;
                 this.mesh.receiveShadow = true;
 
-                 // Add name tag above player (optional)
-                 // this.createNameTag();
+                // Cylinder origin is at its center, offset for positioning later
+                // This offset is applied when the mesh is added/synced, not necessarily here
+                // this.mesh.position.y = h / 2.0; // Setting here might be overwritten
 
                 if (scene) {
                     scene.add(this.mesh);
-                    console.log(`[Entities] Added fallback mesh for ${this.id}`);
+                    console.log(`[Entities] Added fallback CYLINDER mesh for ${this.id}`);
                 } else {
                     console.error("[Entities] Scene missing when trying to add fallback mesh!");
                 }
             } catch (e) {
-                console.error(`[Entities] Error creating fallback capsule for ${this.id}:`, e);
+                // Catch potential error from CylinderGeometry itself
+                console.error(`[Entities] Error creating fallback cylinder for ${this.id}:`, e);
             }
-        // }
+        }
 
-         // Set initial position based on server data (feet position)
-         // The game loop (sync mesh to physics body) will override this shortly after physics body creation.
+        // Set initial position and rotation based on server data (feet position)
+        // The game loop (sync mesh to physics body) will override this shortly after physics body creation.
         if (this.mesh) {
-             this.mesh.position.set(this.x, this.y, this.z);
-             // Initial rotation
+             // Position the mesh CENTER based on feet position + half height
+             const initialYOffset = (CONFIG.PLAYER_HEIGHT || 1.8) / 2.0;
+             this.mesh.position.set(this.x, this.y + initialYOffset, this.z);
              this.mesh.rotation.y = this.rotationY;
         }
     }
-
-    // Example Name Tag function (Needs THREE.CSS2DRenderer setup in game.js)
-    /*
-    createNameTag() {
-        if (!this.mesh) return;
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'player-nametag'; // Add CSS for styling
-        nameDiv.textContent = this.name;
-        nameDiv.style.color = 'white';
-        nameDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-        nameDiv.style.padding = '2px 5px';
-        nameDiv.style.borderRadius = '3px';
-        nameDiv.style.fontSize = '12px';
-
-        const nameLabel = new THREE.CSS2DObject(nameDiv);
-        nameLabel.position.set(0, CONFIG.PLAYER_HEIGHT * 0.6, 0); // Position slightly above capsule center
-        this.mesh.add(nameLabel); // Attach label to the mesh
-        nameLabel.layers.set(0); // Ensure it's rendered by the CSS2DRenderer
-    }
-    */
 
     setVisible(v) { if (this.mesh) this.mesh.visible = v; }
 
     remove() {
         if (this.mesh) {
-            if (scene) {
-                scene.remove(this.mesh);
-            } else {
-                 console.warn("[Entities] Scene missing during mesh removal for", this.id);
-            }
+            if (scene) { scene.remove(this.mesh); }
+            else { console.warn("[Entities] Scene missing during mesh removal for", this.id); }
             try {
-                // Remove CSS2D label if exists
-                 const label = this.mesh.getObjectByProperty('isCSS2DObject', true);
-                 if (label) {
-                     label.removeFromParent();
-                     if(label.element && label.element.parentNode){
-                         label.element.parentNode.removeChild(label.element);
-                     }
-                 }
-
                 this.mesh.traverse(c => {
                     if (c.geometry) c.geometry.dispose();
                     if (c.material) {
-                         // Handle multi-materials
-                         if (Array.isArray(c.material)) {
-                             c.material.forEach(m => m.dispose());
-                         } else {
-                             c.material.dispose();
-                         }
+                         if (Array.isArray(c.material)) { c.material.forEach(m => m.dispose()); }
+                         else { c.material.dispose(); }
                     }
                 });
                  console.log(`[Entities] Disposed mesh resources for ${this.id}`);
@@ -149,8 +133,7 @@ class ClientPlayer {
     }
 }
 
-// ---> ADD THIS LINE <---
+// Ensure ClientPlayer is globally accessible
 window.ClientPlayer = ClientPlayer;
-// ---> END ADDITION <---
 
-console.log("entities.js loaded and ClientPlayer assigned to window."); // Add log
+console.log("entities.js loaded and ClientPlayer assigned to window.");
