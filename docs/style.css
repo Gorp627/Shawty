@@ -1,4 +1,4 @@
-/* docs/style.css (REGENERATED v2 - Matches previous regeneration) */
+/* docs/style.css (REGENERATED v2 - Added crosshair and lock state) */
 * {
     box-sizing: border-box;
 }
@@ -12,6 +12,7 @@ html, body {
     background-color: #111; /* Dark background */
     color: white;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Nicer default font */
+    cursor: auto; /* Default cursor */
 }
 
 /* Base screen style - hidden by default, centered content */
@@ -28,6 +29,7 @@ html, body {
     padding: 20px;
     opacity: 0; /* Start transparent for fade-in */
     transition: opacity 0.4s ease-in-out;
+    user-select: none; /* Prevent text selection on UI screens */
 }
 
 /* Make screen visible when .visible class is added */
@@ -50,6 +52,7 @@ html, body {
 }
 #loadingScreen p { /* Ensure paragraph inherits base color */
     color: #e8f6ef;
+    word-break: break-word; /* Wrap long error messages */
 }
 
 
@@ -123,6 +126,7 @@ html, body {
     font-weight: bold;
     min-height: 1.2em; /* Reserve space */
     display: none; /* Hide error message element by default */
+    word-break: break-word; /* Wrap long error messages */
 }
 /* The display property is controlled by UIManager.js */
 
@@ -152,6 +156,7 @@ html, body {
     visibility: hidden; /* Start hidden */
     /* Delay visibility change until after opacity transition */
     transition: opacity 0.5s ease-in-out, visibility 0s linear 0.5s;
+    user-select: none; /* Prevent text selection on game UI */
 }
 #gameUI.visible {
     opacity: 1;
@@ -159,6 +164,30 @@ html, body {
     /* Visibility transition happens instantly when opacity starts changing */
     transition: opacity 0.5s ease-in-out;
 }
+
+/* Crosshair */
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px; /* Adjust size */
+    height: 10px;
+    /* Simple '+' crosshair */
+    color: rgba(255, 255, 255, 0.7); /* Semi-transparent white */
+    font-size: 20px; /* Adjust size */
+    line-height: 10px;
+    text-align: center;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+    /* Hide crosshair by default, show when pointer is locked */
+    display: none;
+    z-index: 11; /* Above other UI, below screens */
+}
+/* Show crosshair when gameUI has 'locked' class (added by input.js on pointer lock) */
+#gameUI.locked #crosshair {
+    display: block;
+}
+
 
 /* Specific In-Game UI Elements */
 #info {
@@ -226,9 +255,33 @@ html, body {
     max-width: 85%;
     pointer-events: none; /* No interaction */
     text-shadow: 1px 1px 1px rgba(0,0,0,0.7);
+    z-index: 11; /* Ensure above health bar */
 }
 #killMessage.visible {
     opacity: 1; /* Fade in */
     visibility: visible;
     transition: opacity 0.5s ease-in-out;
+}
+
+/* Optional: Player Nametags (Requires CSS2DRenderer setup) */
+.player-nametag {
+    color: white;
+    background-color: rgba(0, 0, 0, 0.6);
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    white-space: nowrap; /* Prevent wrapping */
+    /* Position adjustments might be needed */
+}
+
+/* Container for CSS2D Labels (if used) */
+#css2dContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks through */
+    z-index: 5; /* Above canvas, below main UI */
+    overflow: hidden; /* Prevent scrollbars from labels */
 }
