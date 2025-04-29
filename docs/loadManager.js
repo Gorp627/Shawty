@@ -1,0 +1,234 @@
+// docs/loadManager.js (Add Gun Model and Sound - Uses Global THREE - REGEN v4)
+
+const loadManager = {
+    assets: {
+        // Access global CONFIG safely for paths
+        map: { state: 'pending', path: (typeof CONFIG !== 'undefined' ? CONFIG.MAP_PATH : null), data: null, type: 'gltf' },
+        playerModel: { state: 'pending', path: (typeof CONFIG !== 'undefined' ? CONFIG.PLAYER_MODEL_PATH : null), data: null, type: 'gltf' },
+        gunModel: { state: 'pending', path: (typeof CONFIG !== 'undefined' ? CONFIG.GUN_MODEL_PATH : null), data: null, type: 'gltf'},
+        gunSound: { state: 'pending', path: (typeof CONFIG !== 'undefined' ? CONFIG.GUN_SHOT_SOUND_PATH : null), data: null, type: 'audio'},
+    },
+    loaders: { // Will be populated in startLoading
+        gltf: null,
+        texture: null,
+        audio: null,
+    },
+    requiredForGame: ['map', 'playerModel', 'gunModel', 'gunSound'], // Added gun assets as required
+    eventListeners: {'ready': [], 'error': [], 'progress': [], 'assetLoaded': []},
+
+    isAssetReady: function(key) {
+        const asset = this.assets[key];
+        if (!asset) return false;
+        const isLoadedState = asset.state === 'loaded';
+        const hasValidData = asset.data !== null && asset.data !== undefined && asset.data !== 'error';
+        return isLoadedState && hasValidData;
+    },
+
+    getAssetData: function(key) {
+        if (this.isAssetReady(key)) {
+            return this.assets[key].data;
+        }
+        return null;
+    },
+
+    startLoading: function() {
+        console.log("[LoadManager] Start Loading All Assets...");
+
+        // --- Prerequisite Checks ---
+        // Use global THREE directly
+        if (typeof THREE === 'undefined') {
+             console.error("[LoadManager] CRITICAL: THREE object is undefined!");
+             this.trigger('error',{message:'THREE library not loaded!'});
+             // Access global stateMachine safely
+             if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message: 'FATAL: Graphics Library Failed!', error: true});
+             return;
+        }
+        // Ensure global loaders (assigned usually in game.js) are ready
+        if (typeof window === 'undefined' || typeof window.loader === 'undefined' || !window.loader || typeof THREE === 'undefined' || typeof THREE.GLTFLoader === 'undefined' || !(window.loader instanceof THREE.GLTFLoader) ||
+            typeof window.dracoLoader === 'undefined' || !window.dracoLoader || typeof THREE.DRACOLoader === 'undefined' || !(window.dracoLoader instanceof THREE.DRACOLoader)) {
+             console.error("[LoadManager] CRITICAL: Global GLTFLoader or DRACOLoader reference is missing or invalid!");
+             this.trigger('error',{message:'GFX Loader Ref Missing!'});
+             if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message: 'FATAL: Graphics Loader Ref Failed!', error: true});
+             return;
+        }
+        this.loaders.gltf = window.loader; // Use the global loader
+
+        // Instantiate other loaders using global THREE constructors
+        this.loaders.texture = new THREE.TextureLoader();
+        this.loaders.audio = new THREE.AudioLoader();
+
+        console.log("[LoadManager] Verified Three.js and necessary Loaders available.");
+
+        // --- Start Loading Each Pending Asset ---
+        let assetsToLoadCount = 0;
+        for (const key in this.assets) {
+            if (this.assets.hasOwnProperty(key)) {
+                 // Check if path is valid before attempting load
+                 if(typeof this.assets[key].path !== 'string' || !this.assets[key].path) {
+                     console.error(`[LoadManager] Skipping asset '${key}': Invalid or missing path in CONFIG.`);
+                     // Mark as error immediately so checkCompletion knows it failed
+                     this.assets[key].state = 'error';
+                     this.assets[key].data = 'Invalid path';
+                     this.trigger('error', { message: `Asset '${key}' has invalid path.` });
+                 } else if (this.assets[key].state === 'pending') {
+                     assetsToLoadCount++;
+                     this.loadAsset(key); // Call loadAsset for each pending item
+                 }
+            }
+        }
+
+        if (assetsToLoadCount === 0) {
+            console.log("[LoadManager] No pending assets found to load (or all had invalid paths).");
+            this.checkCompletion(); // Check immediately
+        } else {
+            console.log(`[LoadManager] Started loading process for ${assetsToLoadCount} asset(s).`);
+        }
+    },
+
+    loadAsset: function(key) {
+        const asset = this.assets[key];
+        // Redundant check, but safe
+        if (!asset || asset.state !== 'pending' || !asset.path) return;
+
+        const assetPath = asset.path;
+        const assetType = asset.type?.toLowerCase();
+        console.log(`[LoadManager] Requesting loadAsset('${key}'). Type: ${assetType || 'unknown'}, Path: ${assetPath}`);
+
+        asset.state = 'loading'; // Mark as loading
+        const manager = this;
+        const startTime = Date.now();
+
+        // --- Define Loader Callbacks ---
+        const onProg = (xhr) => { if (xhr.lengthComputable) manager.trigger('progress', {key: key, progress: Math.round(xhr.loaded / xhr.total * 100)}); };
+        const onSuccess = (loadedAsset) => { console.log(`[LoadManager] Net OK: ${key} in ${Date.now() - startTime}ms.`); manager._assetLoadedCallback(key, true, loadedAsset); };
+        const onError = (error) => {
+             let errorMsg = `Failed to load asset '${key}'`;
+             if (error instanceof Error) errorMsg += `: ${error.message}`;
+             else if (error instanceof ProgressEvent && error.target?.status) errorMsg += ` (HTTP Error ${error.target.status})`;
+             else if (typeof error === 'string') errorMsg += `: ${error}`;
+             console.error(`[LoadManager] !!! FAILED to load ${key}. Path: ${assetPath}. Error:`, errorMsg, error);
+             manager._assetLoadedCallback(key, false, errorMsg); // Pass error message/object
+        };
+
+        // --- Use Appropriate Loader Based on Asset Type ---
+        switch (assetType) {
+            case 'gltf':
+                if (!this.loaders.gltf) { onError("GLTF Loader not available"); return; }
+                this.loaders.gltf.load(assetPath, onSuccess, onProg, onError);
+                break;
+            case 'texture':
+                 if (!this.loaders.texture) { onError("Texture Loader not available"); return; }
+                 this.loaders.texture.load(assetPath, onSuccess, undefined /* no progress */, onError);
+                 break;
+            case 'audio': // Use AudioLoader
+                 if (!this.loaders.audio) { onError("Audio Loader not available"); return; }
+                 this.loaders.audio.load(assetPath, onSuccess, onProg, onError); // AudioLoader supports progress
+                 break;
+            default:
+                const unknownTypeError = `Unknown asset type: ${asset.type}`;
+                console.error(`[LoadManager] ${unknownTypeError} for key '${key}'. Cannot load.`);
+                onError(unknownTypeError);
+        }
+    },
+
+    _assetLoadedCallback: function(assetKey, success, loadedAssetOrError) {
+        const assetEntry = this.assets[assetKey];
+        if (!assetEntry) { console.error(`[LM CB] Asset entry for key '${assetKey}' not found!`); return; }
+
+        assetEntry.state = success ? 'processing' : 'error';
+        assetEntry.data = success ? loadedAssetOrError : (loadedAssetOrError || 'Unknown load error');
+        console.log(`[LM CB] Asset: ${assetKey}, Load Success: ${success}. State set to: '${assetEntry.state}'.`);
+
+        // --- Process Loaded Data (if successful) ---
+        // Use global THREE safely
+        if (typeof THREE === 'undefined') {
+             console.error("[LM CB] THREE not found during processing!");
+             assetEntry.state = 'error'; assetEntry.data = 'THREE not loaded'; success = false;
+        }
+
+        try {
+            if (success && assetEntry.data !== 'error') {
+                const assetType = assetEntry.type?.toLowerCase();
+                let processedData = assetEntry.data; // Start with raw data
+
+                if (assetType === 'gltf') {
+                    const gltf = loadedAssetOrError;
+                    if (!gltf?.scene || !(gltf.scene instanceof THREE.Object3D)) throw new Error("Loaded GLTF invalid or no scene.");
+                    processedData = gltf; // Keep the full GLTF object
+                    console.log(`[LM Process] GLTF OK: ${assetKey}.`);
+                    const applyShadows = (obj) => { obj.traverse(c => { if(c.isMesh){c.castShadow=true; c.receiveShadow=true;} }); };
+                    // Assign crucial data to global scope for easy access by other scripts
+                    if (assetKey === 'map') { window.mapMesh = processedData.scene; applyShadows(processedData.scene); }
+                    else if (assetKey === 'playerModel') { applyShadows(processedData.scene); window.playerModelData = processedData; }
+                    else if (assetKey === 'gunModel') { processedData.scene.traverse(c=>{if(c.isMesh)c.castShadow=true;}); window.gunModelData = processedData; }
+                } else if (assetType === 'texture') {
+                    if (!(loadedAssetOrError instanceof THREE.Texture)) throw new Error("Loaded texture not THREE.Texture.");
+                } else if (assetType === 'audio') {
+                     if (!(loadedAssetOrError instanceof AudioBuffer)) throw new Error("Loaded audio not AudioBuffer.");
+                     // Assign crucial data to global scope
+                     if (assetKey === 'gunSound') window.gunSoundBuffer = loadedAssetOrError;
+                }
+                assetEntry.data = processedData;
+                assetEntry.state = 'loaded';
+            } else {
+                assetEntry.state = 'error'; // Ensure state is error if load failed
+            }
+        } catch (processingError) {
+            console.error(`[LM Process] Error processing loaded asset ${assetKey}:`, processingError);
+            assetEntry.state = 'error'; assetEntry.data = processingError.message || 'Processing error';
+        }
+
+        this.trigger('assetLoaded', { key: assetKey, success: assetEntry.state === 'loaded' });
+        this.checkCompletion();
+    },
+
+    checkCompletion: function() {
+        let allRequiredDone = true; let anyRequiredError = false; let stillInProgress = false;
+        for (const key of this.requiredForGame) {
+            const assetInfo = this.assets[key];
+            if (!assetInfo) { console.error(`[LM Check] Req asset key '${key}' missing def!`); anyRequiredError = true; allRequiredDone = false; continue; }
+            const assetState = assetInfo.state;
+            if (assetState === 'pending' || assetState === 'loading' || assetState === 'processing') { allRequiredDone = false; stillInProgress = true; break; } // Still working
+            if (assetState === 'error') { anyRequiredError = true; console.warn(`[LM Check] Req asset '${key}' failed.`); }
+            else if (assetState !== 'loaded') { console.error(`[LM Check] Req asset '${key}' unexpected state: ${assetState}`); anyRequiredError = true; }
+        }
+        if (stillInProgress) return; // Wait for next callback if still loading
+
+        // All required assets are finished (either loaded or error)
+        if (allRequiredDone) { // This is true only if all required assets existed in the list
+             if (anyRequiredError) {
+                 console.error("[LM Check] Triggering global 'error' due to failed required asset(s).");
+                 this.trigger('error', { message: 'One or more required assets failed to load.' });
+                 // Access global stateMachine safely
+                 if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message:"Required Assets Failed!", error:true});
+             } else {
+                 console.log("[LM Check] All required assets loaded successfully. Triggering 'ready'.");
+                 // Set global flag safely
+                 if (typeof window !== 'undefined') window.assetsAreReady = true;
+                 this.trigger('ready'); // Signal that core assets are available.
+             }
+        } else { // Implies a required asset was missing from definition
+             console.error("[LM Check] Cannot trigger 'ready', required asset definitions missing.");
+             this.trigger('error', { message: 'Missing required asset definitions.' });
+              if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message:"Asset Def Missing!", error:true});
+        }
+    },
+
+    on: function(eventName, callback) {
+        if (typeof callback !== 'function') { console.error(`[LM] Invalid cb for '${eventName}'`); return; }
+        if (!this.eventListeners[eventName]) this.eventListeners[eventName] = [];
+        this.eventListeners[eventName].push(callback);
+    },
+    trigger: function(eventName, data = {}) {
+        if (this.eventListeners[eventName]) {
+            this.eventListeners[eventName].slice().forEach(callback => {
+                try { callback(data); } catch (e) { console.error(`[LM Trigger Err] '${eventName}':`, e); }
+            });
+        }
+    }
+};
+// Export globally
+if (typeof window !== 'undefined') {
+    window.loadManager = loadManager;
+}
+console.log("loadManager.js loaded (Using Global THREE/Scope - v4)");
