@@ -1,12 +1,12 @@
-// docs/gameLogic.js (v3 - Debug Void Check)
+// docs/gameLogic.js (v5 - Truly Complete File with Debugging)
 
 // Accesses globals: camera, controls, players, localPlayerId, CONFIG, THREE, RAPIER, rapierWorld, Network, Input, UIManager, stateMachine
 
 // --- Constants ---
 const JUMP_IMPULSE_VALUE = CONFIG?.JUMP_IMPULSE || 300;
 const DASH_IMPULSE_MAGNITUDE = CONFIG?.DASH_IMPULSE_MAGNITUDE || 450;
-const DASH_UP_FACTOR = 0.1; // How much upward impulse to add during dash
-const GROUND_CHECK_DISTANCE = CONFIG?.GROUND_CHECK_DISTANCE || 0.25; // Extra distance below capsule bottom for ground check
+const DASH_UP_FACTOR = 0.1;
+const GROUND_CHECK_DISTANCE = CONFIG?.GROUND_CHECK_DISTANCE || 0.25;
 
 /**
  * Updates the local player's physics BODY based on input and handles void checks.
@@ -19,7 +19,10 @@ function updateLocalPlayer(deltaTime, playerBody) {
     const isPlaying = stateMachine?.is('playing');
     const isLocked = controls?.isLocked;
     const localPlayerData = localPlayerId ? players[localPlayerId] : null;
-    if (!isPlaying || !isLocked || !localPlayerData) { return; }
+    if (!isPlaying || !isLocked || !localPlayerData) { return; } // Don't run if not ready
+
+    // ---> Step 1: Verify Locked Controls <---
+    // console.log(`[gameLogic] Update Start - Controls Locked: ${isLocked}`); // Spammy, enable if needed
 
     let currentPos, currentVel;
     try {
@@ -48,42 +51,85 @@ function updateLocalPlayer(deltaTime, playerBody) {
             if (hit != null && hit.toi > 0) { isGrounded = true; }
         } catch(e) { console.error("!!! Ground check err:", e); isGrounded = false; }
     }
-    // console.log("Grounded:", isGrounded); // DEBUG
+    // console.log("Grounded:", isGrounded); // DEBUG: Log ground status every frame
+
 
     // --- Apply Input Forces/Impulses ---
     if (isAlive) {
         try {
+            // --- Horizontal Movement ---
             const isSprinting = Input.keys['ShiftLeft'] && (Input.keys['KeyW']||Input.keys['KeyS']||Input.keys['KeyA']||Input.keys['KeyD']);
             const moveSpeed = isSprinting ? (CONFIG?.MOVEMENT_SPEED_SPRINTING||10.5) : (CONFIG?.MOVEMENT_SPEED||7.0);
             const forward = new THREE.Vector3(), right = new THREE.Vector3();
             const moveDir = new THREE.Vector3(0, 0, 0);
+
             if (camera && controls?.isLocked) {
                 controls.getDirection(forward); forward.y = 0; forward.normalize();
                 right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+                // ---> Step 3: Log Calculated Vectors <---
+                // console.log(`Vectors - Fwd: (${forward.x.toFixed(2)}, ${forward.z.toFixed(2)}), Rgt: (${right.x.toFixed(2)}, ${right.z.toFixed(2)})`);
             }
-            if (Input.keys['KeyW']) { moveDir.add(forward); }
-            if (Input.keys['KeyS']) { moveDir.sub(forward); }
-            if (Input.keys['KeyA']) { moveDir.add(right); } // Corrected: Add right for left
-            if (Input.keys['KeyD']) { moveDir.sub(right); } // Corrected: Subtract right for right
 
+            // ---> Step 2: Log Input Keys Directly <---
+            let wPressed = Input.keys['KeyW'] || false;
+            let aPressed = Input.keys['KeyA'] || false;
+            let sPressed = Input.keys['KeyS'] || false;
+            let dPressed = Input.keys['KeyD'] || false;
+            // Log only if any movement key is pressed to reduce spam
+            // if(wPressed || aPressed || sPressed || dPressed) {
+            //    console.log(`Input Keys: W:${wPressed}, A:${aPressed}, S:${sPressed}, D:${dPressed}`);
+            // }
+
+            // Calculate input direction based on keys
+            if (wPressed) { moveDir.add(forward); }
+            if (sPressed) { moveDir.sub(forward); }
+            if (aPressed) { moveDir.add(right); }
+            if (dPressed) { moveDir.sub(right); }
+
+            // ---> Log Move Direction <---
+            // if(moveDir.lengthSq() > 1e-4) {
+            //     console.log(`Move Dir Calculated: (${moveDir.x.toFixed(2)}, ${moveDir.z.toFixed(2)})`);
+            // }
+
+            // Calculate target velocity based on input
             let targetVelX = 0, targetVelZ = 0;
             if (moveDir.lengthSq() > 1e-4) {
                 moveDir.normalize();
                 targetVelX = moveDir.x * moveSpeed; targetVelZ = moveDir.z * moveSpeed;
             }
+
+            // ---> Step 4: Log Target Velocity <---
+            // if(targetVelX !== 0 || targetVelZ !== 0) { // Only log if attempting to move
+            //    console.log(`Target Velocity: X=${targetVelX.toFixed(2)}, Z=${targetVelZ.toFixed(2)}`);
+            // }
+
+            // Set linear velocity directly
             playerBody.setLinvel({ x: targetVelX, y: currentVel.y, z: targetVelZ }, true);
 
+            // ---> Step 5: Log Actual Velocity After Setting <---
+             try {
+                 const actualVel = playerBody.linvel();
+                 // Only log if target was non-zero or jump/dash attempted
+                 if(targetVelX !== 0 || targetVelZ !== 0 || Input.keys['Space'] || Input.requestingDash) {
+                      console.log(`Actual Velocity AFTER setLinvel/Impulse: (${actualVel.x.toFixed(2)}, ${actualVel.y.toFixed(2)}, ${actualVel.z.toFixed(2)}) --- Grounded: ${isGrounded}`);
+                 }
+             } catch (e) { console.error("Error getting velocity after set:", e); }
+
+            // --- Handle Jump ---
             if (Input.keys['Space'] && isGrounded && currentVel.y < 1.0) {
                 console.log("Applying Jump Impulse:", JUMP_IMPULSE_VALUE);
                 playerBody.applyImpulse({ x: 0, y: JUMP_IMPULSE_VALUE, z: 0 }, true);
-                isGrounded = false;
+                isGrounded = false; // Assume immediately
             }
+
+            // --- Handle Dash ---
             if (Input.requestingDash) {
                 console.log("Applying Dash Impulse:", DASH_IMPULSE_MAGNITUDE, "Dir:", Input.dashDirection);
                 const impulse = { x: Input.dashDirection.x * DASH_IMPULSE_MAGNITUDE, y: DASH_IMPULSE_MAGNITUDE * DASH_UP_FACTOR, z: Input.dashDirection.z * DASH_IMPULSE_MAGNITUDE };
                 playerBody.applyImpulse(impulse, true);
                 Input.requestingDash = false;
             }
+
         } catch (e) { console.error("!!! Err apply input physics:", e); try { playerBody.setLinvel({ x: 0, y: 0, z: 0 }, true); } catch (rE) {} }
     } else { // If Dead
          try { if (Math.abs(currentVel.x) > 0.1 || Math.abs(currentVel.z) > 0.1 ) { playerBody.setLinvel({x:0, y: currentVel.y, z:0}, true); } }
@@ -92,12 +138,9 @@ function updateLocalPlayer(deltaTime, playerBody) {
 
     // --- Void Check ---
     let fellIntoVoid = false;
-    const voidLevel = CONFIG.VOID_Y_LEVEL || -100; // Get void level
+    const voidLevel = CONFIG.VOID_Y_LEVEL || -100;
     try {
-        if (currentPos.y < voidLevel) { // Use fetched position
-            // *************************************************
-            // *** ADD LOG HERE TO CONFIRM TRIGGER         ***
-            // *************************************************
+        if (currentPos.y < voidLevel) {
             console.log(`Void Check Triggered: Player Y (${currentPos.y.toFixed(2)}) < Void Level (${voidLevel})`);
             fellIntoVoid = true;
         }
@@ -138,4 +181,4 @@ function updateLocalPlayer(deltaTime, playerBody) {
     }
 } // End updateLocalPlayer
 
-console.log("gameLogic.js loaded (v3 - Debug Void Check)");
+console.log("gameLogic.js loaded (v5 - Truly Complete File with Debugging)");
