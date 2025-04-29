@@ -701,7 +701,14 @@ class Game {
      }
 
      cleanupAllPlayers() {
-         console.log("[Game] Cleaning up ALL players...");
+         console.log("[Game] Cleaning up ALL players..."); 
+         if (!this.players || typeof this.players !== 'object') {
+             console.warn("[Game] cleanupAllPlayers called but this.players is not a valid object. Resetting. Value:", this.players);
+             // Attempt to recover by ensuring window.players is an object
+             window.players = {};
+             this.players = window.players; // Re-link the reference in this instance
+             // Handles are cleared below anyway, so just preventing the Object.keys error is key.
+         }
          // Iterate over a copy of keys to avoid issues while modifying the object
          const playerIds = Object.keys(this.players);
          playerIds.forEach(id => this.cleanupPlayer(id));
