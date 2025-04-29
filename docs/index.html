@@ -46,10 +46,12 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
     <!-- Rapier Physics Engine Init (as module - MUST come before game logic that uses RAPIER) -->
+    <!-- This is the ONLY place Rapier should be loaded from -->
     <script type="module" src="rapier_init.js"></script>
 
     <!-- Core & Game Logic - ORDER MATTERS -->
-    <!-- These scripts use the GLOBAL THREE, RAPIER, io, etc. -->
+    <!-- These scripts use the GLOBAL THREE, RAPIER, io, etc. objects -->
+    <!-- They should NOT use "import * as THREE from 'three';" -->
     <script src="config.js"></script>         <!-- Global config -->
     <script src="utils.js"></script>          <!-- Utility functions -->
     <script src="stateMachine.js"></script>    <!-- State management -->
