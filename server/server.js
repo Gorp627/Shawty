@@ -1,4 +1,4 @@
-// server/server.js (Corrected CORS Origin - Full File v3)
+// server/server.js (Corrected CORS Origin - Full File v4 - Added Names to Death Msg)
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
@@ -18,28 +18,28 @@ const CONFIG = {
     // These should roughly match the playable area derived from client's MAP_BOUNDS
     SPAWN_AREA_X_MAX: 45.0, // Example: If client map bounds are 100x100
     SPAWN_AREA_Z_MAX: 45.0, // Example: Spawn within +/- 45 units
+    // Define an initial spawn height. Client physics (raycast down) should find the ground.
+    INITIAL_SPAWN_Y: 30.0, // Start players relatively high up
 };
 
 // --- Socket.IO Server Setup ---
 // Configure CORS for allowed origins (Github Pages, localhost for testing)
-// *** CORRECTED TYPO HERE ***
 const allowedOrigins = [
-    "https://gorp54.github.io", // <<< CORRECTED FROM gorp627
+    "https://gorp54.github.io", // Your GitHub Pages URL
     "http://localhost:8080",    // Keep for local testing if needed
-    // Add any other origins if needed
+    // Add any other origins if needed (e.g., specific preview URLs)
 ];
 const io = new Server(server, {
     cors: {
         origin: function (origin, callback) {
-             // Allow requests with no origin (like mobile apps or curl requests)
-             if (!origin) return callback(null, true);
-             if (allowedOrigins.indexOf(origin) === -1) {
+             // Allow requests with no origin (like mobile apps or curl requests) or from allowed list
+             if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+                 return callback(null, true); // Allow
+             } else {
                  const msg = `CORS policy denial for Origin: ${origin}`;
                  console.warn(msg); // Log CORS denial reason
-                 return callback(new Error(msg), false);
+                 return callback(new Error(msg), false); // Deny
              }
-             // Origin is allowed
-             return callback(null, true);
         },
         methods: ["GET", "POST"]
     },
@@ -72,15 +72,29 @@ class Player {
         if (this.health <= 0) return false; // Don't update dead players' positions
         // Basic validation
         if (data == null || isNaN(data.x) || isNaN(data.y) || isNaN(data.z) || isNaN(data.rotationY)) {
-            console.warn(`[Server] Invalid position data received from ${this.id}:`, data);
+            console.warn(`[Server] Invalid position data received from ${this.id} (${this.name}):`, data);
             return false;
         }
 
+        // Optional: Add basic server-side validation/anti-cheat here
+        // e.g., check distance moved since last update, check if position is within reasonable bounds
+        const maxDistSq = 100; // Max distance squared allowed per update interval (adjust based on speed/interval)
+        const timeDiff = (Date.now() - this.lastUpdateTime) / 1000.0; // Time since last update in seconds
+        const distSq = (data.x - this.x) ** 2 + (data.y - this.y) ** 2 + (data.z - this.z) ** 2;
+        // if(distSq / (timeDiff * timeDiff || 0.001) > maxDistSq * maxDistSq) { // Check speed squared
+        //      console.warn(`[Server AntiCheat?] Player ${this.name} moved too fast: ${Math.sqrt(distSq).toFixed(2)} units in ${timeDiff.toFixed(3)}s`);
+             // maybe ignore update or rubber-band player?
+        // }
+
+
         // Calculate change thresholds
         const movedSq = (data.x - this.x) ** 2 + (data.y - this.y) ** 2 + (data.z - this.z) ** 2;
-        const rotated = Math.abs(data.rotationY - this.rotationY) > 0.01; // Rotation threshold (radians)
-        const positionThreshold = CONFIG.PLAYER_MOVE_THRESHOLD_SQ || 1e-4;
+        // Calculate shortest angle difference for rotation
+        let rotationDiff = data.rotationY - this.rotationY;
+        rotationDiff = Math.atan2(Math.sin(rotationDiff), Math.cos(rotationDiff)); // Normalize to [-PI, PI]
+        const rotated = Math.abs(rotationDiff) > 0.01; // Rotation threshold (radians)
 
+        const positionThreshold = CONFIG.PLAYER_MOVE_THRESHOLD_SQ || 1e-4;
         const changed = movedSq > positionThreshold || rotated;
 
         if (changed) {
@@ -109,14 +123,16 @@ class Player {
             // Broadcast death event to all clients
             io.emit('playerDied', {
                 targetId: this.id,
+                targetName: this.name, // Include target name for better UI messages
                 killerId: killerInfo.id,
                 killerName: killerInfo.name,
-                killerPhrase: killerInfo.phrase
+                killerPhrase: killerInfo.phrase || 'eliminated' // Use killer's phrase or default
             });
             scheduleRespawn(this.id); // Schedule respawn timer
         } else {
             // Broadcast health update only if not dead (death event handles 0 health)
-            io.emit('healthUpdate', { id: this.id, health: this.health });
+            // Send to specific player? Or broadcast? Broadcasting is simpler for now.
+             io.emit('healthUpdate', { id: this.id, health: this.health });
         }
         return died; // Return true if player died
     }
@@ -129,9 +145,7 @@ class Player {
         const xMax = CONFIG.SPAWN_AREA_X_MAX || 45.0;
         const zMax = CONFIG.SPAWN_AREA_Z_MAX || 45.0;
         this.x = randomFloat(-xMax, xMax);
-        // SET INITIAL SPAWN HEIGHT HIGH - Client physics will handle ground placement.
-        // Start high enough to be above most potential geometry near the random X/Z.
-        this.y = 20; // Example: Start 20 units up
+        this.y = CONFIG.INITIAL_SPAWN_Y || 30.0; // SET INITIAL SPAWN HEIGHT HIGH
         this.z = randomFloat(-zMax, zMax);
         this.rotationY = randomFloat(0, Math.PI * 2); // Random initial facing direction
 
@@ -144,10 +158,10 @@ class Player {
     getNetworkData() {
         return {
             // id: this.id, // ID is the key in the update object
-            x: this.x,
-            y: this.y,
-            z: this.z,
-            r: this.rotationY, // Use 'r' for brevity
+            x: parseFloat(this.x.toFixed(3)), // Reduce precision for network
+            y: parseFloat(this.y.toFixed(3)),
+            z: parseFloat(this.z.toFixed(3)),
+            r: parseFloat(this.rotationY.toFixed(3)), // Use 'r' for brevity
             h: this.health      // Use 'h' for brevity
         };
     }
@@ -157,7 +171,7 @@ class Player {
         return {
             id: this.id,
             x: this.x,
-            y: this.y,
+            y: this.y, // Send initial high Y
             z: this.z,
             rotationY: this.rotationY, // Full name for clarity
             health: this.health,
@@ -166,6 +180,16 @@ class Player {
         };
     }
 }
+
+// Helper to get all players' full data
+function getAllPlayersFullData() {
+    let allPlayersData = {};
+    for (const id in players) {
+        allPlayersData[id] = players[id].getFullData();
+    }
+    return allPlayersData;
+}
+
 
 // --- Respawn Scheduling ---
 function scheduleRespawn(playerId) {
@@ -176,10 +200,10 @@ function scheduleRespawn(playerId) {
     respawnTimeouts[playerId] = setTimeout(() => {
         const player = players[playerId];
         if (player) {
-            player.respawn(); // Reset player state
-            // Broadcast respawn event with full data
+            player.respawn(); // Reset player state (sets new pos/health)
+            // Broadcast respawn event with full data (includes new position)
             io.emit('playerRespawned', player.getFullData());
-            console.log(`[Server] Player ${playerId} respawn processed.`);
+            console.log(`[Server] Player ${player.name} (${playerId}) respawn processed.`);
         } else {
             console.warn(`[Server] Player ${playerId} not found during scheduled respawn.`);
         }
@@ -212,6 +236,15 @@ io.on('connection', (socket) => {
         // Prevent double joining
         if (players[socket.id]) {
             console.warn(`[Server] Player ${socket.id} tried to set details again.`);
+             // Maybe just update details instead of erroring? Allow name/phrase change?
+             const oldName = players[socket.id].name;
+             const oldPhrase = players[socket.id].phrase;
+             players[socket.id].name = String(data?.name).substring(0, 16).trim() || players[socket.id].name;
+             players[socket.id].phrase = String(data?.phrase).substring(0, 20).trim() || players[socket.id].phrase;
+             console.log(`[Server] Updated details for ${players[socket.id].name} (was ${oldName}). Phrase: ${players[socket.id].phrase} (was ${oldPhrase})`);
+             // Re-initialize the player with potentially new details?
+             socket.emit('initialize', { id: socket.id, players: getAllPlayersFullData() });
+             // Notify others of the update? Maybe not necessary unless name changes significantly
             return;
         }
 
@@ -221,11 +254,8 @@ io.on('connection', (socket) => {
         players[socket.id] = new Player(socket.id, name, phrase);
         const newPlayer = players[socket.id];
 
-        // Prepare data for all existing players
-        let allPlayersData = {};
-        for (const id in players) {
-            allPlayersData[id] = players[id].getFullData();
-        }
+        // Prepare data for all existing players (including the new one)
+        let allPlayersData = getAllPlayersFullData();
 
         // Send 'initialize' event to the new player
         console.log(`[Server] Sending 'initialize' to ${newPlayer.name} (ID: ${socket.id})`);
@@ -247,6 +277,8 @@ io.on('connection', (socket) => {
         if (player) {
             player.updatePosition(data);
             // Update is broadcast periodically by the game loop if needsUpdate is true
+        } else {
+             // console.warn(`[Server] Received playerUpdate from unknown socket ID: ${socket.id}`);
         }
     });
 
@@ -259,6 +291,26 @@ io.on('connection', (socket) => {
              player.takeDamage(9999, { id: null, name: "The Void", phrase: "consumed" });
          }
      });
+
+     // --- Placeholder for Shooting ---
+     socket.on('playerShot', (/* targetId */) => {
+          const shooter = players[socket.id];
+          if(!shooter || shooter.health <= 0) return; // Ignore shots from dead or non-existent players
+
+          // TODO: Implement shooting logic
+          // 1. Validate shot (cooldown, ammo, line of sight?)
+          // 2. Determine hit target (raycast from shooter's position/direction)
+          //    - This ideally requires server-side physics or at least position checks.
+          //    - For simplicity now, we might trust client hit report or skip server validation.
+          // 3. If target is hit (e.g., targetId provided by client - UNSAFE)
+          // const targetPlayer = players[targetId];
+          // if(targetPlayer) {
+          //      const damage = 25; // Example damage
+          //      targetPlayer.takeDamage(damage, { id: shooter.id, name: shooter.name, phrase: shooter.phrase });
+          // }
+          console.log(`[Server] Received 'playerShot' from ${shooter.name} (ID: ${socket.id}) - Target processing TBD.`);
+     });
+
 
     // --- Handle Disconnection ---
     socket.on('disconnect', (reason) => {
@@ -297,10 +349,14 @@ function serverGameLoop() {
     let updateGenerated = false;
 
     for (const id in players) {
-        if (players[id].needsUpdate) {
+        // Only include alive players who need updating in the broadcast
+        if (players[id].needsUpdate && players[id].health > 0) {
             stateUpdate.players[id] = players[id].getNetworkData();
             players[id].needsUpdate = false; // Reset flag after adding to update
             updateGenerated = true;
+        } else if (players[id].needsUpdate) {
+             // Reset flag even if dead, so they don't perpetually need update
+             players[id].needsUpdate = false;
         }
     }
 
@@ -328,7 +384,7 @@ app.get('/', (req, res) => {
         if (err) {
             console.error("[Server] Error sending index.html:", err);
             if (!res.headersSent) { // Check if headers were already sent
-                 res.status(500).send('Error loading game page.');
+                 res.status(err.status || 500).send('Error loading game page.');
             }
         }
     });
@@ -336,12 +392,20 @@ app.get('/', (req, res) => {
 
 // Serve static files (CSS, JS, assets) from the 'docs' directory
 const staticPath = path.join(__dirname, '..', 'docs');
-app.use(express.static(staticPath));
+app.use(express.static(staticPath, {
+    // Optional: Set headers for specific file types if needed
+    // setHeaders: function (res, filePath, stat) {
+    //   if (path.extname(filePath) === '.glb') {
+    //     res.set('Content-Encoding', 'gzip'); // If you are pre-gzipping assets
+    //   }
+    // }
+}));
 console.log(`[Server] Serving static files from: ${staticPath}`);
 
 // --- Start Server Listening ---
 server.listen(PORT, () => {
     console.log(`[Server] HTTP and Socket.IO server listening on *:${PORT}`);
+    console.log(`[Server] Allowed Origins: ${allowedOrigins.join(', ')}`);
 });
 
 // --- Graceful Shutdown Handling ---
@@ -349,6 +413,11 @@ function gracefulShutdown(signal) {
     console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
     clearInterval(gameLoopIntervalId); // Stop game loop
     console.log('[Server] Game loop stopped.');
+
+    // Clear all pending respawn timeouts
+    Object.values(respawnTimeouts).forEach(clearTimeout);
+    console.log('[Server] Cleared pending respawn timeouts.');
+
     io.close(() => { // Close Socket.IO connections
         console.log('[Server] Socket.IO connections closed.');
         server.close(() => { // Close HTTP server
