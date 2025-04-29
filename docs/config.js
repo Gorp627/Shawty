@@ -1,11 +1,11 @@
 // docs/config.js (Added Shooting/Effect Constants - Reduced Gravity Debug)
 
 const CONFIG = {
-    SERVER_URL: 'https://gametest-psxl.onrender.com',
-    MAP_PATH: 'assets/maps/map.glb', // Make sure this is the correct map path!
+    SERVER_URL: 'https://gametest-psxl.onrender.com', // Ensure this points to your Render server URL
+    MAP_PATH: 'assets/maps/map.glb', // MAKE SURE THIS PATH IS CORRECT
     PLAYER_MODEL_PATH: 'assets/maps/Shawty1.glb',
-    GUN_MODEL_PATH: 'assets/maps/gun2.glb', // Added Gun Model Path
-    GUN_SHOT_SOUND_PATH: 'assets/maps/gunshot.wav', // Added Sound Path
+    GUN_MODEL_PATH: 'assets/maps/gun2.glb',
+    GUN_SHOT_SOUND_PATH: 'assets/maps/gunshot.wav',
 
     PLAYER_HEIGHT: 1.8,
     PLAYER_RADIUS: 0.4,
@@ -18,7 +18,7 @@ const CONFIG = {
     DASH_DURATION: 0.15,
 
     // --- Physics Config (Rapier) ---
-    GRAVITY: -25.0, // Reverted DEBUG reduction, use heavy gravity
+    GRAVITY: -25.0, // Heavy gravity
     JUMP_IMPULSE: 300,
     VOID_Y_LEVEL: -100,
     MAP_BOUNDS_X: 100.0,
@@ -42,7 +42,7 @@ const CONFIG = {
     KILL_MESSAGE_DURATION: 3500,
 
     CLIENT_UPDATE_INTERVAL: 1000 / 20, // ~50ms
-    SERVER_BROADCAST_INTERVAL: 1000 / 15, // ~66ms
+    SERVER_BROADCAST_INTERVAL: 1000 / 15, // ~66ms (Used by server.js)
     PLAYER_DEFAULT_HEALTH: 100,
     PLAYER_MOVE_THRESHOLD_SQ: 0.0001 // Min distance squared to trigger network update
 };
@@ -57,10 +57,11 @@ let localPlayerPhrase = '...';
 let lastDashTime = 0;
 let lastShootTime = 0; // Added for shoot cooldown
 
+// These will be assigned by game.js or other init scripts
 let scene, camera, renderer, controls, clock, loader, dracoLoader;
-var RAPIER = window.RAPIER || null;
-var rapierWorld = null;
-var rapierEventQueue = null;
+var RAPIER = window.RAPIER || null; // Will be populated by rapier_init.js
+var rapierWorld = null; // Will be populated by game.js
+var rapierEventQueue = null; // Will be populated by game.js
 let loadingScreen, homeScreen, gameUI, playerCountSpan, playerNameInput, playerPhraseInput, joinButton, homeScreenError, infoDiv, healthBarFill, healthText, killMessageDiv;
 let killMessageTimeout = null;
 let mapMesh = null; // Reference to the visual map Object3D
@@ -68,4 +69,10 @@ let gunMesh = null; // Reference to the local player's gun model
 let gunSoundBuffer = null; // Loaded gunshot sound
 let listener; // THREE.AudioListener
 
-console.log("config.js loaded (Added Shooting/Effect Consts)");
+// Flags used by game.js / network.js
+let assetsAreReady = false;
+let networkIsInitialized = false;
+let physicsIsReady = false;
+let initializationData = null; // From server
+
+console.log("config.js loaded (Using Global THREE/RAPIER)");
