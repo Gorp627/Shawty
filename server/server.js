@@ -25,12 +25,12 @@ const CONFIG = {
 // determined from your map geometry (where the collider exists).
 // The Y value should be the actual ground level. INITIAL_SPAWN_Y_OFFSET will be added.
 const SAFE_SPAWN_POINTS = [
-    { x: -5.21592, y: -55.1608, z: 39.8632 },    // Example: Center (assuming ground is at Y=0)
-    { x: 0,  y: -128, z: 90 },   // Example: Point 1
-    { x: 50,  y: -203, z: 40 },  // Example: Point 2 (ground might be at Y=1 here)
-    { x: -66,  y: -97, z: 44 },   // Example: Point 3
-    { x: 25,  y: -9, z: 86 },
-    { x: -87,  y: -43, z: 27 },
+    { x: -5.21592, y: 39.8632, z: 55.1608 },
+    { x: 0,        y: 90,      z: 128 },
+    { x: 50,       y: 40,      z: 203 },
+    { x: -66,      y: 44,      z: 97 },
+    { x: 25,       y: 86,      z: 9 },
+    { x: -87,      y: 27,      z: 43 },
     // Add more known safe spawn locations on your map collider
 ];
 if (SAFE_SPAWN_POINTS.length === 0) {
