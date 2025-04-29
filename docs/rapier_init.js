@@ -1,4 +1,4 @@
-// docs/rapier_init.js (REGENERATED v2)
+// docs/rapier_init.js (REGENERATED v2 - No changes needed)
 
 // Dynamically import the Rapier library
 // Using Skypack CDN for compatibility
