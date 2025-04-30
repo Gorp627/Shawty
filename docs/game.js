@@ -1,5 +1,5 @@
-// --- START OF FULL game.js FILE (Manual Raycasting v4 - Debug Logging) ---
-// docs/game.js - Main Game Orchestrator (Manual Raycasting v4 - Debug Logging)
+// --- START OF FULL game.js FILE (Manual Raycasting v5 - Update Loop Logging) ---
+// docs/game.js - Main Game Orchestrator (Manual Raycasting v5 - Update Loop Logging)
 
 var currentGameInstance = null; // Holds the single Game instance
 
@@ -210,9 +210,9 @@ class Game {
             console.warn("[Game] startGamePlay called while already in 'playing' state. Ignoring.");
             return;
         }
-        this.cleanupAllPlayers(); // Cleanup BEFORE setting state and processing
+        this.cleanupAllPlayers();
 
-        stateMachine.transitionTo('playing'); // Set state FIRST
+        stateMachine.transitionTo('playing');
         console.log("[Game] --- Starting Gameplay (Manual Raycasting) ---");
 
         window.localPlayerId = initData.id;
@@ -254,9 +254,8 @@ class Game {
                  if(gunModelAsset?.scene && this.camera) {
                      if (window.gunMesh) this.camera.remove(window.gunMesh);
                      window.gunMesh = gunModelAsset.scene.clone();
-                     // *** ADJUST GUN SCALE HERE ***
-                     window.gunMesh.scale.set(0.5, 0.5, 0.5); // Example: Increased scale
-                     window.gunMesh.position.set(0.15, -0.15, -0.4); // May need minor position tweaks after scaling
+                     window.gunMesh.scale.set(0.5, 0.5, 0.5); // Increased gun scale
+                     window.gunMesh.position.set(0.15, -0.15, -0.4);
                      window.gunMesh.rotation.set(0, Math.PI, 0);
                      window.gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; });
                      this.camera.add(window.gunMesh);
@@ -280,7 +279,7 @@ class Game {
             this.playerVelocities[id] = new THREE.Vector3(0, 0, 0);
             this.playerIsGrounded[id] = false; // Start airborne, ground check will correct
         }
-        // Map Mesh Check (moved from loop)
+        // Map Mesh Check
         if (window.mapMesh) {
             console.log("Map Mesh Check:", window.mapMesh instanceof THREE.Object3D, "Visible:", window.mapMesh.visible);
             let hasMeshChild = false;
@@ -329,57 +328,71 @@ class Game {
     update() {
         requestAnimationFrame(this.update.bind(this));
         if (!this.clock || !this.renderer || !this.scene || !this.camera || !window.mapMesh) {
-            return; // Skip update if core components or map aren't ready
+            return;
         }
 
         const deltaTime = this.clock.getDelta();
-        const clampedDeltaTime = Math.min(deltaTime, 0.05); // Clamp delta time
+        const clampedDeltaTime = Math.min(deltaTime, 0.05);
 
         if (stateMachine.is('playing')) {
-             // console.log("Game Loop Running - Playing State"); // <-- TEMP LOG
+             // ***** NEW LOG 1: Confirm 'playing' state check passes *****
+             // console.log("Game Update Loop: In 'playing' state.");
 
-            // 1. Update Local Player Input & Intent
-            if (this.localPlayerMesh && localPlayerId && this.playerVelocities[localPlayerId]) {
+            // --- 1. Update Local Player Input & Intent ---
+            const canUpdateInput = this.localPlayerMesh && localPlayerId && this.playerVelocities && this.playerVelocities[localPlayerId] !== undefined;
+             // ***** NEW LOG 2: Check prerequisites for input update *****
+             // console.log(`Game Update Loop: Input Prerequisites - Mesh=${!!this.localPlayerMesh}, ID=${!!localPlayerId}, VelMap=${!!(this.playerVelocities && this.playerVelocities[localPlayerId] !== undefined)} -> CanUpdate=${canUpdateInput}`);
+            if (canUpdateInput) {
+                // ***** NEW LOG 3: Confirm calling input update *****
+                // console.log("Game Update Loop: Calling updateLocalPlayerInput...");
                 updateLocalPlayerInput(clampedDeltaTime, this.camera, this.localPlayerMesh);
             }
 
-            // 2. Apply Physics & Collision (Local Player)
-            if (this.localPlayerMesh && localPlayerId && this.playerVelocities[localPlayerId]) {
+            // --- 2. Apply Physics & Collision (Local Player) ---
+            const canCheckCollision = this.localPlayerMesh && localPlayerId && this.playerVelocities && this.playerVelocities[localPlayerId] !== undefined;
+            // ***** NEW LOG 4: Check prerequisites for collision check *****
+            // console.log(`Game Update Loop: Collision Prerequisites - Mesh=${!!this.localPlayerMesh}, ID=${!!localPlayerId}, VelMap=${!!(this.playerVelocities && this.playerVelocities[localPlayerId] !== undefined)} -> CanCheck=${canCheckCollision}`);
+            if (canCheckCollision) {
+                 // ***** NEW LOG 5: Confirm calling collision check *****
+                 // console.log("Game Update Loop: Calling checkPlayerCollisionAndMove...");
                 const groundedResult = checkPlayerCollisionAndMove(
                     this.localPlayerMesh,
                     this.playerVelocities[localPlayerId],
                     clampedDeltaTime
                 );
-                // Only update if the function didn't return undefined (e.g., due to early exit)
                 if (groundedResult !== undefined) {
+                    // Ensure the grounded map exists before assigning
+                    if (!this.playerIsGrounded) this.playerIsGrounded = {};
                     this.playerIsGrounded[localPlayerId] = groundedResult;
                 }
-                // console.log("Grounded state updated to:", this.playerIsGrounded[localPlayerId]); // <-- TEMP LOG
+                 // console.log("Game Update Loop: Grounded state updated to:", this.playerIsGrounded[localPlayerId]);
             }
 
-            // 3. Update Remote Players (Interpolation)
+            // --- 3. Update Remote Players (Interpolation) ---
             for (const id in window.players) {
                 if (id === localPlayerId) continue;
                 const player = window.players[id];
                 const playerMesh = player?.mesh;
-                const playerVelocity = this.playerVelocities[id];
+                const playerVelocity = this.playerVelocities ? this.playerVelocities[id] : undefined; // Check if map exists
 
-                if (player instanceof ClientPlayer && playerMesh && playerVelocity) {
+                if (player instanceof ClientPlayer && playerMesh && playerVelocity !== undefined) { // Check velocity exists
                     try {
-                        // Simple physics simulation (gravity/damping) if velocity exists (e.g., after shockwave)
+                        // Simple physics simulation if velocity exists
                         if (playerVelocity.lengthSq() > 0.01) {
-                             if (!this.playerIsGrounded[id]) { // Use potentially stale grounded state for remote
+                             if (this.playerIsGrounded && !this.playerIsGrounded[id]) { // Check if map exists
                                 playerVelocity.y -= (CONFIG?.GRAVITY_ACCELERATION ?? 28.0) * clampedDeltaTime;
                              }
                              playerMesh.position.addScaledVector(playerVelocity, clampedDeltaTime);
-                             // Basic ground clamp
                              if (playerMesh.position.y < 0) {
-                                playerMesh.position.y = 0; playerVelocity.y = 0; this.playerIsGrounded[id] = true;
-                             } else { this.playerIsGrounded[id] = false; }
-                             playerVelocity.multiplyScalar(0.98); // Dampen velocity
+                                playerMesh.position.y = 0; playerVelocity.y = 0;
+                                if(this.playerIsGrounded) this.playerIsGrounded[id] = true;
+                             } else {
+                                if(this.playerIsGrounded) this.playerIsGrounded[id] = false;
+                             }
+                             playerVelocity.multiplyScalar(0.98);
                         }
 
-                        // Interpolate position & rotation towards server state
+                        // Interpolate position & rotation
                         playerMesh.position.lerp(new THREE.Vector3(player.serverX, player.serverY, player.serverZ), this.interpolationFactor);
                         const targetQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), player.serverRotY);
                         playerMesh.quaternion.slerp(targetQuat, this.interpolationFactor);
@@ -388,7 +401,7 @@ class Game {
                 }
             }
 
-            // 4. Update Camera Position/Rotation
+            // --- 4. Update Camera Position/Rotation ---
             if (this.localPlayerMesh && this.camera && this.controls) {
                  try {
                      const targetCameraParentPos = this.localPlayerMesh.position.clone();
@@ -397,10 +410,10 @@ class Game {
                  } catch(e) { console.error("Error updating camera/controls position:", e); }
             }
 
-            // 5. Send Network Update
+            // --- 5. Send Network Update ---
             sendLocalPlayerUpdateIfNeeded(this.localPlayerMesh, this.camera);
 
-            // 6. Update Effects
+            // --- 6. Update Effects ---
             Effects?.update(deltaTime);
 
         } // End if(stateMachine.is('playing'))
@@ -426,5 +439,5 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     startGameInit();
 });
-console.log("game.js loaded (Manual Raycasting v4 - Debug Logging)");
-// --- END OF FULL game.js FILE (Manual Raycasting v4 - Debug Logging) ---
+console.log("game.js loaded (Manual Raycasting v5 - Update Loop Logging)");
+// --- END OF FULL game.js FILE (Manual Raycasting v5 - Update Loop Logging) ---
