@@ -272,7 +272,7 @@ class Game {
                  const gunModelAsset = window.gunModelData;
                  if(gunModelAsset?.scene && this.camera) { // Added check for this.camera
                      gunMesh = gunModelAsset.scene.clone();
-                     gunMesh.scale.set(0.1, 0.1, 0.1);
+                     gunMesh.scale.set(0.3, 0.3, 0.3);
                      gunMesh.position.set(0.15, -0.15, -0.4);
                      gunMesh.rotation.set(0, Math.PI, 0);
                       gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; });
