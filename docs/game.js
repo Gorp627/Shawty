@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (Uses Global Scope - v13 Quaternion/Sky Fix)
+// docs/game.js - Main Game Orchestrator (Uses Global Scope - v14 Quaternion Fix 2)
 
 // --- Global variables like networkIsInitialized, assetsAreReady, etc., ---
 // --- are DECLARED in config.js and accessed directly here. ---
@@ -60,11 +60,7 @@ class Game {
         stateMachine.transitionTo('loading', { message: 'Setting up Graphics...' });
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene(); window.scene = this.scene; // Assign to global window.scene
-
-        // ***** ADDED SKY COLOR HERE *****
         this.scene.background = new THREE.Color(0x87CEEB); // Sky Blue
-        // ******************************
-
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500); window.camera = this.camera; // Assign to global window.camera
         this.renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; window.renderer = this.renderer; // Assign to global window.renderer
@@ -77,28 +73,23 @@ class Game {
         this.controls = new THREE.PointerLockControls(this.camera, this.renderer.domElement); window.controls = this.controls; // Assign to global window.controls
         // Add listeners for pointer lock/unlock
         this.controls.addEventListener('lock', () => {
-            // console.log("Pointer Locked"); // Less spammy log
             if(stateMachine?.is('playing') && UIManager?.gameUI) { UIManager.gameUI.style.cursor = 'none'; }
         });
         this.controls.addEventListener('unlock', () => {
-            // console.log("Pointer Unlocked"); // Less spammy log
             if(stateMachine?.is('playing') && UIManager?.gameUI) { UIManager.gameUI.style.cursor = 'default'; }
         });
-        // Add the controls' object (which contains the camera) to the scene
         this.scene.add(this.controls.getObject());
 
         // 4. Setup Scene Lighting
-        this.scene.add(new THREE.AmbientLight(0x606070, 1.0)); // Slightly increased ambient light
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0); // Slightly increased directional light
+        this.scene.add(new THREE.AmbientLight(0x606070, 1.0));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(40, 50, 30);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
         dirLight.shadow.camera.near = 0.5; dirLight.shadow.camera.far = 500;
         this.scene.add(dirLight);
-        // Optional: Add Hemisphere Light for softer sky/ground lighting
-        const hemisphereLight = new THREE.HemisphereLight( 0x87CEEB, 0x404020, 0.6 ); // Sky color, ground color, intensity
+        const hemisphereLight = new THREE.HemisphereLight( 0x87CEEB, 0x404020, 0.6 );
         this.scene.add( hemisphereLight );
-
 
         // 5. Initialize Input System (Uses global Input object)
         if (!Input.init(this.controls)) {
@@ -112,9 +103,8 @@ class Game {
 
         // 7. Initialize Physics (Waits for global RAPIER, assigns to global rapierWorld)
         stateMachine.transitionTo('loading', { message: 'Loading Physics Engine...' });
-        if (!window.isRapierReady) { // Check global flag set by rapier_init.js
+        if (!window.isRapierReady) {
             console.log("Waiting for Rapier physics engine...");
-            // Use event listener to wait for Rapier to be ready
             await new Promise((resolve, reject) => {
                 const readyListener = () => { console.log("Heard rapier-ready event."); resolve(); cleanup(); };
                 const errorListener = (e) => { console.error("Heard rapier-error event.", e.detail); reject(new Error("Rapier failed to initialize")); cleanup(); };
@@ -126,7 +116,7 @@ class Game {
                  stateMachine.transitionTo('loading', { message: 'FATAL: Physics Engine Failed!', error: true }); return;
             });
         }
-        this.setupPhysics(); // Setup Rapier world using global RAPIER
+        this.setupPhysics();
 
         // 8. Setup Asset Loaders (Assigns to global loader/dracoLoader)
         stateMachine.transitionTo('loading', { message: 'Preparing Asset Loaders...' });
@@ -154,29 +144,27 @@ class Game {
 
     // --- Setup Sub-functions ---
     setupPhysics() {
-        // Uses global RAPIER and assigns to global rapierWorld/EventQueue
         if (!RAPIER) { console.error("!!! RAPIER global object is missing during physics setup!"); return; }
-        rapierWorld = new RAPIER.World({ x: 0, y: CONFIG.GRAVITY, z: 0 }); // Use GRAVITY from global CONFIG
-        rapierEventQueue = new RAPIER.EventQueue(true); // Enable collision event queue
-        window.rapierWorld = rapierWorld; // Assign to global scope
-        window.rapierEventQueue = rapierEventQueue; // Assign to global scope
-        physicsIsReady = true; // Set global flag
+        rapierWorld = new RAPIER.World({ x: 0, y: CONFIG.GRAVITY, z: 0 });
+        rapierEventQueue = new RAPIER.EventQueue(true);
+        window.rapierWorld = rapierWorld;
+        window.rapierEventQueue = rapierEventQueue;
+        physicsIsReady = true;
         console.log("[Game] Rapier Physics World Initialized.");
-        this.attemptProceedToGame(); // Check if other dependencies are met
+        this.attemptProceedToGame();
     }
 
     setupLoaders() {
-        // Uses global THREE and assigns to global loader/dracoLoader
         if (!THREE) { console.error("!!! THREE missing during loader setup!"); return; }
         if (typeof THREE.DRACOLoader === 'undefined' || typeof THREE.GLTFLoader === 'undefined') {
              console.error("!!! THREE.DRACOLoader or THREE.GLTFLoader constructors not found! Check index.html script order."); return;
         }
-        dracoLoader = new THREE.DRACOLoader(); // Assign to global dracoLoader
-        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'); // Path to Draco decoder files
-        loader = new THREE.GLTFLoader(); // Assign to global loader
+        dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+        loader = new THREE.GLTFLoader();
         loader.setDRACOLoader(dracoLoader);
-        window.dracoLoader = dracoLoader; // Explicitly assign to window
-        window.loader = loader; // Explicitly assign to window
+        window.dracoLoader = dracoLoader;
+        window.loader = loader;
         console.log("[Game] GLTF/DRACO Loaders Initialized.");
     }
 
@@ -195,129 +183,103 @@ class Game {
     // --- Loading Callbacks ---
     onAssetsReady() {
         console.log("[Game] Asset Load Manager reported 'ready'.");
-        assetsAreReady = true; // Set global flag
-        this.createMapCollider(); // Create collider now map asset is loaded and Rapier is ready
-        this.attemptProceedToGame(); // Check prerequisites again
+        assetsAreReady = true;
+        this.createMapCollider();
+        this.attemptProceedToGame();
     }
 
     onLoadError(errorData) {
         console.error("[Game] Asset Load Manager reported 'error':", errorData.message);
-        // Use global stateMachine
         stateMachine.transitionTo('loading', { message: `Asset Load Failed!<br/>${errorData.message}`, error: true });
     }
 
     // --- Check Prerequisites & Transition Logic ---
     attemptProceedToGame() {
-        // This is called whenever Assets, Physics, or Network state might have changed.
-        // Uses global flags: assetsAreReady, physicsIsReady, networkIsInitialized, initializationData
-
         console.log(`[Game] Checking prerequisites: Assets=${assetsAreReady}, Physics=${physicsIsReady}, Network=${networkIsInitialized}, InitData=${!!initializationData}`);
 
-        // Condition 1: Everything ready for ACTUAL GAMEPLAY?
         if (assetsAreReady && physicsIsReady && networkIsInitialized && initializationData) {
-            // Prevent starting gameplay multiple times if somehow called again after starting
             if (!stateMachine.is('playing')) {
                 console.log("[Game] All prerequisites met! Starting gameplay...");
-                this.startGamePlay(initializationData); // Pass data to start function
-                initializationData = null; // Consume the init data (clear global)
+                this.startGamePlay(initializationData);
+                initializationData = null;
             } else {
                  console.log("[Game] Already in playing state, ignoring redundant attemptProceedToGame for gameplay start.");
             }
         }
-        // Condition 2: Ready for HOMESCREEN, but not gameplay yet?
-        // Need Assets, Physics, and a Network connection established. Don't need InitData yet.
-        // Also check if we are currently in the 'loading' state to prevent unnecessary transitions.
         else if (assetsAreReady && physicsIsReady && networkIsInitialized && !initializationData && stateMachine.is('loading')) {
             console.log("[Game] Core components ready, transitioning to Homescreen...");
-            stateMachine.transitionTo('homescreen'); // <<< TRANSITION TO HOMESCREEN
-            // UIManager listener for 'homescreen' will handle showing the UI elements.
+            stateMachine.transitionTo('homescreen');
         }
-        // Condition 3: Still waiting for something...
         else {
-            // Update loading message if still in loading state and not showing an error
             if (stateMachine.is('loading') && !stateMachine.options.error) {
                 let waitMsg = "Initializing...";
                 if (!assetsAreReady) waitMsg = "Loading Assets...";
                 else if (!physicsIsReady) waitMsg = "Loading Physics...";
                 else if (!networkIsInitialized) waitMsg = "Connecting...";
-                // No need to mention InitData here, user needs homescreen first
-                stateMachine.transitionTo('loading', { message: waitMsg }); // Re-transition to update message
+                stateMachine.transitionTo('loading', { message: waitMsg });
             }
-            // console.log("[Game] Prerequisites not yet fully met. Waiting..."); // Less spammy log
         }
     }
 
     // --- Start Actual Gameplay Logic ---
     startGamePlay(initData) {
         console.log("[Game] --- Starting Gameplay ---");
-        // Use global stateMachine, UIManager, players, THREE, RAPIER, Effects, Network, scene, camera, gunMesh, loadManager, CONFIG
-        stateMachine.transitionTo('playing'); // Trigger UI change via UIManager listener
+        stateMachine.transitionTo('playing');
 
-        this.cleanupAllPlayers(); // Clear any old state first
+        this.cleanupAllPlayers();
 
-        localPlayerId = initData.id; // Set global localPlayerId
+        localPlayerId = initData.id;
         console.log(`[Game] Local Player ID set: ${localPlayerId}`);
 
-        // Process all players received from the server
         for (const id in initData.players) {
-            const playerData = initData.players[id]; if (!playerData) continue; // Skip if null/undefined data
+            const playerData = initData.players[id]; if (!playerData) continue;
 
             if (id === localPlayerId) {
-                // --- Create LOCAL Player ---
                 console.log("[Game] Creating LOCAL player objects...");
-                // 1. Store data locally (using global players map)
                 players[id] = {
                     id: id, name: playerData.name, phrase: playerData.phrase,
-                    health: playerData.health, isLocal: true, mesh: null, // Mesh added later
-                    x: playerData.x, y: playerData.y, z: playerData.z, rotationY: playerData.rotationY, // Initial server state cache
+                    health: playerData.health, isLocal: true, mesh: null,
+                    x: playerData.x, y: playerData.y, z: playerData.z, rotationY: playerData.rotationY,
                 };
-                window.localPlayerName = playerData.name; // Update global name/phrase for UI etc.
+                window.localPlayerName = playerData.name;
                 window.localPlayerPhrase = playerData.phrase;
-                UIManager.updateInfo(`Playing as ${playerData.name}`); // Update UI
-                UIManager.updateHealthBar(playerData.health); // Update UI
+                UIManager.updateInfo(`Playing as ${playerData.name}`);
+                UIManager.updateHealthBar(playerData.health);
 
-                // 2. Create Physics Body (Dynamic) using instance method
                 const playerHeight = CONFIG.PLAYER_HEIGHT; const bodyCenterY = playerData.y + playerHeight / 2.0;
                 const startPos = { x: playerData.x, y: bodyCenterY, z: playerData.z };
                 this.createPlayerPhysicsBody(id, startPos, playerData.rotationY, true); // true = isLocal
 
-                // 3. Create Visual Mesh (using global playerModelData from loadManager)
                 const playerModelAsset = window.playerModelData;
                 if (playerModelAsset?.scene) {
                     try {
-                        this.localPlayerMesh = playerModelAsset.scene.clone(); // Clone for local player, assign to instance var
-                        this.localPlayerMesh.scale.set(0.5, 0.5, 0.5); // Example scale - ADJUST
-                        this.localPlayerMesh.visible = false; // Hide local player body for FPS view
+                        this.localPlayerMesh = playerModelAsset.scene.clone();
+                        this.localPlayerMesh.scale.set(0.5, 0.5, 0.5);
+                        this.localPlayerMesh.visible = false;
                         this.localPlayerMesh.userData = { entityId: id, isPlayer: true, isLocal: true };
-                        // Make all submeshes invisible too
                          this.localPlayerMesh.traverse(child => { if(child.isMesh){ child.castShadow=true; child.receiveShadow=true; child.visible=false; } });
-                        scene.add(this.localPlayerMesh); // Add to global scene
-                        players[id].mesh = this.localPlayerMesh; // Link mesh reference in global players map
+                        scene.add(this.localPlayerMesh);
+                        players[id].mesh = this.localPlayerMesh;
                         console.log("[Game] Created local player GLTF mesh (hidden).");
                     } catch(e) { console.error("Error cloning/adding local player mesh:", e); }
                 } else { console.error("!!! Local player model asset not found! Cannot create mesh."); }
 
-                 // 4. Attach Gun Model to Camera (using global gunModelData)
                  const gunModelAsset = window.gunModelData;
                  if(gunModelAsset?.scene) {
-                     gunMesh = gunModelAsset.scene.clone(); // Assign to global gunMesh var
-                     gunMesh.scale.set(0.1, 0.1, 0.1); // Adjust scale as needed
-                     // Adjust position/rotation relative to camera VIEW
-                     gunMesh.position.set(0.15, -0.15, -0.4); // Right, Down, Forward from camera center - ADJUST
-                     gunMesh.rotation.set(0, Math.PI, 0); // Adjust rotation as needed (Y is up)
-                      gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; }); // Gun casts shadows
-                     camera.add(gunMesh); // Add gun directly to global camera
+                     gunMesh = gunModelAsset.scene.clone();
+                     gunMesh.scale.set(0.1, 0.1, 0.1);
+                     gunMesh.position.set(0.15, -0.15, -0.4);
+                     gunMesh.rotation.set(0, Math.PI, 0);
+                      gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; });
+                     camera.add(gunMesh);
                      console.log("[Game] Attached gun model to camera.");
                  } else { console.warn("Gun model asset not ready, cannot attach gun."); }
 
             } else {
-                // --- Create REMOTE Player ---
                 console.log(`[Game] Creating REMOTE player objects for ${playerData.name || id}...`);
-                // 1. Create ClientPlayer visual instance (uses global THREE/scene/loadManager/etc.)
-                const remotePlayer = new ClientPlayer(playerData); // ClientPlayer class handles mesh loading
-                players[id] = remotePlayer; // Store in global players map
+                const remotePlayer = new ClientPlayer(playerData);
+                players[id] = remotePlayer;
 
-                // 2. Create Physics Body (Kinematic) - Only if mesh was successfully created
                 if (remotePlayer.mesh) {
                     const playerHeight = CONFIG.PLAYER_HEIGHT; const bodyCenterY = playerData.y + playerHeight / 2.0;
                     const startPos = { x: playerData.x, y: bodyCenterY, z: playerData.z };
@@ -332,51 +294,43 @@ class Game {
 
     // --- Physics Body Creation ---
     createPlayerPhysicsBody(playerId, initialPosition, initialRotationY, isLocal) {
-        // Uses global RAPIER, rapierWorld, CONFIG
         if (!rapierWorld || !RAPIER) { console.error("!!! Physics world/Rapier missing for body creation!"); return; }
         const h = CONFIG.PLAYER_HEIGHT; const r = CONFIG.PLAYER_RADIUS;
-        const capsuleHalfHeight = Math.max(0.01, h / 2.0 - r); // Avoid zero height cylinder part
+        const capsuleHalfHeight = Math.max(0.01, h / 2.0 - r);
 
         let rigidBodyDesc;
-        let colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, r) // Use .capsule() - Y is default alignment
+        let colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, r)
             .setFriction(0.7).setRestitution(0.1).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
 
-        // ***** FIXED LINE HERE *****
+        // ***** MODIFIED LINE HERE *****
         // Convert Y rotation to Quaternion using global RAPIER
-        const quaternion = RAPIER.Quaternion.from_axis_angle({ x: 0, y: 1, z: 0 }, initialRotationY);
-        // *************************
+        const quaternion = RAPIER.Quaternion.rotation_from_axis_angle({ x: 0, y: 1, z: 0 }, initialRotationY);
+        // ****************************
         if (!quaternion) { console.error(`Failed to create quaternion for player ${playerId}`); return; }
 
-        // Add userData to the collider for identification in collision events
         colliderDesc.userData = { entityId: playerId, isLocal: isLocal, isPlayer: true };
 
         if (isLocal) {
-            // --- Dynamic Body for Local Player ---
             rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
                 .setTranslation(initialPosition.x, initialPosition.y, initialPosition.z)
                 .setRotation(quaternion)
-                .setLinearDamping(0.5) // Air resistance feel
-                .setAngularDamping(1.0) // Resistance to spinning
-                .lockRotations() // Prevent capsule falling over from torque
-                .setCcdEnabled(true); // Continuous Collision Detection for fast movement
-            colliderDesc.setDensity(1.0); // Give mass to dynamic body based on volume
+                .setLinearDamping(0.5)
+                .setAngularDamping(1.0)
+                .lockRotations()
+                .setCcdEnabled(true);
+            colliderDesc.setDensity(1.0);
         } else {
-            // --- Kinematic Body for Remote Players ---
-            rigidBodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased() // Moves based on setNextKinematic...
+            rigidBodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
                 .setTranslation(initialPosition.x, initialPosition.y, initialPosition.z)
-                .setRotation(quaternion); // Set initial kinematic state
+                .setRotation(quaternion);
         }
 
-        // Create body and collider using global rapierWorld
         try {
             const body = rapierWorld.createRigidBody(rigidBodyDesc);
             if (!body) throw new Error("Rapier RigidBody creation returned null.");
-            // Create collider and attach it to the body's handle
             rapierWorld.createCollider(colliderDesc, body.handle);
-            // Store the handle in the instance's map
             this.playerRigidBodyHandles[playerId] = body.handle;
             console.log(`[Game] Created ${isLocal ? 'DYNAMIC' : 'KINEMATIC'} Rapier body for player ${playerId} (Handle: ${body.handle})`);
-            // Add debug mesh if enabled
             if (this.DEBUG_SHOW_PLAYER_COLLIDERS) {
                 this.addDebugMesh(playerId, r, h, initialPosition, quaternion);
             }
@@ -387,28 +341,24 @@ class Game {
 
     // --- Map Collider Creation ---
     createMapCollider() {
-        // Uses global RAPIER, rapierWorld, window.mapMesh (THREE.Object3D from loadManager)
         if (!rapierWorld || !RAPIER || !window.mapMesh) {
             console.warn("Map collider prerequisites (Rapier/World/MapMesh) not met, using simple ground.");
-            this.createSimpleGroundCollider(); // Create fallback ground
+            this.createSimpleGroundCollider();
             return;
         }
         console.log("[Game] Attempting to create map collider from loaded GLTF...");
         try {
-            // Process the loaded map scene (window.mapMesh) to extract combined vertices and indices
             const geometries = [];
             window.mapMesh.traverse(child => {
                 if (child.isMesh) {
-                    // IMPORTANT: Apply world matrix transformation to vertices
-                    const clonedGeometry = child.geometry.clone(); // Clone to avoid modifying original
-                    clonedGeometry.applyMatrix4(child.matrixWorld); // Apply parent transformations
+                    const clonedGeometry = child.geometry.clone();
+                    clonedGeometry.applyMatrix4(child.matrixWorld);
                     geometries.push(clonedGeometry);
                 }
             });
 
             if (geometries.length === 0) throw new Error("No mesh geometries found within the loaded map asset.");
 
-            // Combine all mesh data into single vertex/index arrays
             const vertices = [];
             const indices = [];
             let currentIndexOffset = 0;
@@ -416,45 +366,34 @@ class Game {
             geometries.forEach(geometry => {
                 const positionAttribute = geometry.attributes.position;
                 const indexAttribute = geometry.index;
-
-                if (!positionAttribute) return; // Skip meshes without position data
-
-                // Add vertices to the main array
+                if (!positionAttribute) return;
                 for (let i = 0; i < positionAttribute.count; i++) {
                     vertices.push(positionAttribute.getX(i), positionAttribute.getY(i), positionAttribute.getZ(i));
                 }
-
-                // Add indices to the main array, adjusting for the offset
                 if (indexAttribute) {
                     for (let i = 0; i < indexAttribute.count; i++) {
                         indices.push(indexAttribute.getX(i) + currentIndexOffset);
                     }
                 } else {
-                    // Handle non-indexed geometry (create indices assuming triangles)
                     for (let i = 0; i < positionAttribute.count; i += 3) {
                         indices.push(currentIndexOffset + i, currentIndexOffset + i + 1, currentIndexOffset + i + 2);
                     }
                 }
-                currentIndexOffset += positionAttribute.count; // Update offset for the next mesh's indices
-                geometry.dispose(); // Dispose of the cloned geometry to free memory
+                currentIndexOffset += positionAttribute.count;
+                geometry.dispose();
             });
 
-
             if (vertices.length > 0 && indices.length > 0) {
-                // Create Rapier Trimesh collider using the combined data
                  const vertsF32 = new Float32Array(vertices);
                  const indsU32 = new Uint32Array(indices);
                  let colliderDesc = RAPIER.ColliderDesc.trimesh(vertsF32, indsU32)
-                     .setFriction(1.0) // High friction for ground surfaces
-                     .setRestitution(0.1); // Low bounciness
-                 // Creating a collider without a body handle automatically creates a fixed rigid body for it
+                     .setFriction(1.0).setRestitution(0.1);
                  const mapCollider = rapierWorld.createCollider(colliderDesc);
-                 this.mapColliderHandle = mapCollider.handle; // Store the handle in the Game instance
+                 this.mapColliderHandle = mapCollider.handle;
                  console.log(`[Game] Trimesh map collider created successfully. Handle: ${this.mapColliderHandle}. Vertices: ${vertices.length / 3}, Triangles: ${indices.length / 3}`);
             } else {
                 throw new Error("No valid vertices or indices could be extracted from map meshes.");
             }
-
         } catch (e) {
             console.error("!!! Error creating Trimesh map collider:", e);
             console.warn("Falling back to simple ground collider due to error.");
@@ -463,201 +402,151 @@ class Game {
     }
 
     createSimpleGroundCollider() {
-        // Uses global RAPIER, rapierWorld
         if (!rapierWorld || !RAPIER) { console.error("Cannot create simple ground, Rapier/World missing."); return; }
-        let colliderDesc = RAPIER.ColliderDesc.cuboid(100.0, 0.5, 100.0) // Large flat plane
-             .setTranslation(0, -0.5, 0) // Position it slightly below origin
-             .setFriction(1.0);
-        const groundCollider = rapierWorld.createCollider(colliderDesc); // Creates fixed body automatically
-        this.mapColliderHandle = groundCollider.handle; // Store handle in instance
+        let colliderDesc = RAPIER.ColliderDesc.cuboid(100.0, 0.5, 100.0)
+             .setTranslation(0, -0.5, 0).setFriction(1.0);
+        const groundCollider = rapierWorld.createCollider(colliderDesc);
+        this.mapColliderHandle = groundCollider.handle;
         console.warn("[Game] Using SIMPLE GROUND COLLIDER (DEBUG/FALLBACK).");
     }
 
     // --- Debug Mesh Creation ---
     addDebugMesh(playerId, radius, height, position, quaternion) {
-         // Uses global scene, THREE
          if (!scene || !THREE) return;
-         const capsuleHeight = height - 2 * radius; // Height of cylinder part
+         const capsuleHeight = height - 2 * radius;
          const capsuleGeom = new THREE.CapsuleGeometry(radius, capsuleHeight, 4, 8);
          const wireframeMat = new THREE.MeshBasicMaterial({ color: playerId === localPlayerId ? 0x00ff00 : 0xffff00, wireframe: true });
          const wireframeMesh = new THREE.Mesh(capsuleGeom, wireframeMat);
-         // Set position and rotation based on the physics body's state
          wireframeMesh.position.set(position.x, position.y, position.z);
          wireframeMesh.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
          scene.add(wireframeMesh);
-         this.debugMeshes[playerId] = wireframeMesh; // Store in instance map
-         // console.log(`[Debug] Added wireframe for ${playerId}`); // Less spammy
+         this.debugMeshes[playerId] = wireframeMesh;
     }
 
     // --- Player Cleanup ---
     cleanupPlayer(playerId) {
-        // Uses global players, scene, rapierWorld
         const player = players[playerId];
-        // Remove visual mesh
         if (player && player.mesh && scene) {
              scene.remove(player.mesh);
-             // Consider more thorough disposal here if performance becomes an issue
-             // player.mesh.traverse(c => { if(c.geometry) c.geometry.dispose(); if(c.material) c.material.dispose(); });
-             player.mesh = null; // Clear reference
+             player.mesh = null;
         }
-        if (players[playerId]) delete players[playerId]; // Remove from client state map
+        if (players[playerId]) delete players[playerId];
 
-        // Clear local player specific reference if it matches
         if(playerId === localPlayerId) { this.localPlayerMesh = null; }
 
-        // Remove debug mesh
         if (this.debugMeshes[playerId]) {
              if(scene) scene.remove(this.debugMeshes[playerId]);
-             // Dispose geometry/material of debug mesh if they aren't shared
              this.debugMeshes[playerId].geometry?.dispose();
              this.debugMeshes[playerId].material?.dispose();
-             delete this.debugMeshes[playerId]; // Remove from instance map
+             delete this.debugMeshes[playerId];
         }
 
-        // Remove physics body
         const bodyHandle = this.playerRigidBodyHandles[playerId];
         if (bodyHandle !== undefined && bodyHandle !== null && rapierWorld) {
              try {
                  let body = rapierWorld.getRigidBody(bodyHandle);
-                 if (body) rapierWorld.removeRigidBody(body); // This also removes associated colliders
+                 if (body) rapierWorld.removeRigidBody(body);
              } catch (e) { console.error(`Error removing Rapier body handle ${bodyHandle}:`, e); }
-             delete this.playerRigidBodyHandles[playerId]; // Remove from instance map
+             delete this.playerRigidBodyHandles[playerId];
          }
-         // console.log(`[Game] Cleaned up player ${playerId}`); // Less spammy
      }
 
      cleanupAllPlayers() {
-         // Uses global players map
          console.log("[Game] Cleaning up all player objects...");
-         // Get keys first to avoid issues while iterating and deleting
          const playerIds = Object.keys(players);
          playerIds.forEach(id => this.cleanupPlayer(id));
-         // Ensure local player refs are also cleared
-         localPlayerId = null; // Clear global ID
-         this.localPlayerMesh = null; // Clear instance ref
-         this.playerRigidBodyHandles = {}; // Clear instance map
-         players = {}; // Clear global players map completely
+         localPlayerId = null;
+         this.localPlayerMesh = null;
+         this.playerRigidBodyHandles = {};
+         players = {};
          console.log("[Game] Player cleanup finished.");
      }
 
     // --- Main Update Loop ---
     update() {
         requestAnimationFrame(this.update.bind(this));
-        // Use global clock, renderer, scene, camera, stateMachine, rapierWorld, RAPIER, players, localPlayerId, updateLocalPlayer, Effects, CONFIG, THREE
-        if (!this.clock || !this.renderer || !this.scene || !this.camera) return; // Core components missing
+        if (!this.clock || !this.renderer || !this.scene || !this.camera) return;
 
         const deltaTime = this.clock.getDelta();
 
-        // Update logic only when in 'playing' state
         if (stateMachine.is('playing')) {
-            // --- Physics Simulation Step ---
+            // Physics Step
             if (rapierWorld && RAPIER) {
-                 const physicsTimestep = 1 / 60; // Target 60Hz physics rate
+                 const physicsTimestep = 1 / 60;
                  this.physicsStepAccumulator += deltaTime;
 
-                 // Use fixed timestep loop for stable physics
                  while (this.physicsStepAccumulator >= physicsTimestep) {
-                     // Update local player input & forces BEFORE stepping the world
-                     const localPlayerBodyHandle = this.playerRigidBodyHandles[localPlayerId]; // Use instance map
+                     const localPlayerBodyHandle = this.playerRigidBodyHandles[localPlayerId];
                      if (localPlayerBodyHandle !== undefined && localPlayerBodyHandle !== null) {
                           try {
                               const localBody = rapierWorld.getRigidBody(localPlayerBodyHandle);
                               if (localBody) {
-                                  // updateLocalPlayer function (defined in gameLogic.js) uses globals
                                   updateLocalPlayer(physicsTimestep, localBody);
                               }
                           } catch(e) { console.error("Error getting/updating local player body:", e); }
                      }
-
-                     // Step the physics world
                      rapierWorld.step(rapierEventQueue);
-
                      this.physicsStepAccumulator -= physicsTimestep;
-                 } // End fixed timestep loop
-
-                 // --- Handle Collision Events (After stepping) ---
+                 }
+                 // Handle Collisions
                  rapierEventQueue.drainCollisionEvents((handle1, handle2, started) => {
-                     // Example: Log collisions involving the local player
-                     const collider1 = rapierWorld.getCollider(handle1);
-                     const collider2 = rapierWorld.getCollider(handle2);
-                     if(started && collider1?.userData?.isLocal && collider2?.userData?.isPlayer) {
-                        // console.log(`Local player collided with player ${collider2.userData.entityId}`);
-                     } else if (started && collider2?.userData?.isLocal && collider1?.userData?.isPlayer) {
-                        // console.log(`Local player collided with player ${collider1.userData.entityId}`);
-                     } else if (started && (collider1?.userData?.isLocal || collider2?.userData?.isLocal)) {
-                        // console.log(`Local player collided with map/other object.`);
-                     }
+                     // Collision logic...
                  });
-            } // End Physics Step
+            }
 
-            // --- Update Remote Player Visuals ---
-            // Remote player meshes follow their kinematic bodies directly (Rapier handles interpolation)
-            for (const id in players) { // Use global players map
-                 if (id === localPlayerId || !players[id]?.mesh) continue; // Skip local or players without meshes
-
+            // Update Remote Players
+            for (const id in players) {
+                 if (id === localPlayerId || !players[id]?.mesh) continue;
                  const remotePlayer = players[id];
-                 const bodyHandle = this.playerRigidBodyHandles[id]; // Use instance map
+                 const bodyHandle = this.playerRigidBodyHandles[id];
                  if (bodyHandle !== undefined && bodyHandle !== null && rapierWorld) {
                       try {
                           const body = rapierWorld.getRigidBody(bodyHandle);
                           if (body) {
-                              const position = body.translation(); // Get current interpolated physics position
-                              const rotation = body.rotation(); // Get current interpolated physics rotation
-
-                              // Position mesh origin (assumed feet) based on physics body center
+                              const position = body.translation();
+                              const rotation = body.rotation();
                               const playerHeight = CONFIG.PLAYER_HEIGHT;
                               remotePlayer.mesh.position.set(position.x, position.y - playerHeight / 2.0, position.z);
-                              remotePlayer.mesh.quaternion.copy(rotation); // Apply physics rotation directly
-
-                              // Update debug mesh if enabled
+                              remotePlayer.mesh.quaternion.copy(rotation);
                               if (this.DEBUG_SHOW_PLAYER_COLLIDERS && this.debugMeshes[id]) {
-                                   this.debugMeshes[id].position.copy(position); // Debug mesh at body center
+                                   this.debugMeshes[id].position.copy(position);
                                    this.debugMeshes[id].quaternion.copy(rotation);
                               }
                           }
                       } catch(e) { console.error(`Error updating remote player ${id} visuals:`, e); }
                  }
-            } // End Remote Player Visual Update
+            }
 
-            // --- Update Camera ---
-            // Camera follows the LOCAL player's physics body smoothly
-             const localPlayerBodyHandle = this.playerRigidBodyHandles[localPlayerId]; // Use instance map
+            // Update Camera
+             const localPlayerBodyHandle = this.playerRigidBodyHandles[localPlayerId];
              if (localPlayerBodyHandle !== undefined && localPlayerBodyHandle !== null && rapierWorld) {
                  try {
                      const localBody = rapierWorld.getRigidBody(localPlayerBodyHandle);
                      if (localBody) {
-                         const bodyPos = localBody.translation(); // Physics body center position
-                         // Target position slightly above the body center for eye level
+                         const bodyPos = localBody.translation();
                          const targetCameraPos = new THREE.Vector3(bodyPos.x, bodyPos.y + CONFIG.CAMERA_Y_OFFSET, bodyPos.z);
-                         // Smoothly interpolate camera position towards the target
-                         // Use global camera and THREE
-                         camera.position.lerp(targetCameraPos, 0.7); // Adjust lerp factor (0.1 = smooth, 0.9 = snappy)
-
-                         // Camera rotation is handled by PointerLockControls modifying the camera directly
+                         camera.position.lerp(targetCameraPos, 0.7);
                      }
                  } catch(e) { console.error("Error updating camera position:", e); }
-             } // End Camera Update
+             }
 
-             // Use global Effects object
-             Effects?.update(deltaTime); // Update Effects System
+             Effects?.update(deltaTime);
 
-        } // End if(stateMachine.is('playing'))
+        }
 
-        // --- Render Scene ---
+        // Render
         this.renderer.render(this.scene, this.camera);
-    } // End Update Loop
+    }
 
 } // End Game Class
 
 // --- Global Initialization Trigger ---
-// Waits for DOMContentLoaded and the 'rapier-ready' event before starting the game
 document.addEventListener('DOMContentLoaded', () => {
     const startGameInit = () => {
          console.log("DOM ready. Starting Game Initialization...");
-         const game = new Game(); // Create the single game instance
-         game.init().catch(error => { // Start initialization
+         const game = new Game();
+         game.init().catch(error => {
              console.error("Unhandled error during Game Initialization:", error);
-              // Attempt to display error via UIManager if it initialized, otherwise use basic message
               if(typeof UIManager !== 'undefined') {
                  UIManager.showLoading(`Initialization Error:<br/>${error.message}`, true);
               } else {
@@ -666,18 +555,14 @@ document.addEventListener('DOMContentLoaded', () => {
          });
     };
 
-    // Check if Rapier is already ready (e.g., script loaded quickly)
     if (window.isRapierReady) {
-        startGameInit(); // Start immediately
+        startGameInit();
     } else {
-        // Otherwise, wait for the 'rapier-ready' event from rapier_init.js
         console.log("DOM Content Loaded, waiting for Rapier...");
         window.addEventListener('rapier-ready', startGameInit, { once: true });
-        // Optional: Add listener for rapier errors as well
         window.addEventListener('rapier-error', () => {
              console.error("Rapier failed to load, cannot start game.");
-             // Error message is already shown by rapier_init.js
         }, { once: true });
     }
 });
-console.log("game.js loaded (Uses Global Scope - v13 Quaternion/Sky Fix)");
+console.log("game.js loaded (Uses Global Scope - v14 Quaternion Fix 2)");
