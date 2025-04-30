@@ -21,7 +21,7 @@ const DEATH_SHOCKWAVE_RADIUS = CONFIG?.DEATH_EXPLOSION_RADIUS || 15.0;
  * @param {number} deltaTime Time since last frame.
  * @param {RAPIER.RigidBody} playerBody Reference to the local player's dynamic physics body.
  */
-function updateLocalPlayer(deltaTime, playerBody) {
+function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
     // ***** DEBUG LOG 1: Function Entry *****
     // console.log("[GameLogic Update] updateLocalPlayer called"); // Can be spammy
 
