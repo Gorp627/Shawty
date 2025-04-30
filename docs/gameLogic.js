@@ -1,5 +1,5 @@
 // --- START OF FULL gameLogic.js FILE ---
-// docs/gameLogic.js (Rapier - v19 Fix Recursive Use Error)
+// docs/gameLogic.js (Rapier - v20 Use Impulse for WASD)
 
 // Accesses globals: players, localPlayerId, CONFIG, THREE, RAPIER, rapierWorld, Network, Input, UIManager, stateMachine, Effects, scene
 
@@ -64,17 +64,17 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
         } catch(e) {
             console.error("!!! Rapier ground check error:", e);
             isGrounded = false;
-            // If ground check itself fails critically, maybe skip applying forces this frame
-            // return; // Optional: exit here if ground check error is fatal
         }
     }
 
     // --- Apply Input Forces/Impulses (Only if Alive) ---
     if (isAlive) {
         try {
-            // Read current vertical velocity *once* safely
+            // Read current velocity components
             const currentLinvel = playerBody.linvel();
             const currentVelY = currentLinvel ? currentLinvel.y : 0;
+            const currentVelX = currentLinvel ? currentLinvel.x : 0;
+            const currentVelZ = currentLinvel ? currentLinvel.z : 0;
 
             const moveSpeed = Input.keys['ShiftLeft'] ? (CONFIG?.MOVEMENT_SPEED_SPRINTING || 10.5) : (CONFIG?.MOVEMENT_SPEED || 7.0);
 
@@ -89,25 +89,38 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
             if (Input.keys['KeyA']) { moveDirectionInput.sub(right); }
             if (Input.keys['KeyD']) { moveDirectionInput.add(right); }
 
-            let targetVelocityX = 0, targetVelocityZ = 0;
+            // Calculate desired velocity based on input
+            let desiredVelX = 0, desiredVelZ = 0;
             if (moveDirectionInput.lengthSq() > 0.0001) {
                 moveDirectionInput.normalize();
-                targetVelocityX = moveDirectionInput.x * moveSpeed;
-                targetVelocityZ = moveDirectionInput.z * moveSpeed;
+                desiredVelX = moveDirectionInput.x * moveSpeed;
+                desiredVelZ = moveDirectionInput.z * moveSpeed;
             }
 
-            // --- Apply Movement Velocity ---
-            // Use the separately read currentVelY
-            playerBody.setLinvel({ x: targetVelocityX, y: currentVelY, z: targetVelocityZ }, true);
+            // ***** APPLY MOVEMENT AS IMPULSE *****
+            // Calculate the change needed
+            const deltaVelX = desiredVelX - currentVelX;
+            const deltaVelZ = desiredVelZ - currentVelZ;
+
+            // Apply an impulse proportional to the change needed.
+            // Tune this factor for responsiveness. Start with mass * small_factor or a fixed value.
+            // Example: If PLAYER_MASS is 70, try factors like 70 * 0.1 = 7, or just 5, 10, etc.
+            const moveForceFactor = (CONFIG.PLAYER_MASS || 70) * 0.1; // Adjust 0.1 based on feel
+
+            if (Math.abs(deltaVelX) > 0.01 || Math.abs(deltaVelZ) > 0.01) { // Only apply if change is significant
+                 playerBody.applyImpulse({ x: deltaVelX * moveForceFactor, y: 0, z: deltaVelZ * moveForceFactor }, true);
+                 // console.log(`Applying move impulse: dx=${(deltaVelX * moveForceFactor).toFixed(1)}, dz=${(deltaVelZ * moveForceFactor).toFixed(1)}`); // Debug if needed
+            }
+             // We removed the setLinvel here, relying only on impulse for horizontal changes.
+            // Gravity will still affect the Y velocity naturally via the physics step.
+            // *************************************
 
 
             // --- Handle Jump ---
             if (Input.keys['Space'] && isGrounded) {
-                 // Use the separately read currentVelY
-                 if (currentVelY < 1.0) {
+                 if (currentVelY < 1.0) { // Use the separately read currentVelY here
                     console.log("[GameLogic Update] Applying Jump Impulse");
                     playerBody.applyImpulse({ x: 0, y: JUMP_IMPULSE_VALUE, z: 0 }, true);
-                    // No need to set isGrounded = false here, physics will handle it
                  }
             }
 
@@ -275,5 +288,5 @@ function applyShockwave(originPosition, deadPlayerId) {
     }
 }
 
-console.log("gameLogic.js loaded (v19 Fix Recursive Use Error)");
+console.log("gameLogic.js loaded (v20 Use Impulse for WASD)");
 // --- END OF FULL gameLogic.js FILE ---
