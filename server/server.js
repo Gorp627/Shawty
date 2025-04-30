@@ -42,7 +42,7 @@ if (SPAWN_POINTS.length === 0) {
 
 // --- Socket.IO Server Setup ---
 const allowedOrigins = [
-    "https://gorp54.github.io",
+    "https://github.com/Gerpungus/Shawty2",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
 ];
