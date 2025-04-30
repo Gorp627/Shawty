@@ -3,68 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. (Rapier Physics)</title> <!-- Updated title -->
+    <title>Shawty. (Rapier Physics)</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Favicon links (optional - ignored for now) -->
-    <!-- <link rel="icon" href="/favicon.ico" sizes="any"> -->
-    <!-- <link rel="icon" href="/favicon.svg" type="image/svg+xml"> -->
+    <!-- Optional: Add Google Fonts link -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- UI Screens -->
-    <div id="loadingScreen" class="screen visible"><p>Loading...</p></div>
+    <div id="loadingScreen" class="screen visible">
+        <div class="spinner"></div> <!-- Added spinner element -->
+        <p>Loading...</p>
+    </div>
+
     <div id="homeScreen" class="screen">
-        <h1>Shawty.</h1>
-        <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
-        <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
-        <div class="phrase-container">
-             <span>Kill phrase: </span>
-             <input type="text" id="playerPhraseInput" placeholder="..............." maxlength="20">
+        <div class="home-content"> <!-- Wrapper for centering -->
+            <h1>Shawty.</h1>
+            <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
+            <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
+            <div class="phrase-container">
+                 <span>Kill phrase: </span>
+                 <input type="text" id="playerPhraseInput" placeholder="..............." maxlength="20">
+            </div>
+            <button id="joinButton">Join Game</button>
+            <p id="homeScreenError" class="error-message"></p>
         </div>
-        <button id="joinButton">Join Game</button>
-        <p id="homeScreenError" class="error-message"></p> <!-- Error message placeholder -->
     </div>
 
     <!-- In-Game UI -->
     <div id="gameUI"> <!-- Hidden by default -->
-        <div id="info"></div> <!-- Player Name/Status -->
+        <!-- Crosshair - Added -->
+        <div id="crosshair">+</div>
+        <!-- Existing UI elements -->
+        <div id="info"></div>
         <div id="healthBarContainer">
             <div id="healthBarFill"></div>
             <div id="healthText"></div>
         </div>
-        <div id="killMessage"></div> <!-- Kill Messages -->
+        <div id="killMessage"></div>
     </div>
 
     <!-- Game Canvas -->
-    <canvas id="gameCanvas"></canvas> <!-- Hidden by default via CSS -->
+    <canvas id="gameCanvas"></canvas>
 
     <!-- Libraries -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <!-- THREE.js Core - Loaded Globally FIRST -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Loaders & Controls - Depend on Global THREE -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- Rapier Physics Engine Init (as module - MUST come before game logic that uses RAPIER) -->
-    <!-- This is the ONLY place Rapier should be loaded from -->
+    <!-- Rapier Physics Engine Init -->
     <script type="module" src="rapier_init.js"></script>
 
-    <!-- Core & Game Logic - ORDER MATTERS -->
-    <!-- These scripts use the GLOBAL THREE, RAPIER, io, etc. objects -->
-    <!-- They should NOT use "import * as THREE from 'three';" -->
-    <script src="config.js"></script>         <!-- Global config -->
-    <script src="utils.js"></script>          <!-- Utility functions -->
-    <script src="stateMachine.js"></script>    <!-- State management -->
-    <script src="loadManager.js"></script>     <!-- Asset loading -->
-    <script src="entities.js"></script>       <!-- Player class (remote) -->
-    <script src="uiManager.js"></script>       <!-- UI interaction -->
-    <script src="input.js"></script>          <!-- Keyboard/Mouse input -->
-    <script src="effects.js"></script>        <!-- Visual/Audio Effects -->
-    <script src="network.js"></script>        <!-- Server communication -->
-    <script src="gameLogic.js"></script>      <!-- Player update logic (physics, shooting) -->
-    <script src="game.js"></script>           <!-- Main Init/Loop (MUST BE LAST or after dependencies) -->
+    <!-- Core & Game Logic -->
+    <script src="config.js"></script>
+    <script src="utils.js"></script>
+    <script src="stateMachine.js"></script>
+    <script src="loadManager.js"></script>
+    <script src="entities.js"></script>
+    <script src="uiManager.js"></script>
+    <script src="input.js"></script>
+    <script src="effects.js"></script>
+    <script src="network.js"></script> <!-- Load updated network.js -->
+    <script src="gameLogic.js"></script>
+    <script src="game.js"></script>
 
 </body>
 </html>
