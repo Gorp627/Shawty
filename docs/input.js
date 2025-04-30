@@ -49,7 +49,7 @@ const Input = {
             const cooldown = (typeof CONFIG !== 'undefined' ? (CONFIG.DASH_COOLDOWN || 0.8) : 0.8) * 1000;
             // Access global stateMachine safely
             const isPlaying = (typeof stateMachine !== 'undefined' && stateMachine.is('playing'));
-            // Access global lastDashTime safely
+            // Access global lastDashTime safely (assuming lastDashTime is global)
             const canDash = (now - (window.lastDashTime || 0)) > cooldown;
 
             if (canDash && isPlaying) {
@@ -67,8 +67,10 @@ const Input = {
 
         // --- Handle Jump (Space) ---
         if (event.code === 'Space') {
-            event.preventDefault(); // Prevent default space action (like scrolling)
-            // gameLogic checks Input.keys['Space'] && isGrounded to apply impulse
+            // gameLogic checks Input.keys['Space'] && isGrounded to apply velocity change
+             if (stateMachine?.is('playing')) { // Prevent space scrolling only when playing
+                event.preventDefault();
+             }
         }
 
         // --- Allow Controls Lock Toggle (Escape) ---
@@ -87,6 +89,9 @@ const Input = {
 
     // Handle mouse button press down
     handleMouseDown: function(event) {
+        // Ignore clicks on UI elements if needed (e.g., buttons)
+        // if (event.target !== document.getElementById('gameCanvas')) return; // Example: only lock if clicking canvas
+
         this.mouseButtons[event.button] = true;
         // console.log(`Mouse Down: ${event.button}`); // DEBUG
 
@@ -117,8 +122,8 @@ const Input = {
          let inputDir = new THREE.Vector3(); // Use global THREE
          if(this.keys['KeyW']){ inputDir.z = -1; }
          if(this.keys['KeyS']){ inputDir.z = 1; }
-         if(this.keys['KeyA']){ inputDir.x = -1; }
-         if(this.keys['KeyD']){ inputDir.x = 1; }
+         if(this.keys['KeyA']){ inputDir.x = -1; } // Corrected A/D relative to camera
+         if(this.keys['KeyD']){ inputDir.x = 1; } // Corrected A/D relative to camera
 
          // Get camera's world quaternion (PointerLockControls rotates the camera object directly)
          const cameraQuaternion = window.camera.quaternion;
