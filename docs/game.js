@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (Uses Global Scope - v11 Complete and Verified)
+// docs/game.js - Main Game Orchestrator (Uses Global Scope - v12 Capsule Fix)
 
 // --- Global variables like networkIsInitialized, assetsAreReady, etc., ---
 // --- are DECLARED in config.js and accessed directly here. ---
@@ -335,8 +335,11 @@ class Game {
         const capsuleHalfHeight = Math.max(0.01, h / 2.0 - r); // Avoid zero height cylinder part
 
         let rigidBodyDesc;
-        let colliderDesc = RAPIER.ColliderDesc.capsuleY(capsuleHalfHeight, r) // Rapier capsule takes half-height of cylinder part
+
+        // ***** FIXED LINE HERE *****
+        let colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, r) // Use .capsule() which aligns with Y by default
             .setFriction(0.7).setRestitution(0.1).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS); // Listen for collisions
+        // *************************
 
         // Convert Y rotation to Quaternion using global RAPIER
         const quaternion = RAPIER.Quaternion.fromAxisAngle({ x: 0, y: 1, z: 0 }, initialRotationY);
@@ -675,4 +678,4 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { once: true });
     }
 });
-console.log("game.js loaded (Uses Global Scope - v11 Complete)");
+console.log("game.js loaded (Uses Global Scope - v12 Capsule Fix)");
