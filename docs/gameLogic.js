@@ -112,8 +112,13 @@ function updateLocalPlayer(deltaTime, playerBody) {
     // --- Void Check ---
     try {
         const currentBodyPos = playerBody.translation();
-        const fellIntoVoid = currentBodyPos.y < (CONFIG.VOID_Y_LEVEL || -100);
-        const outOfBounds = !fellIntoVoid && (Math.abs(currentBodyPos.x) > (CONFIG.MAP_BOUNDS_X || 100) || Math.abs(currentBodyPos.z) > (CONFIG.MAP_BOUNDS_Z || 100));
+        // Ensure CONFIG.VOID_Y_LEVEL exists, otherwise use a sensible default
+        const voidLevel = (typeof CONFIG !== 'undefined' && typeof CONFIG.VOID_Y_LEVEL === 'number') ? CONFIG.VOID_Y_LEVEL : -100;
+        const boundsX = (typeof CONFIG !== 'undefined' && typeof CONFIG.MAP_BOUNDS_X === 'number') ? CONFIG.MAP_BOUNDS_X : 100;
+        const boundsZ = (typeof CONFIG !== 'undefined' && typeof CONFIG.MAP_BOUNDS_Z === 'number') ? CONFIG.MAP_BOUNDS_Z : 100;
+
+        const fellIntoVoid = currentBodyPos.y < voidLevel;
+        const outOfBounds = !fellIntoVoid && (Math.abs(currentBodyPos.x) > boundsX || Math.abs(currentBodyPos.z) > boundsZ);
 
         if ((fellIntoVoid || outOfBounds) && isAlive) {
             console.log(`Player ${localPlayerId} fell into void or out of bounds.`);
@@ -177,7 +182,7 @@ function updateLocalPlayer(deltaTime, playerBody) {
 /** Performs shooting logic: Raycast, send hit, trigger effects/rocket jump */
 function performShoot(playerBody) {
      if (!camera || !Network || !scene) return;
-     console.log("Bang!"); // DEBUG
+     // console.log("Bang!"); // DEBUG
 
      // Play Gun Sound (non-positional, attached to camera/listener)
      if (window.gunSoundBuffer) Effects.playSound(window.gunSoundBuffer, null, false, 0.4);
