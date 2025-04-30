@@ -27,7 +27,10 @@ const DEATH_SHOCKWAVE_RADIUS = CONFIG?.DEATH_EXPLOSION_RADIUS || 15.0;
 function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
 
     // --- Guard Clauses ---
-    if (!playerBody || !rapierWorld || !RAPIER || !camera || !controls) return;
+    if (!playerBody || !rapierWorld || !RAPIER || !camera || !controls) {
+        console.warn("[GameLogic Update] Returning early - Missing prerequisites (check passed args)");
+        return;
+    }
     const isPlaying = stateMachine?.is('playing');
     const isLocked = controls?.isLocked;
     const localPlayerData = localPlayerId ? players[localPlayerId] : null;
@@ -238,7 +241,6 @@ function performShoot(playerBody, camera) {
          const worldDown = new THREE.Vector3(0, -1, 0); const dotProduct = direction.dot(worldDown);
          if (dotProduct > -ROCKET_JUMP_THRESH) {
              console.log("Rocket Jump Triggered!");
-             // Apply impulse immediately here is usually OK as it's the last physics write related to shooting
              playerBody.applyImpulse({ x: 0, y: ROCKET_JUMP_IMPULSE, z: 0 }, true);
          }
      }
@@ -246,11 +248,9 @@ function performShoot(playerBody, camera) {
 
 /** Applies physics impulse to nearby players on death */
 function applyShockwave(originPosition, deadPlayerId) {
-    // This function reads other bodies and applies impulses, it *might* need similar separation if errors occur during shockwaves
     if (!RAPIER || !rapierWorld || !window.players || !currentGameInstance?.playerRigidBodyHandles) return;
     console.log(`Applying shockwave from dead player ${deadPlayerId} at`, originPosition);
     const origin = new THREE.Vector3(originPosition.x, originPosition.y, originPosition.z);
-    // Collect bodies to apply impulse to first
     const impulsesToApply = [];
     for (const targetId in window.players) {
         if (targetId === deadPlayerId) continue;
@@ -260,14 +260,13 @@ function applyShockwave(originPosition, deadPlayerId) {
         try {
             const targetBody = rapierWorld.getRigidBody(targetBodyHandle);
             if (!targetBody || targetPlayer.health <= 0) continue;
-            const targetPos = targetBody.translation(); // READ
+            const targetPos = targetBody.translation();
             const direction = new THREE.Vector3().subVectors(targetPos, origin);
             const distance = direction.length();
             if (distance < DEATH_SHOCKWAVE_RADIUS && distance > 0.01) {
                 const forceFalloff = 1.0 - (distance / DEATH_SHOCKWAVE_RADIUS);
                 const impulseMagnitude = DEATH_SHOCKWAVE_FORCE * forceFalloff;
                 direction.normalize();
-                // Store impulse details instead of applying immediately
                 impulsesToApply.push({
                     body: targetBody,
                     impulse: {
@@ -279,14 +278,13 @@ function applyShockwave(originPosition, deadPlayerId) {
             }
         } catch (e) { console.error(`Error calculating shockwave for player ${targetId}:`, e); }
     }
-    // Now apply all impulses
     for (const data of impulsesToApply) {
         try {
              console.log(`Applying shockwave impulse to ${data.body.userData?.entityId || 'unknown'}`);
-             data.body.applyImpulse(data.impulse, true); // WRITE
+             data.body.applyImpulse(data.impulse, true);
         } catch(e) { console.error(`Error applying shockwave impulse to player ${data.body.userData?.entityId || 'unknown'}:`, e); }
     }
 }
 
-console.log("gameLogic.js loaded (v25 Separate Read/Write)");
+console.log("gameLogic.js loaded (v25 Separate Read/Write)"); // Keep log message consistent with the code structure
 // --- END OF FULL gameLogic.js FILE ---
