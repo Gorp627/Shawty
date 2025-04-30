@@ -448,7 +448,7 @@ class Game {
                               if (localBody) {
                                   // ***** DEBUG LOG 3: Check if updateLocalPlayer is called *****
                                   // console.log("[Game Update] Calling updateLocalPlayer"); // Can be spammy
-                                  updateLocalPlayer(physicsTimestep, localBody); // updateLocalPlayer uses globals ok
+                                   updateLocalPlayer(physicsTimestep, localBody, this.camera, this.controls);
                               } else {
                                   // ***** DEBUG LOG 4: Check if body retrieval fails *****
                                   // console.warn("[Game Update] Failed to get local RigidBody from handle:", localPlayerBodyHandle);
