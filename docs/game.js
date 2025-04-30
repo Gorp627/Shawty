@@ -1,5 +1,5 @@
 // --- START OF FULL game.js FILE ---
-// docs/game.js - Main Game Orchestrator (Uses Global Scope - v16 Scene/Camera Ref Fix)
+// docs/game.js - Main Game Orchestrator (Uses Global Scope - v17 Update Loop Debug)
 
 // --- Global variables like networkIsInitialized, assetsAreReady, etc., ---
 // --- are DECLARED in config.js and accessed directly here. ---
@@ -261,24 +261,22 @@ class Game {
                         this.localPlayerMesh.visible = false;
                         this.localPlayerMesh.userData = { entityId: id, isPlayer: true, isLocal: true };
                          this.localPlayerMesh.traverse(child => { if(child.isMesh){ child.castShadow=true; child.receiveShadow=true; child.visible=false; } });
-                        // ***** USE this.scene *****
                         this.scene.add(this.localPlayerMesh);
-                        // ************************
                         players[id].mesh = this.localPlayerMesh;
                         console.log("[Game] Created local player GLTF mesh (hidden).");
                     } catch(e) { console.error("Error cloning/adding local player mesh:", e); }
                 } else { console.error("!!! Local player model asset not found! Cannot create mesh."); }
 
                  const gunModelAsset = window.gunModelData;
-                 if(gunModelAsset?.scene && this.camera) { // Added check for this.camera
+                 if(gunModelAsset?.scene && this.camera) {
                      gunMesh = gunModelAsset.scene.clone();
-                     gunMesh.scale.set(0.3, 0.3, 0.3);
+                     // ***** ADJUST GUN SCALE *****
+                     gunMesh.scale.set(0.3, 0.3, 0.3); // Example: Increased scale
+                     // **************************
                      gunMesh.position.set(0.15, -0.15, -0.4);
                      gunMesh.rotation.set(0, Math.PI, 0);
                       gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; });
-                     // ***** USE this.camera *****
                      this.camera.add(gunMesh);
-                     // *************************
                      console.log("[Game] Attached gun model to camera.");
                  } else if (!this.camera) {
                      console.error("!!! Cannot attach gun model: Game camera not initialized.");
@@ -286,7 +284,7 @@ class Game {
 
             } else {
                 console.log(`[Game] Creating REMOTE player objects for ${playerData.name || id}...`);
-                const remotePlayer = new ClientPlayer(playerData); // ClientPlayer adds mesh to window.scene internally if available
+                const remotePlayer = new ClientPlayer(playerData);
                 players[id] = remotePlayer;
 
                 if (remotePlayer.mesh) {
@@ -303,7 +301,6 @@ class Game {
 
     // --- Physics Body Creation ---
     createPlayerPhysicsBody(playerId, initialPosition, initialRotationY, isLocal) {
-        // (Keep the manual quaternion calculation from previous step)
         if (!rapierWorld || !RAPIER) { console.error("!!! Physics world/Rapier missing for body creation!"); return; }
         const h = CONFIG.PLAYER_HEIGHT; const r = CONFIG.PLAYER_RADIUS;
         const capsuleHalfHeight = Math.max(0.01, h / 2.0 - r);
@@ -316,15 +313,11 @@ class Game {
             const halfAngle = angle * 0.5; const s = Math.sin(halfAngle);
             const qx = axis.x * s; const qy = axis.y * s; const qz = axis.z * s; const qw = Math.cos(halfAngle);
             quaternion = new RAPIER.Quaternion(qx, qy, qz, qw);
-            // console.log("[Game] Manually calculated Quaternion:", quaternion);
         } catch (e) {
              console.error(`!!! Failed to manually create Quaternion for ${playerId}:`, e);
              quaternion = RAPIER.Quaternion.identity();
         }
-        if (!quaternion) {
-             console.error(`Failed to create or fallback quaternion for player ${playerId}`);
-             return;
-        }
+        if (!quaternion) { console.error(`Failed to create or fallback quaternion for player ${playerId}`); return; }
         colliderDesc.userData = { entityId: playerId, isLocal: isLocal, isPlayer: true };
         if (isLocal) {
             rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
@@ -392,40 +385,24 @@ class Game {
 
     // --- Debug Mesh Creation ---
     addDebugMesh(playerId, radius, height, position, quaternion) {
-         // ***** USE this.scene *****
          if (!this.scene || !THREE) return;
-         // ************************
          const capsuleHeight = height - 2 * radius;
          const capsuleGeom = new THREE.CapsuleGeometry(radius, capsuleHeight, 4, 8);
          const wireframeMat = new THREE.MeshBasicMaterial({ color: playerId === localPlayerId ? 0x00ff00 : 0xffff00, wireframe: true });
          const wireframeMesh = new THREE.Mesh(capsuleGeom, wireframeMat);
          wireframeMesh.position.set(position.x, position.y, position.z);
          wireframeMesh.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
-         // ***** USE this.scene *****
          this.scene.add(wireframeMesh);
-         // ************************
          this.debugMeshes[playerId] = wireframeMesh;
     }
 
     // --- Player Cleanup ---
     cleanupPlayer(playerId) {
         const player = players[playerId];
-        // ***** USE this.scene *****
-        if (player && player.mesh && this.scene) {
-             this.scene.remove(player.mesh);
-             player.mesh = null;
-        }
-        // ************************
+        if (player && player.mesh && this.scene) { this.scene.remove(player.mesh); player.mesh = null; }
         if (players[playerId]) delete players[playerId];
         if(playerId === localPlayerId) { this.localPlayerMesh = null; }
-        // ***** USE this.scene *****
-        if (this.debugMeshes[playerId] && this.scene) {
-             this.scene.remove(this.debugMeshes[playerId]);
-             this.debugMeshes[playerId].geometry?.dispose();
-             this.debugMeshes[playerId].material?.dispose();
-             delete this.debugMeshes[playerId];
-        }
-        // ************************
+        if (this.debugMeshes[playerId] && this.scene) { this.scene.remove(this.debugMeshes[playerId]); this.debugMeshes[playerId].geometry?.dispose(); this.debugMeshes[playerId].material?.dispose(); delete this.debugMeshes[playerId]; }
         const bodyHandle = this.playerRigidBodyHandles[playerId];
         if (bodyHandle !== undefined && bodyHandle !== null && rapierWorld) {
              try { let body = rapierWorld.getRigidBody(bodyHandle); if (body) rapierWorld.removeRigidBody(body); }
@@ -451,21 +428,45 @@ class Game {
         const deltaTime = this.clock.getDelta();
 
         if (stateMachine.is('playing')) {
-            // Physics Step
+            // --- Physics Simulation Step ---
             if (rapierWorld && RAPIER) {
                  const physicsTimestep = 1 / 60;
                  this.physicsStepAccumulator += deltaTime;
+
+                 // ***** DEBUG LOG 1: Check if physics loop runs *****
+                 // console.log(`[Game Update] Physics Accumulator: ${this.physicsStepAccumulator.toFixed(3)}`); // Can be spammy
+
                  while (this.physicsStepAccumulator >= physicsTimestep) {
+                     // ***** DEBUG LOG 2: Check if fixed step runs *****
+                     // console.log("[Game Update] Running fixed physics step"); // Can be spammy
+
+                     // Update local player input & forces BEFORE stepping the world
                      const localPlayerBodyHandle = this.playerRigidBodyHandles[localPlayerId];
                      if (localPlayerBodyHandle !== undefined && localPlayerBodyHandle !== null) {
                           try {
                               const localBody = rapierWorld.getRigidBody(localPlayerBodyHandle);
-                              if (localBody) { updateLocalPlayer(physicsTimestep, localBody); } // updateLocalPlayer uses globals ok
+                              if (localBody) {
+                                  // ***** DEBUG LOG 3: Check if updateLocalPlayer is called *****
+                                  // console.log("[Game Update] Calling updateLocalPlayer"); // Can be spammy
+                                  updateLocalPlayer(physicsTimestep, localBody); // updateLocalPlayer uses globals ok
+                              } else {
+                                  // ***** DEBUG LOG 4: Check if body retrieval fails *****
+                                  // console.warn("[Game Update] Failed to get local RigidBody from handle:", localPlayerBodyHandle);
+                              }
                           } catch(e) { console.error("Error getting/updating local player body:", e); }
+                     } else if (localPlayerId) { // Only log if we expect a body
+                         // ***** DEBUG LOG 5: Check if handle is missing *****
+                         // console.warn("[Game Update] Local player body handle not found for ID:", localPlayerId);
                      }
+
+                     // ***** DEBUG LOG 6: Check if world step is called *****
+                     // console.log("[Game Update] Stepping Physics World"); // Can be spammy
                      rapierWorld.step(rapierEventQueue);
+
                      this.physicsStepAccumulator -= physicsTimestep;
-                 }
+                 } // End fixed timestep loop
+
+                 // --- Handle Collision Events (After stepping) ---
                  rapierEventQueue.drainCollisionEvents((handle1, handle2, started) => {
                     const collider1 = rapierWorld.getCollider(handle1);
                     const collider2 = rapierWorld.getCollider(handle2);
@@ -477,9 +478,9 @@ class Game {
                        // console.log(`Local player collided with map/other object.`);
                     }
                  });
-            }
+            } // End Physics Step
 
-            // Update Remote Player Visuals
+            // --- Update Remote Player Visuals ---
             for (const id in players) {
                  if (id === localPlayerId || !players[id]?.mesh) continue;
                  const remotePlayer = players[id];
@@ -500,35 +501,29 @@ class Game {
                           }
                       } catch(e) { console.error(`Error updating remote player ${id} visuals:`, e); }
                  }
-            }
+            } // End Remote Player Visual Update
 
-            // Update Camera Position
+            // --- Update Camera Position ---
              const localPlayerBodyHandle = this.playerRigidBodyHandles[localPlayerId];
-             // ***** USE this.camera *****
              if (localPlayerBodyHandle !== undefined && localPlayerBodyHandle !== null && rapierWorld && this.camera) {
-             // *************************
                  try {
                      const localBody = rapierWorld.getRigidBody(localPlayerBodyHandle);
                      if (localBody) {
                          const bodyPos = localBody.translation();
                          const targetCameraPos = new THREE.Vector3(bodyPos.x, bodyPos.y + CONFIG.CAMERA_Y_OFFSET, bodyPos.z);
-                         // ***** USE this.camera *****
                          this.camera.position.lerp(targetCameraPos, 0.7);
-                         // *************************
                      }
                  } catch(e) { console.error("Error updating camera position:", e); }
-             }
+             } // End Camera Update
 
              Effects?.update(deltaTime); // Effects uses globals ok
 
         } // End if(stateMachine.is('playing'))
 
-        // Render Scene using instance variables
-        // ***** USE this.renderer, this.scene, this.camera *****
+        // --- Render Scene ---
         if (this.renderer && this.scene && this.camera) {
             this.renderer.render(this.scene, this.camera);
         }
-        // ****************************************************
     } // End Update Loop
 
 } // End Game Class
@@ -554,5 +549,5 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('rapier-error', () => { console.error("Rapier failed to load, cannot start game."); }, { once: true });
     }
 });
-console.log("game.js loaded (Uses Global Scope - v16 Scene/Camera Ref Fix)");
+console.log("game.js loaded (Uses Global Scope - v17 Update Loop Debug)");
 // --- END OF FULL game.js FILE ---
