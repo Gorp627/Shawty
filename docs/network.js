@@ -1,4 +1,4 @@
-// docs/network.js (Handle Hits, Death Effects - REGENERATED v3)
+// docs/network.js (Handle Hits, Death Effects - REGENERATED v4 - Prereq Fix)
 
 // Depends on: config.js, stateMachine.js, entities.js, input.js, uiManager.js, game.js, gameLogic.js, effects.js
 // Accesses globals: players, localPlayerId, socket, controls, CONFIG, RAPIER, rapierWorld,
@@ -560,10 +560,15 @@ const Network = {
         // 3. *** Check Core Game Prerequisites ***
         console.log(`[Network Attempt Join] Checking prerequisites:`);
         // Use global flags/objects safely
-        const rapierIsSetup = !!window.RAPIER && !!window.rapierWorld && !!currentGameInstance?.mapColliderHandle; // Check map collider too
+        // ***** MODIFIED CHECK HERE *****
+        const rapierIsSetup = !!window.RAPIER &&
+                              !!window.rapierWorld &&
+                              currentGameInstance?.mapColliderHandle !== null && // Check not null
+                              currentGameInstance?.mapColliderHandle !== undefined; // Check not undefined
+        // *****************************
         const areAssetsReady = typeof window !== 'undefined' && window.assetsAreReady === true;
         console.log(`  - Assets Ready? ${areAssetsReady}`);
-        console.log(`  - Physics/Map Ready? ${rapierIsSetup}`);
+        console.log(`  - Physics/Map Ready? ${rapierIsSetup}`); // This should now be true if handle is 0
 
         // If any core component is missing, show "initializing" message and stop
         if (!areAssetsReady || !rapierIsSetup) {
@@ -658,4 +663,4 @@ const Network = {
 if (typeof window !== 'undefined') {
     window.Network = Network;
 }
-console.log("network.js loaded (Handle Hits, Death Effects - v3 REGEN)");
+console.log("network.js loaded (Handle Hits, Death Effects - v4 REGEN - Prereq Fix)");
