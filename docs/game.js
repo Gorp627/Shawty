@@ -1,5 +1,5 @@
 // --- START OF FULL game.js FILE ---
-// docs/game.js - Main Game Orchestrator (Uses Global Scope - v17 Update Loop Debug)
+// docs/game.js - Main Game Orchestrator (Uses Global Scope - v27 Camera Lerp Disabled)
 
 // --- Global variables like networkIsInitialized, assetsAreReady, etc., ---
 // --- are DECLARED in config.js and accessed directly here. ---
@@ -145,12 +145,6 @@ class Game {
     // --- Setup Sub-functions ---
     setupPhysics() {
         if (!RAPIER) { console.error("!!! RAPIER global object is missing during physics setup!"); return; }
-        // Keep debug log if needed (can be commented out)
-        // console.log("--- DEBUG: Inspecting RAPIER.Quaternion ---");
-        // console.dir(RAPIER.Quaternion);
-        // console.log("--- DEBUG: Inspecting Top-Level RAPIER ---");
-        // console.dir(RAPIER);
-        // console.log("--- END DEBUG ---");
         rapierWorld = new RAPIER.World({ x: 0, y: CONFIG.GRAVITY, z: 0 });
         rapierEventQueue = new RAPIER.EventQueue(true);
         window.rapierWorld = rapierWorld;
@@ -270,9 +264,7 @@ class Game {
                  const gunModelAsset = window.gunModelData;
                  if(gunModelAsset?.scene && this.camera) {
                      gunMesh = gunModelAsset.scene.clone();
-                     // ***** ADJUST GUN SCALE *****
-                     gunMesh.scale.set(0.3, 0.3, 0.3); // Example: Increased scale
-                     // **************************
+                     gunMesh.scale.set(0.3, 0.3, 0.3); // Adjusted scale
                      gunMesh.position.set(0.15, -0.15, -0.4);
                      gunMesh.rotation.set(0, Math.PI, 0);
                       gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; });
@@ -433,51 +425,21 @@ class Game {
                  const physicsTimestep = 1 / 60;
                  this.physicsStepAccumulator += deltaTime;
 
-                 // ***** DEBUG LOG 1: Check if physics loop runs *****
-                 // console.log(`[Game Update] Physics Accumulator: ${this.physicsStepAccumulator.toFixed(3)}`); // Can be spammy
-
                  while (this.physicsStepAccumulator >= physicsTimestep) {
-                     // ***** DEBUG LOG 2: Check if fixed step runs *****
-                     // console.log("[Game Update] Running fixed physics step"); // Can be spammy
-
-                     // Update local player input & forces BEFORE stepping the world
                      const localPlayerBodyHandle = this.playerRigidBodyHandles[localPlayerId];
                      if (localPlayerBodyHandle !== undefined && localPlayerBodyHandle !== null) {
                           try {
                               const localBody = rapierWorld.getRigidBody(localPlayerBodyHandle);
                               if (localBody) {
-                                  // ***** DEBUG LOG 3: Check if updateLocalPlayer is called *****
-                                  // console.log("[Game Update] Calling updateLocalPlayer"); // Can be spammy
-                                   updateLocalPlayer(physicsTimestep, localBody, this.camera, this.controls);
-                              } else {
-                                  // ***** DEBUG LOG 4: Check if body retrieval fails *****
-                                  // console.warn("[Game Update] Failed to get local RigidBody from handle:", localPlayerBodyHandle);
+                                  updateLocalPlayer(physicsTimestep, localBody, this.camera, this.controls);
                               }
                           } catch(e) { console.error("Error getting/updating local player body:", e); }
-                     } else if (localPlayerId) { // Only log if we expect a body
-                         // ***** DEBUG LOG 5: Check if handle is missing *****
-                         // console.warn("[Game Update] Local player body handle not found for ID:", localPlayerId);
                      }
-
-                     // ***** DEBUG LOG 6: Check if world step is called *****
-                     // console.log("[Game Update] Stepping Physics World"); // Can be spammy
                      rapierWorld.step(rapierEventQueue);
-
                      this.physicsStepAccumulator -= physicsTimestep;
                  } // End fixed timestep loop
 
-                 // --- Handle Collision Events (After stepping) ---
-                 rapierEventQueue.drainCollisionEvents((handle1, handle2, started) => {
-                    const collider1 = rapierWorld.getCollider(handle1);
-                    const collider2 = rapierWorld.getCollider(handle2);
-                    if(started && collider1?.userData?.isLocal && collider2?.userData?.isPlayer) {
-                       // console.log(`Local player collided with player ${collider2.userData.entityId}`);
-                    } else if (started && collider2?.userData?.isLocal && collider1?.userData?.isPlayer) {
-                       // console.log(`Local player collided with player ${collider1.userData.entityId}`);
-                    } else if (started && (collider1?.userData?.isLocal || collider2?.userData?.isLocal)) {
-                       // console.log(`Local player collided with map/other object.`);
-                    }
-                 });
+                 rapierEventQueue.drainCollisionEvents((handle1, handle2, started) => { /* Collision logic */ });
             } // End Physics Step
 
             // --- Update Remote Player Visuals ---
@@ -511,7 +473,10 @@ class Game {
                      if (localBody) {
                          const bodyPos = localBody.translation();
                          const targetCameraPos = new THREE.Vector3(bodyPos.x, bodyPos.y + CONFIG.CAMERA_Y_OFFSET, bodyPos.z);
-                         this.camera.position.lerp(targetCameraPos, 0.7);
+                         // ***** CAMERA LERPING DISABLED FOR DEBUGGING *****
+                         // this.camera.position.lerp(targetCameraPos, 0.7);
+                         // Let PointerLockControls handle camera position/rotation for now
+                         // ************************************************
                      }
                  } catch(e) { console.error("Error updating camera position:", e); }
              } // End Camera Update
@@ -549,5 +514,5 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('rapier-error', () => { console.error("Rapier failed to load, cannot start game."); }, { once: true });
     }
 });
-console.log("game.js loaded (Uses Global Scope - v17 Update Loop Debug)");
+console.log("game.js loaded (Uses Global Scope - v27 Camera Lerp Disabled)");
 // --- END OF FULL game.js FILE ---
