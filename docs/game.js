@@ -149,6 +149,10 @@ class Game {
     // --- Setup Sub-functions ---
     setupPhysics() {
         if (!RAPIER) { console.error("!!! RAPIER global object is missing during physics setup!"); return; }
+        console.log("--- DEBUG: Inspecting RAPIER.Quaternion ---");
+        console.dir(RAPIER.Quaternion); // Use console.dir for better object inspection
+        // Look for the method that creates a *new* quaternion from axis and angle.
+        console.log("--- END DEBUG ---");
         rapierWorld = new RAPIER.World({ x: 0, y: CONFIG.GRAVITY, z: 0 });
         rapierEventQueue = new RAPIER.EventQueue(true);
         window.rapierWorld = rapierWorld;
