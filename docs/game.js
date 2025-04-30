@@ -1,4 +1,4 @@
-// docs/game.js - Main Game Orchestrator (Uses Global Scope - v12 Capsule Fix)
+// docs/game.js - Main Game Orchestrator (Uses Global Scope - v13 Quaternion/Sky Fix)
 
 // --- Global variables like networkIsInitialized, assetsAreReady, etc., ---
 // --- are DECLARED in config.js and accessed directly here. ---
@@ -60,6 +60,11 @@ class Game {
         stateMachine.transitionTo('loading', { message: 'Setting up Graphics...' });
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene(); window.scene = this.scene; // Assign to global window.scene
+
+        // ***** ADDED SKY COLOR HERE *****
+        this.scene.background = new THREE.Color(0x87CEEB); // Sky Blue
+        // ******************************
+
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500); window.camera = this.camera; // Assign to global window.camera
         this.renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; window.renderer = this.renderer; // Assign to global window.renderer
@@ -83,19 +88,17 @@ class Game {
         this.scene.add(this.controls.getObject());
 
         // 4. Setup Scene Lighting
-        this.scene.add(new THREE.AmbientLight(0x606070)); // Ambient light for overall illumination
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9); // Main directional light
-        dirLight.position.set(40, 50, 30); // Position the light source
-        dirLight.castShadow = true; // Enable shadow casting
-        // Configure shadow properties for quality/performance
+        this.scene.add(new THREE.AmbientLight(0x606070, 1.0)); // Slightly increased ambient light
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0); // Slightly increased directional light
+        dirLight.position.set(40, 50, 30);
+        dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
         dirLight.shadow.camera.near = 0.5; dirLight.shadow.camera.far = 500;
-        // Optional: Adjust shadow camera frustum if needed
-        // dirLight.shadow.camera.left = -100; dirLight.shadow.camera.right = 100;
-        // dirLight.shadow.camera.top = 100; dirLight.shadow.camera.bottom = -100;
         this.scene.add(dirLight);
-        // Optional: Add a helper to visualize the light
-        // const dirLightHelper = new THREE.DirectionalLightHelper( dirLight, 10 ); scene.add( dirLightHelper );
+        // Optional: Add Hemisphere Light for softer sky/ground lighting
+        const hemisphereLight = new THREE.HemisphereLight( 0x87CEEB, 0x404020, 0.6 ); // Sky color, ground color, intensity
+        this.scene.add( hemisphereLight );
+
 
         // 5. Initialize Input System (Uses global Input object)
         if (!Input.init(this.controls)) {
@@ -335,14 +338,13 @@ class Game {
         const capsuleHalfHeight = Math.max(0.01, h / 2.0 - r); // Avoid zero height cylinder part
 
         let rigidBodyDesc;
+        let colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, r) // Use .capsule() - Y is default alignment
+            .setFriction(0.7).setRestitution(0.1).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
 
         // ***** FIXED LINE HERE *****
-        let colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, r) // Use .capsule() which aligns with Y by default
-            .setFriction(0.7).setRestitution(0.1).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS); // Listen for collisions
-        // *************************
-
         // Convert Y rotation to Quaternion using global RAPIER
-        const quaternion = RAPIER.Quaternion.fromAxisAngle({ x: 0, y: 1, z: 0 }, initialRotationY);
+        const quaternion = RAPIER.Quaternion.from_axis_angle({ x: 0, y: 1, z: 0 }, initialRotationY);
+        // *************************
         if (!quaternion) { console.error(`Failed to create quaternion for player ${playerId}`); return; }
 
         // Add userData to the collider for identification in collision events
@@ -678,4 +680,4 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { once: true });
     }
 });
-console.log("game.js loaded (Uses Global Scope - v12 Capsule Fix)");
+console.log("game.js loaded (Uses Global Scope - v13 Quaternion/Sky Fix)");
