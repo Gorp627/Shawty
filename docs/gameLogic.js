@@ -1,5 +1,5 @@
 // --- START OF FULL gameLogic.js FILE ---
-// docs/gameLogic.js (Rapier - v22 SIMPLIFIED DEBUGGING - Full Code Commented)
+// docs/gameLogic.js (Rapier - v23 Re-enable Features & Fix A/D)
 
 // Accesses globals: players, localPlayerId, CONFIG, THREE, RAPIER, rapierWorld, Network, Input, UIManager, stateMachine, Effects, scene
 
@@ -42,9 +42,8 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
     const isAlive = localPlayerData.health > 0;
 
     // --- Ground Check (Raycast) ---
-    // ***** DISABLED FOR DEBUGGING *****
-    let isGrounded = false; // Assume not grounded temporarily
-    /*
+    // ***** RE-ENABLED *****
+    let isGrounded = false;
     if (isAlive) {
         try {
             const bodyPos = playerBody.translation();
@@ -73,13 +72,10 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
         } catch(e) {
             console.error("!!! Rapier ground check error:", e); // Log the actual error
             isGrounded = false;
-            // If ground check itself fails critically, maybe skip applying forces this frame
-            // return; // Optional: exit here if ground check error is fatal
         }
     }
-    */
-    // *******************************
-     // console.log(`[GameLogic Update] IsGrounded: ${isGrounded}`); // Uncomment if needed
+    // ********************
+    // console.log(`[GameLogic Update] IsGrounded: ${isGrounded}`); // Uncomment if needed
 
 
     // --- Apply Input Forces/Impulses (Only if Alive) ---
@@ -88,11 +84,10 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
             // Read current vertical velocity *once* safely
             const currentLinvel = playerBody.linvel();
             const currentVelY = currentLinvel ? currentLinvel.y : 0;
-            // Note: currentVelX/Z are not needed for the simplified setLinvel approach below
 
-            // ***** SIMPLIFIED MOVEMENT *****
             const moveSpeed = Input.keys['ShiftLeft'] ? (CONFIG?.MOVEMENT_SPEED_SPRINTING || 10.5) : (CONFIG?.MOVEMENT_SPEED || 7.0);
 
+            // --- Horizontal Movement Calculation ---
             const forward = new THREE.Vector3(), right = new THREE.Vector3();
             const moveDirectionInput = new THREE.Vector3(0, 0, 0);
             camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
@@ -100,8 +95,10 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
 
             if (Input.keys['KeyW']) { moveDirectionInput.add(forward); }
             if (Input.keys['KeyS']) { moveDirectionInput.sub(forward); }
-            if (Input.keys['KeyA']) { moveDirectionInput.sub(right); }
-            if (Input.keys['KeyD']) { moveDirectionInput.add(right); }
+            // ***** SWAPPED A/D LOGIC *****
+            if (Input.keys['KeyA']) { moveDirectionInput.add(right); } // A adds right vector (Try this for left)
+            if (Input.keys['KeyD']) { moveDirectionInput.sub(right); } // D subtracts right vector (Try this for right)
+            // ***************************
 
             let targetVelocityX = 0, targetVelocityZ = 0;
             if (moveDirectionInput.lengthSq() > 0.0001) {
@@ -110,28 +107,26 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
                 targetVelocityZ = moveDirectionInput.z * moveSpeed;
             }
 
+            // --- Apply Movement Velocity ---
             // Apply horizontal movement using setLinvel, keep existing vertical velocity
             playerBody.setLinvel({ x: targetVelocityX, y: currentVelY, z: targetVelocityZ }, true);
-            // *****************************
 
 
             // --- Handle Jump ---
-            // ***** DISABLED FOR DEBUGGING *****
-            /*
+            // ***** RE-ENABLED *****
             if (Input.keys['Space'] && isGrounded) {
                  // Use the separately read currentVelY
                  if (currentVelY < 1.0) {
                     console.log("[GameLogic Update] Applying Jump Impulse");
                     playerBody.applyImpulse({ x: 0, y: JUMP_IMPULSE_VALUE, z: 0 }, true);
+                    // Don't set isGrounded=false, let next frame's check determine it
                  }
             }
-            */
-            // *******************************
+            // ********************
 
 
             // --- Handle Dash ---
-             // ***** DISABLED FOR DEBUGGING *****
-            /*
+            // ***** RE-ENABLED *****
             if (Input.requestingDash) {
                  console.log("[GameLogic Update] Applying Dash Impulse");
                  const impulse = {
@@ -142,13 +137,11 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
                  playerBody.applyImpulse(impulse, true);
                  Input.requestingDash = false;
             }
-            */
-             // *******************************
+            // ********************
 
 
             // --- Handle Shooting ---
-             // ***** DISABLED FOR DEBUGGING *****
-            /*
+            // ***** RE-ENABLED *****
             const now = Date.now();
             if (Input.mouseButtons[0] && now > (window.lastShootTime || 0) + SHOOT_COOLDOWN_MS) {
                  console.log("[GameLogic] Shoot condition met (Click & Cooldown OK)");
@@ -156,13 +149,13 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
                  performShoot(playerBody, camera); // Pass camera ref
                  Input.mouseButtons[0] = false;
             }
-            */
-             // *******************************
+            // ********************
 
         } catch (e) { console.error("!!! Error applying input physics:", e); }
     } // End if(isAlive)
 
     // --- Void Check ---
+    // (Keep void check)
     try {
         const currentBodyPos = playerBody.translation();
         const voidLevel = (typeof CONFIG !== 'undefined' && typeof CONFIG.VOID_Y_LEVEL === 'number') ? CONFIG.VOID_Y_LEVEL : -100;
@@ -179,6 +172,7 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
     } catch (e) { console.error("!!! Error during void check:", e); }
 
     // --- Sync Local Player Visual Mesh to Physics Body ---
+    // (Keep mesh sync)
     if (localPlayerData?.mesh) {
         try {
             const bodyPos = playerBody.translation();
@@ -190,6 +184,7 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
     }
 
     // --- Send Network Updates ---
+    // (Keep network update)
     if (playerBody && isAlive) {
          try {
              const playerHeight = CONFIG.PLAYER_HEIGHT;
@@ -302,5 +297,5 @@ function applyShockwave(originPosition, deadPlayerId) {
     }
 }
 
-console.log("gameLogic.js loaded (v22 SIMPLIFIED DEBUGGING)");
+console.log("gameLogic.js loaded (v23 Re-enable Features & Fix A/D)");
 // --- END OF FULL gameLogic.js FILE ---
