@@ -1,8 +1,8 @@
-// docs/stateMachine.js (REGENERATED v2 - Ensure Global Access)
+// docs/stateMachine.js (Add Character Select State v3)
 
 const stateMachine = {
     currentState: 'uninitialized',
-    states: ['uninitialized', 'loading', 'homescreen', 'joining', 'playing', 'error'], // 'error' is a potential state, though often handled via 'loading'
+    states: ['uninitialized', 'loading', 'homescreen', 'characterSelect', 'joining', 'playing', 'error'],
     listeners: {}, // { eventName: [callback1, callback2] }
     options: {}, // Store options passed during the last transition
 
@@ -14,8 +14,8 @@ const stateMachine = {
 
         // Prevent redundant transitions, EXCEPT for 'loading' state if new options indicate an error
         const isNewErrorOnLoading = (newState === 'loading' && options.error && !this.options.error);
-        if (newState === this.currentState && !isNewErrorOnLoading) {
-            // Allow re-transition to loading if new error occurs while already loading without error
+        if (newState === this.currentState && !isNewErrorOnLoading && newState !== 'loading') {
+             // Allow re-transition to loading even without error (e.g., updating loading message)
             // console.log(`[StateMachine] State already '${newState}'. Skipping transition.`);
             return;
         }
@@ -69,4 +69,4 @@ const stateMachine = {
 if (typeof window !== 'undefined') {
     window.stateMachine = stateMachine;
 }
-console.log("stateMachine.js loaded (REGENERATED v2 - Ensure Global)");
+console.log("stateMachine.js loaded (v3 - Character Select State)");
