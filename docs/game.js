@@ -1,116 +1,9 @@
-    // --- Main Update Loop (Manual Raycasting) ---
-    update() {
-        requestAnimationFrame(this.update.bind(this)); // Keep this at the top
+// --- START OF FULL game.js FILE (Manual Raycasting v7 - Focused Logging) ---
+// docs/game.js - Main Game Orchestrator (Manual Raycasting v7 - Focused Logging)
 
-        // ***** Check update loop is running and current state *****
-        // console.log(`>>> GAME UPDATE - State: ${stateMachine?.currentState}`);
+var currentGameInstance = null; // Holds the single Game instance
 
-        if (!this.clock || !this.renderer || !this.scene || !this.camera || !window.mapMesh) {
-            return; // Skip update if core components or map aren't ready
-        }
-
-        const deltaTime = this.clock.getDelta();
-        const clampedDeltaTime = Math.min(deltaTime, 0.05); // Clamp delta time
-
-        if (stateMachine.is('playing')) {
-             // console.log("Game Update Loop: In 'playing' state.");
-
-            // --- Define prerequisites using DIRECT global checks ---
-            const localMeshExists = !!this.localPlayerMesh; // Check instance variable for mesh
-            const idExists = !!window.localPlayerId; // Check global ID
-            const velocityMapExists = typeof window.playerVelocities === 'object' && window.playerVelocities !== null; // Check global velocity map
-            const localVelocityEntryExists = velocityMapExists && window.playerVelocities[window.localPlayerId] !== undefined; // Check entry for local player in global map
-            const groundedMapExists = typeof window.playerIsGrounded === 'object' && window.playerIsGrounded !== null; // Check global grounded map
-            const localGroundedEntryExists = groundedMapExists && window.playerIsGrounded.hasOwnProperty(window.localPlayerId); // Check entry for local player
-
-            // Combine checks for clarity
-            const canUpdateInput = localMeshExists && idExists && localVelocityEntryExists && groundedMapExists && localGroundedEntryExists;
-            const canCheckCollision = localMeshExists && idExists && localVelocityEntryExists; // Doesn't strictly need grounded map
-
-             // ***** REVISED LOG: More detailed prerequisite check *****
-             console.log(`>>> Prerequisites Check - Mesh:${localMeshExists}, ID:${idExists}, VelMap:${velocityMapExists}, VelEntry:${localVelocityEntryExists}, GroundMap:${groundedMapExists}, GroundEntry:${localGroundedEntryExists} -> CanUpdateInput: ${canUpdateInput}, CanCheckCollision: ${canCheckCollision}`);
-
-
-            // --- 1. Update Local Player Input & Intent ---
-            if (canUpdateInput) {
-                // console.log("Game Update Loop: Calling updateLocalPlayerInput...");
-                 // Pass the global velocity and grounded maps explicitly if needed, but gameLogic uses globals too
-                updateLocalPlayerInput(clampedDeltaTime, this.camera, this.localPlayerMesh);
-            } else if (stateMachine.is('playing')) { // Log only once if prerequisites fail while playing
-                 // console.warn("Cannot update input - prerequisites failed.");
-             }
-
-            // --- 2. Apply Physics & Collision (Local Player) ---
-            if (canCheckCollision) {
-                 // console.log("Game Update Loop: Calling checkPlayerCollisionAndMove...");
-                const groundedResult = checkPlayerCollisionAndMove(
-                    this.localPlayerMesh,
-                    window.playerVelocities[window.localPlayerId], // Use direct global access
-                    clampedDeltaTime
-                );
-                if (groundedResult !== undefined) {
-                    window.playerIsGrounded[window.localPlayerId] = groundedResult; // Update direct global access
-                }
-                 // console.log("Game Update Loop: Grounded state updated to:", window.playerIsGrounded[window.localPlayerId]);
-             } else if (stateMachine.is('playing')) { // Log only once if prerequisites fail while playing
-                 // console.warn("Cannot check collision - prerequisites failed.");
-             }
-
-
-            // --- 3. Update Remote Players (Interpolation) ---
-            for (const id in window.players) {
-                if (id === window.localPlayerId) continue; // Use global ID
-                const player = window.players[id];
-                const playerMesh = player?.mesh;
-                const playerVelocity = window.playerVelocities ? window.playerVelocities[id] : undefined; // Check global map
-
-                if (player instanceof ClientPlayer && playerMesh && playerVelocity !== undefined) {
-                    try {
-                        if (playerVelocity.lengthSq() > 0.01) {
-                             if (window.playerIsGrounded && !window.playerIsGrounded[id]) { // Check global map
-                                playerVelocity.y -= (CONFIG?.GRAVITY_ACCELERATION ?? 28.0) * clampedDeltaTime;
-                             }
-                             playerMesh.position.addScaledVector(playerVelocity, clampedDeltaTime);
-                             if (playerMesh.position.y < 0) {
-                                playerMesh.position.y = 0; playerVelocity.y = 0;
-                                if(window.playerIsGrounded) window.playerIsGrounded[id] = true; // Update global map
-                             } else {
-                                if(window.playerIsGrounded) window.playerIsGrounded[id] = false; // Update global map
-                             }
-                             playerVelocity.multiplyScalar(0.98);
-                        }
-                        playerMesh.position.lerp(new THREE.Vector3(player.serverX, player.serverY, player.serverZ), this.interpolationFactor);
-                        const targetQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), player.serverRotY);
-                        playerMesh.quaternion.slerp(targetQuat, this.interpolationFactor);
-                    } catch(e) { console.error(`Error updating remote player ${id}:`, e); }
-                }
-            }
-
-            // --- 4. Update Camera Position/Rotation ---
-            if (this.localPlayerMesh && this.camera && this.controls) {
-                 try {
-                     const targetCameraParentPos = this.localPlayerMesh.position.clone();
-                     targetCameraParentPos.y += CONFIG.CAMERA_Y_OFFSET;
-                     this.controls.getObject().position.copy(targetCameraParentPos);
-                 } catch(e) { console.error("Error updating camera/controls position:", e); }
-            }
-
-            // --- 5. Send Network Update ---
-            sendLocalPlayerUpdateIfNeeded(this.localPlayerMesh, this.camera);
-
-            // --- 6. Update Effects ---
-            Effects?.update(deltaTime);
-
-        } // End if(stateMachine.is('playing'))
-
-        // Render Scene ALWAYS
-        if (this.renderer && this.scene && this.camera) {
-            this.renderer.render(this.scene, this.camera);
-        }
-    } // End Update Loop
-
-    // ... (Rest of the Game class: init, setupLoaders, addEventListeners, etc. remain the same) ...
-
+class Game {
     // --- Constructor ---
     constructor() {
         // Core components to be initialized
@@ -304,6 +197,118 @@
          console.log("[Game] Player cleanup finished.");
      }
 
+    // --- Main Update Loop (Manual Raycasting) ---
+    update() {
+        requestAnimationFrame(this.update.bind(this)); // Keep this at the top
+
+        // ***** NEW LOG: Check if update loop is running and current state *****
+        // Use optional chaining for safety in case stateMachine isn't ready yet
+        console.log(`>>> GAME UPDATE - State: ${stateMachine?.currentState}`); // <-- UNCOMMENTED
+
+        if (!this.clock || !this.renderer || !this.scene || !this.camera || !window.mapMesh) {
+            return; // Skip update if core components or map aren't ready
+        }
+
+        const deltaTime = this.clock.getDelta();
+        const clampedDeltaTime = Math.min(deltaTime, 0.05); // Clamp delta time
+
+        if (stateMachine.is('playing')) {
+             // console.log("Game Update Loop: In 'playing' state."); // Keep this commented for now
+
+            // --- Define prerequisites using DIRECT global checks ---
+            const localMeshExists = !!this.localPlayerMesh; // Check instance variable for mesh
+            const idExists = !!window.localPlayerId; // Check global ID
+            const velocityMapExists = typeof window.playerVelocities === 'object' && window.playerVelocities !== null; // Check global velocity map
+            const localVelocityEntryExists = velocityMapExists && window.playerVelocities[window.localPlayerId] !== undefined; // Check entry for local player in global map
+            const groundedMapExists = typeof window.playerIsGrounded === 'object' && window.playerIsGrounded !== null; // Check global grounded map
+            const localGroundedEntryExists = groundedMapExists && window.playerIsGrounded.hasOwnProperty(window.localPlayerId); // Check entry for local player
+
+            // Combine checks for clarity
+            const canUpdateInput = localMeshExists && idExists && localVelocityEntryExists && groundedMapExists && localGroundedEntryExists;
+            const canCheckCollision = localMeshExists && idExists && localVelocityEntryExists; // Doesn't strictly need grounded map
+
+             // ***** REVISED LOG: More detailed prerequisite check *****
+             console.log(`>>> Prerequisites Check - Mesh:${localMeshExists}, ID:${idExists}, VelMap:${velocityMapExists}, VelEntry:${localVelocityEntryExists}, GroundMap:${groundedMapExists}, GroundEntry:${localGroundedEntryExists} -> CanUpdateInput: ${canUpdateInput}, CanCheckCollision: ${canCheckCollision}`); // <-- UNCOMMENTED
+
+
+            // --- 1. Update Local Player Input & Intent ---
+            if (canUpdateInput) {
+                // console.log("Game Update Loop: Calling updateLocalPlayerInput...");
+                 // Pass the global velocity and grounded maps explicitly if needed, but gameLogic uses globals too
+                updateLocalPlayerInput(clampedDeltaTime, this.camera, this.localPlayerMesh);
+            } else if (stateMachine.is('playing')) { // Log only once if prerequisites fail while playing
+                 // console.warn("Cannot update input - prerequisites failed.");
+             }
+
+            // --- 2. Apply Physics & Collision (Local Player) ---
+            if (canCheckCollision) {
+                 // console.log("Game Update Loop: Calling checkPlayerCollisionAndMove...");
+                const groundedResult = checkPlayerCollisionAndMove(
+                    this.localPlayerMesh,
+                    window.playerVelocities[window.localPlayerId], // Use direct global access
+                    clampedDeltaTime
+                );
+                if (groundedResult !== undefined) {
+                    window.playerIsGrounded[window.localPlayerId] = groundedResult; // Update direct global access
+                }
+                 // console.log("Game Update Loop: Grounded state updated to:", window.playerIsGrounded[window.localPlayerId]);
+             } else if (stateMachine.is('playing')) { // Log only once if prerequisites fail while playing
+                 // console.warn("Cannot check collision - prerequisites failed.");
+             }
+
+
+            // --- 3. Update Remote Players (Interpolation) ---
+            for (const id in window.players) {
+                if (id === window.localPlayerId) continue; // Use global ID
+                const player = window.players[id];
+                const playerMesh = player?.mesh;
+                const playerVelocity = window.playerVelocities ? window.playerVelocities[id] : undefined; // Check global map
+
+                if (player instanceof ClientPlayer && playerMesh && playerVelocity !== undefined) { // Check velocity exists
+                    try {
+                        if (playerVelocity.lengthSq() > 0.01) {
+                             if (window.playerIsGrounded && !window.playerIsGrounded[id]) { // Check global map
+                                playerVelocity.y -= (CONFIG?.GRAVITY_ACCELERATION ?? 28.0) * clampedDeltaTime;
+                             }
+                             playerMesh.position.addScaledVector(playerVelocity, clampedDeltaTime);
+                             if (playerMesh.position.y < 0) {
+                                playerMesh.position.y = 0; playerVelocity.y = 0;
+                                if(window.playerIsGrounded) window.playerIsGrounded[id] = true; // Update global map
+                             } else {
+                                if(window.playerIsGrounded) window.playerIsGrounded[id] = false; // Update global map
+                             }
+                             playerVelocity.multiplyScalar(0.98);
+                        }
+                        playerMesh.position.lerp(new THREE.Vector3(player.serverX, player.serverY, player.serverZ), this.interpolationFactor);
+                        const targetQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), player.serverRotY);
+                        playerMesh.quaternion.slerp(targetQuat, this.interpolationFactor);
+                    } catch(e) { console.error(`Error updating remote player ${id}:`, e); }
+                }
+            }
+
+            // --- 4. Update Camera Position/Rotation ---
+            if (this.localPlayerMesh && this.camera && this.controls) {
+                 try {
+                     const targetCameraParentPos = this.localPlayerMesh.position.clone();
+                     targetCameraParentPos.y += CONFIG.CAMERA_Y_OFFSET;
+                     this.controls.getObject().position.copy(targetCameraParentPos);
+                 } catch(e) { console.error("Error updating camera/controls position:", e); }
+            }
+
+            // --- 5. Send Network Update ---
+            sendLocalPlayerUpdateIfNeeded(this.localPlayerMesh, this.camera);
+
+            // --- 6. Update Effects ---
+            Effects?.update(deltaTime);
+
+        } // End if(stateMachine.is('playing'))
+
+        // Render Scene ALWAYS
+        if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+        }
+    } // End Update Loop
+
 } // End Game Class
 
 // --- Global Initialization Trigger ---
@@ -319,5 +324,5 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     startGameInit();
 });
-console.log("game.js loaded (Manual Raycasting v7 - Focused Logging)"); // Updated version name
+console.log("game.js loaded (Manual Raycasting v7 - Focused Logging)");
 // --- END OF FULL game.js FILE (Manual Raycasting v7 - Focused Logging) ---
