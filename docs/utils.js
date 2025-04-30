@@ -8,14 +8,16 @@ function lerp(a, b, t) {
 
 // Clamp value between min and max
 function clamp(value, min, max) {
-    if (min > max) { [min, max] = [max, min]; }
+    if (min > max) { // Swap if min > max
+        [min, max] = [max, min];
+    }
     return Math.max(min, Math.min(value, max));
 }
 
 // Random float between min (inclusive) and max (exclusive)
 function randomFloat(min, max) {
     if (typeof min !== 'number' || typeof max !== 'number' || !isFinite(min) || !isFinite(max)) { return 0; }
-    if (min >= max) { return min; }
+    if (min >= max) { return min; } // Return min if range is invalid or zero
     return Math.random() * (max - min) + min;
 }
 
@@ -24,7 +26,9 @@ function randomInt(min, max) {
     if (typeof min !== 'number' || typeof max !== 'number' || !isFinite(min) || !isFinite(max)) { return 0; }
     min = Math.ceil(min);
     max = Math.floor(max);
-    if (min > max) { return max; }
+    if (min > max) { // If min > max after floor/ceil, return min
+        return min;
+    }
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
