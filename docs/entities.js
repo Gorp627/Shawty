@@ -129,4 +129,5 @@ class ClientPlayer {
         }
     }
 }
+window.ClientPlayer = ClientPlayer; // Make class globally accessible
 // No window assignment needed if Network.js uses `new ClientPlayer()`
