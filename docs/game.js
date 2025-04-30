@@ -1,5 +1,5 @@
-// --- START OF FULL game.js FILE (Manual Raycasting v3 - Cleanup Fix) ---
-// docs/game.js - Main Game Orchestrator (Manual Raycasting v3 - Cleanup Fix)
+// --- START OF FULL game.js FILE (Manual Raycasting v4 - Debug Logging) ---
+// docs/game.js - Main Game Orchestrator (Manual Raycasting v4 - Debug Logging)
 
 var currentGameInstance = null; // Holds the single Game instance
 
@@ -37,7 +37,7 @@ class Game {
         // Ensure THREE is loaded globally before proceeding
         if (typeof THREE === 'undefined') {
             console.error("!!! CRITICAL: THREE.js library not loaded before Game.init()!");
-            document.body.innerHTML = "<p style='color:red; text-align:center;'>FATAL ERROR: Graphics Library (THREE.js) failed to load. Check index.html script order.</p>";
+            document.body.innerHTML = "<p style='color:red; text-align:center;'>FATAL ERROR: Graphics Library (THREE.js) failed to load.</p>";
             return;
         }
 
@@ -45,7 +45,7 @@ class Game {
         stateMachine.transitionTo('loading', { message: 'Initializing Core...' });
         if (!UIManager.initialize()) {
              console.error("UIManager initialization failed!");
-             document.body.innerHTML = "<p style='color:red; text-align:center;'>FATAL ERROR: UI System Failed to Initialize. Check console (F12).</p>";
+             document.body.innerHTML = "<p style='color:red; text-align:center;'>FATAL ERROR: UI System Failed to Initialize.</p>";
              return; // Stop
         }
         UIManager.bindStateListeners(stateMachine);
@@ -63,7 +63,7 @@ class Game {
 
         // 3. Setup PointerLockControls
         if (typeof THREE.PointerLockControls === 'undefined') {
-             console.error("!!! THREE.PointerLockControls not found! Check index.html script order.");
+             console.error("!!! THREE.PointerLockControls not found!");
              stateMachine.transitionTo('loading', { message: 'FATAL: Controls Library Failed!', error: true }); return;
         }
         this.controls = new THREE.PointerLockControls(this.camera, this.renderer.domElement); window.controls = this.controls; // Assign to global AND instance
@@ -129,7 +129,7 @@ class Game {
     setupLoaders() {
         if (!THREE) { console.error("!!! THREE missing during loader setup!"); return; }
         if (typeof THREE.DRACOLoader === 'undefined' || typeof THREE.GLTFLoader === 'undefined') {
-             console.error("!!! THREE.DRACOLoader or THREE.GLTFLoader constructors not found! Check index.html script order.");
+             console.error("!!! THREE.DRACOLoader or THREE.GLTFLoader constructors not found!");
              stateMachine.transitionTo('loading', { message: 'FATAL: GFX Loader Failed!', error: true }); return;
         }
         window.dracoLoader = new THREE.DRACOLoader();
@@ -179,7 +179,7 @@ class Game {
         if (assetsReady && mapMeshReady && networkReady && initDataPresent) {
              console.log(`[Game attempt #${callCount}] Prerequisites met! Attempting to start gameplay...`);
              this.startGamePlay(window.initializationData);
-             if (stateMachine?.is('playing')) { // Check if start was successful before consuming data
+             if (stateMachine?.is('playing')) {
                 window.initializationData = null;
              } else { console.warn(`[Game attempt #${callCount}] startGamePlay was called but state did not transition to 'playing'. initData not consumed.`); }
         }
@@ -210,11 +210,9 @@ class Game {
             console.warn("[Game] startGamePlay called while already in 'playing' state. Ignoring.");
             return;
         }
-        // Clean up *before* setting state to playing and processing initData
-        this.cleanupAllPlayers();
+        this.cleanupAllPlayers(); // Cleanup BEFORE setting state and processing
 
-        // Transition state
-        stateMachine.transitionTo('playing');
+        stateMachine.transitionTo('playing'); // Set state FIRST
         console.log("[Game] --- Starting Gameplay (Manual Raycasting) ---");
 
         window.localPlayerId = initData.id;
@@ -254,10 +252,11 @@ class Game {
                 // Attach gun model
                 const gunModelAsset = window.gunModelData;
                  if(gunModelAsset?.scene && this.camera) {
-                     if (window.gunMesh) this.camera.remove(window.gunMesh); // Remove old one first
+                     if (window.gunMesh) this.camera.remove(window.gunMesh);
                      window.gunMesh = gunModelAsset.scene.clone();
-                     window.gunMesh.scale.set(0.3, 0.3, 0.3);
-                     window.gunMesh.position.set(0.15, -0.15, -0.4);
+                     // *** ADJUST GUN SCALE HERE ***
+                     window.gunMesh.scale.set(0.5, 0.5, 0.5); // Example: Increased scale
+                     window.gunMesh.position.set(0.15, -0.15, -0.4); // May need minor position tweaks after scaling
                      window.gunMesh.rotation.set(0, Math.PI, 0);
                      window.gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; });
                      this.camera.add(window.gunMesh);
@@ -281,7 +280,17 @@ class Game {
             this.playerVelocities[id] = new THREE.Vector3(0, 0, 0);
             this.playerIsGrounded[id] = false; // Start airborne, ground check will correct
         }
-         console.log("[Game] Finished initial player processing.");
+        // Map Mesh Check (moved from loop)
+        if (window.mapMesh) {
+            console.log("Map Mesh Check:", window.mapMesh instanceof THREE.Object3D, "Visible:", window.mapMesh.visible);
+            let hasMeshChild = false;
+            window.mapMesh.traverse(child => { if (child.isMesh) hasMeshChild = true; });
+            console.log("Map Mesh has Mesh children:", hasMeshChild);
+        } else {
+            console.error("!!! Map Mesh (window.mapMesh) is missing when starting gameplay!");
+        }
+
+        console.log("[Game] Finished initial player processing.");
     }
 
     // --- Player Cleanup ---
@@ -289,17 +298,13 @@ class Game {
         const player = window.players[playerId];
         if (player?.mesh && this.scene) {
             this.scene.remove(player.mesh);
-            if (player instanceof ClientPlayer) { player.remove(); } // Use ClientPlayer disposal
+            if (player instanceof ClientPlayer) { player.remove(); }
             player.mesh = null;
         }
-        // Remove from global players AFTER checking it
         if (window.players && window.players[playerId]) {
             delete window.players[playerId];
         }
-
         if(playerId === window.localPlayerId) { this.localPlayerMesh = null; }
-
-        // Clean up state maps using instance references
         if (this.playerVelocities && this.playerVelocities[playerId]) {
             delete this.playerVelocities[playerId];
         }
@@ -310,38 +315,28 @@ class Game {
 
      cleanupAllPlayers() {
          console.log("[Game] Cleaning up all player objects (Manual Raycasting)...");
-         // Get player IDs FIRST from the current global state, IF it exists
          const playerIds = (window.players && typeof window.players === 'object') ? Object.keys(window.players) : [];
-
-         // Iterate using the collected IDs
-         playerIds.forEach(id => this.cleanupPlayer(id)); // Call cleanup for each existing player
-
-         // Now safely reset the global and instance variables
+         playerIds.forEach(id => this.cleanupPlayer(id));
          window.localPlayerId = null;
          this.localPlayerMesh = null;
-         this.playerVelocities = {}; // Reset instance velocity map
-         this.playerIsGrounded = {}; // Reset instance grounded map
-         window.players = {};       // Reset global players map
-
+         this.playerVelocities = {};
+         this.playerIsGrounded = {};
+         window.players = {};
          console.log("[Game] Player cleanup finished.");
      }
 
     // --- Main Update Loop (Manual Raycasting) ---
     update() {
         requestAnimationFrame(this.update.bind(this));
-        // Ensure core components and map mesh are ready
         if (!this.clock || !this.renderer || !this.scene || !this.camera || !window.mapMesh) {
-            // Optional: Render loading screen or placeholder if needed before map is ready
-             // if (this.renderer && this.scene && this.camera && stateMachine.is('loading')) {
-             //      this.renderer.render(this.scene, this.camera);
-             // }
-            return;
+            return; // Skip update if core components or map aren't ready
         }
 
         const deltaTime = this.clock.getDelta();
-        const clampedDeltaTime = Math.min(deltaTime, 0.05);
+        const clampedDeltaTime = Math.min(deltaTime, 0.05); // Clamp delta time
 
         if (stateMachine.is('playing')) {
+             // console.log("Game Loop Running - Playing State"); // <-- TEMP LOG
 
             // 1. Update Local Player Input & Intent
             if (this.localPlayerMesh && localPlayerId && this.playerVelocities[localPlayerId]) {
@@ -350,11 +345,16 @@ class Game {
 
             // 2. Apply Physics & Collision (Local Player)
             if (this.localPlayerMesh && localPlayerId && this.playerVelocities[localPlayerId]) {
-                this.playerIsGrounded[localPlayerId] = checkPlayerCollisionAndMove(
+                const groundedResult = checkPlayerCollisionAndMove(
                     this.localPlayerMesh,
                     this.playerVelocities[localPlayerId],
                     clampedDeltaTime
                 );
+                // Only update if the function didn't return undefined (e.g., due to early exit)
+                if (groundedResult !== undefined) {
+                    this.playerIsGrounded[localPlayerId] = groundedResult;
+                }
+                // console.log("Grounded state updated to:", this.playerIsGrounded[localPlayerId]); // <-- TEMP LOG
             }
 
             // 3. Update Remote Players (Interpolation)
@@ -366,21 +366,20 @@ class Game {
 
                 if (player instanceof ClientPlayer && playerMesh && playerVelocity) {
                     try {
-                        // Only apply physics sim if velocity is significant (e.g., from shockwave)
+                        // Simple physics simulation (gravity/damping) if velocity exists (e.g., after shockwave)
                         if (playerVelocity.lengthSq() > 0.01) {
-                            if (!this.playerIsGrounded[id]) {
+                             if (!this.playerIsGrounded[id]) { // Use potentially stale grounded state for remote
                                 playerVelocity.y -= (CONFIG?.GRAVITY_ACCELERATION ?? 28.0) * clampedDeltaTime;
-                            }
-                            playerMesh.position.addScaledVector(playerVelocity, clampedDeltaTime);
-                             if (playerMesh.position.y < 0) { // Basic ground clamp
-                                playerMesh.position.y = 0;
-                                playerVelocity.y = 0;
-                                this.playerIsGrounded[id] = true;
+                             }
+                             playerMesh.position.addScaledVector(playerVelocity, clampedDeltaTime);
+                             // Basic ground clamp
+                             if (playerMesh.position.y < 0) {
+                                playerMesh.position.y = 0; playerVelocity.y = 0; this.playerIsGrounded[id] = true;
                              } else { this.playerIsGrounded[id] = false; }
-                            playerVelocity.multiplyScalar(0.98);
+                             playerVelocity.multiplyScalar(0.98); // Dampen velocity
                         }
 
-                        // Interpolate position & rotation
+                        // Interpolate position & rotation towards server state
                         playerMesh.position.lerp(new THREE.Vector3(player.serverX, player.serverY, player.serverZ), this.interpolationFactor);
                         const targetQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), player.serverRotY);
                         playerMesh.quaternion.slerp(targetQuat, this.interpolationFactor);
@@ -406,7 +405,7 @@ class Game {
 
         } // End if(stateMachine.is('playing'))
 
-        // Render Scene ALWAYS (even if not playing, e.g., for menus eventually)
+        // Render Scene ALWAYS
         if (this.renderer && this.scene && this.camera) {
             this.renderer.render(this.scene, this.camera);
         }
@@ -427,5 +426,5 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     startGameInit();
 });
-console.log("game.js loaded (Manual Raycasting v3 - Cleanup Fix)");
-// --- END OF FULL game.js FILE (Manual Raycasting v3 - Cleanup Fix) ---
+console.log("game.js loaded (Manual Raycasting v4 - Debug Logging)");
+// --- END OF FULL game.js FILE (Manual Raycasting v4 - Debug Logging) ---
