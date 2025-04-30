@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. (Cannon.js Physics)</title>
+    <title>Shawty. (Manual Raycasting)</title> <!-- UPDATED TITLE -->
     <link rel="stylesheet" href="style.css">
     <!-- Optional: Add Google Fonts link -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,30 +13,40 @@
 <body>
     <!-- UI Screens -->
     <div id="loadingScreen" class="screen visible">
-        <!-- Replace spinner with new loader structure -->
         <div class="loader-bars">
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
+            <div></div><div></div><div></div><div></div><div></div>
         </div>
-        <p data-text="Loading...">Loading...</p> <!-- Added data-text for potential effect -->
+        <p data-text="Loading...">Loading...</p>
     </div>
 
     <div id="homeScreen" class="screen">
-        <div class="home-content"> <!-- Keep wrapper -->
-            <h1 class="stencil-font">SHAWTY.</h1> <!-- Use class for font -->
+        <div class="home-content">
+            <h1 class="stencil-font">SHAWTY.</h1>
             <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
-            <input type="text" id="playerNameInput" placeholder="Enter Callsign" maxlength="16"> <!-- Changed placeholder -->
-            <div class="phrase-container">
-                 <span>Kill Phrase: </span> <!-- Changed text -->
-                 <input type="text" id="playerPhraseInput" placeholder="Target Neutralized..." maxlength="20"> <!-- Changed placeholder -->
-            </div>
-            <button id="joinButton" class="stencil-font">DEPLOY</button> <!-- Changed text -->
+            <input type="text" id="playerNameInput" placeholder="Enter Callsign" maxlength="16">
+            <!-- Phrase input removed -->
+            <button id="nextButton" class="stencil-font">NEXT</button> <!-- CHANGED ID and text -->
             <p id="homeScreenError" class="error-message"></p>
         </div>
-        <div class="scanlines"></div> <!-- Added overlay effect -->
+        <div class="scanlines"></div>
+    </div>
+
+    <!-- NEW Character Select Screen -->
+    <div id="characterSelectScreen" class="screen">
+        <div class="select-content"> <!-- New content wrapper -->
+            <h2 class="stencil-font">SELECT OPERATOR</h2>
+            <div id="characterPreview">
+                 <!-- Preview will be rendered here by Three.js later -->
+                 <canvas id="previewCanvas"></canvas> <!-- Separate canvas for preview -->
+            </div>
+            <p id="characterNameDisplay">Shawty</p> <!-- Display current character name -->
+            <!-- Add Arrow buttons later if more characters exist -->
+            <!-- <button id="prevCharButton"><</button>
+            <button id="nextCharButton">></button> -->
+            <button id="confirmDeployButton" class="stencil-font">DEPLOY</button>
+            <p id="characterSelectError" class="error-message"></p>
+        </div>
+        <!-- Optional: Add scanlines or other effects -->
     </div>
 
     <!-- In-Game UI -->
@@ -56,8 +66,7 @@
     <!-- Libraries -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Using CANNON.JS (Integrity check removed) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <!-- Physics Engine Script Removed -->
     <!-- THREE Loaders & Controls -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
@@ -69,13 +78,13 @@
     <script src="utils.js"></script>
     <script src="stateMachine.js"></script>
     <script src="loadManager.js"></script>
-    <script src="entities.js"></script>
+    <script src="entities.js"></script> <!-- ClientPlayer used by Network -->
     <script src="uiManager.js"></script>
     <script src="input.js"></script>
     <script src="effects.js"></script>
     <script src="network.js"></script> <!-- Load updated network.js -->
-    <script src="gameLogic.js"></script> <!-- Load Cannon.js version -->
-    <script src="game.js"></script> <!-- Load Cannon.js version -->
+    <script src="gameLogic.js"></script> <!-- Load Manual Raycasting version -->
+    <script src="game.js"></script> <!-- Load Manual Raycasting version -->
 
 </body>
 </html>
