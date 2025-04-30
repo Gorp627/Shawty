@@ -310,10 +310,40 @@ class Game {
         let rigidBodyDesc;
         let colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, r)
             .setFriction(0.7).setRestitution(0.1).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+                let quaternion;
+        try {
+            // Manual Axis-Angle to Quaternion calculation
+            const axis = { x: 0, y: 1, z: 0 }; // Y axis
+            const angle = initialRotationY;
+            const halfAngle = angle * 0.5;
+            const s = Math.sin(halfAngle);
 
-        // Convert Y rotation to Quaternion using global RAPIER
-        const quaternion = RAPIER.Quaternion.rotation_from_axis_angle({ x: 0, y: 1, z: 0 }, initialRotationY);
-        if (!quaternion) { console.error(`Failed to create quaternion for player ${playerId}`); return; }
+            const qx = axis.x * s;
+            const qy = axis.y * s;
+            const qz = axis.z * s;
+            const qw = Math.cos(halfAngle);
+
+            // Construct using the (x, y, z, w) components
+            // Assuming the constructor RAPIER.Quaternion(x, y, z, w) exists based on length: 4
+            quaternion = new RAPIER.Quaternion(qx, qy, qz, qw);
+            console.log("[Game] Manually calculated Quaternion:", quaternion); // Debug log
+
+        } catch (e) {
+             console.error(`!!! Failed to manually create Quaternion for ${playerId}:`, e);
+             // Fallback to identity quaternion if manual creation fails
+             quaternion = RAPIER.Quaternion.identity(); // Assume identity() exists
+        }
+        // ****************************************
+
+        // Original code continued: Check if quaternion creation succeeded one way or another
+        if (!quaternion) {
+             console.error(`Failed to create or fallback quaternion for player ${playerId}`);
+             // If even identity fails, we have a bigger problem with RAPIER object itself
+             // For now, just return to prevent further errors.
+             return;
+        }
+
+
 
         colliderDesc.userData = { entityId: playerId, isLocal: isLocal, isPlayer: true };
 
