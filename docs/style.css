@@ -1,10 +1,13 @@
+/* --- START OF FULL style.css FILE --- */
 /* General Body Styles */
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Staatliches&display=swap'); /* Roboto Condensed & Staatliches (stencil-like) */
+
 body {
     margin: 0;
     overflow: hidden; /* Prevent scrollbars */
-    background-color: #1a1a2e; /* Dark blue/purple background */
-    color: #e0e0e0; /* Light grey text */
-    font-family: 'Roboto', sans-serif; /* Use Roboto font */
+    background-color: #111820; /* Dark charcoal/almost black */
+    color: #cdd6f4; /* Off-white / light lavender */
+    font-family: 'Roboto Condensed', sans-serif; /* Use Roboto Condensed */
     display: flex; /* Use flex for easier centering */
     justify-content: center;
     align-items: center;
@@ -23,9 +26,10 @@ body {
     justify-content: center;
     align-items: center;
     text-align: center;
-    background-color: rgba(26, 26, 46, 0.9); /* Semi-transparent background */
-    backdrop-filter: blur(5px); /* Add blur effect */
-    transition: opacity 0.5s ease-in-out; /* Smooth transition */
+    /* Slightly transparent dark background */
+    background-color: rgba(17, 24, 32, 0.95);
+    backdrop-filter: blur(3px); /* Add blur effect */
+    transition: opacity 0.4s ease-in-out; /* Smooth transition */
     opacity: 0;
     z-index: 10; /* Ensure screens are above canvas initially */
 }
@@ -35,127 +39,178 @@ body {
     opacity: 1;
 }
 
-/* Loading Screen Styles */
+/* --- Loading Screen --- */
 #loadingScreen {
-    /* background: linear-gradient(45deg, #1a1a2e, #16213e); */ /* Gradient example */
+    /* background: #111820; Optional solid background */
+}
+
+/* Bar Loader */
+.loader-bars {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end; /* Align bars at the bottom */
+  height: 50px; /* Container height */
+}
+
+.loader-bars div {
+  width: 8px; /* Bar width */
+  height: 10px; /* Start height */
+  margin: 0 3px; /* Spacing between bars */
+  background-color: #a6e3a1; /* Muted Green */
+  animation: bar-grow 1.2s infinite ease-in-out;
+  border-radius: 2px 2px 0 0; /* Slightly rounded top */
+}
+
+/* Stagger the animation delays */
+.loader-bars div:nth-child(2) { animation-delay: 0.1s; }
+.loader-bars div:nth-child(3) { animation-delay: 0.2s; }
+.loader-bars div:nth-child(4) { animation-delay: 0.3s; }
+.loader-bars div:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes bar-grow {
+  0%, 40%, 100% {
+    height: 10px; /* Min height */
+    opacity: 0.5;
+    transform: scaleY(1); /* Start/end scale */
+  }
+  20% {
+    height: 50px; /* Max height */
+    opacity: 1;
+    transform: scaleY(1.1); /* Slight bounce effect */
+   }
 }
 
 #loadingScreen p {
-    font-size: 1.5em;
-    color: #f0f0f0;
-    margin-top: 20px; /* Space below spinner */
-    text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+    font-size: 1.4em;
+    color: #a6adc8; /* Lighter grey */
+    margin-top: 25px;
+    letter-spacing: 1px;
+    position: relative; /* Needed for pseudo-elements if using glitch */
 }
 
+/* Style for error state */
 #loadingScreen.error p {
-    color: #ff6666; /* Reddish color for errors */
+    color: #f38ba8; /* Reddish */
     font-weight: bold;
 }
 
-/* Simple CSS Spinner */
-.spinner {
-    border: 8px solid #f3f3f3; /* Light grey */
-    border-top: 8px solid #3498db; /* Blue */
-    border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    animation: spin 1s linear infinite;
-}
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+/* --- Homescreen --- */
+/* Scanlines Overlay */
+.scanlines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    rgba(18, 18, 18, 0) 50%,
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg, rgba(255, 0, 0, 0.04), /* Reduced opacity */
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.04)
+  );
+  background-size: 100% 3px, 4px 100%; /* Thinner scanlines, slightly wider color bars */
+  pointer-events: none;
+  z-index: 1; /* Below home-content */
+  opacity: 0.2; /* Reduced opacity */
+  animation: scanline-anim 20s linear infinite; /* Slower animation */
 }
-
-/* Homescreen Styles */
-#homeScreen {
-    /* background: url('assets/your-background-image.jpg') center center / cover no-repeat; */ /* Optional Background */
-    /* background-color: rgba(0, 0, 0, 0.6); Add overlay if using image */
+@keyframes scanline-anim {
+    0% { background-position: 0 0; }
+    100% { background-position: 0 200%; } /* Move further for slower feel */
 }
 
 .home-content {
-    background-color: rgba(40, 40, 60, 0.8); /* Slightly transparent box */
-    padding: 30px 50px;
-    border-radius: 15px;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-    max-width: 450px; /* Limit width */
+    background-color: rgba(30, 30, 42, 0.85); /* Darker, less transparent */
+    padding: 35px 55px;
+    border-radius: 5px; /* Sharper edges */
+    border: 1px solid rgba(137, 180, 250, 0.2); /* Faint blue border */
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
+    max-width: 480px;
+    z-index: 2; /* Above scanlines */
+    position: relative; /* Needed for z-index */
 }
 
-#homeScreen h1 {
-    font-family: 'Orbitron', sans-serif; /* Sci-fi font */
-    font-size: 4em;
-    margin-bottom: 20px;
-    color: #61dafb; /* Light blue */
-    text-shadow: 0 0 10px #61dafb, 0 0 15px #ffffff;
+.stencil-font {
+     font-family: 'Staatliches', cursive; /* Stencil-like font */
+     letter-spacing: 2px;
+}
+
+#homeScreen h1.stencil-font {
+    font-size: 4.5em;
+    margin-bottom: 15px;
+    color: #89b4fa; /* Muted blue */
+    text-shadow: 0 0 8px rgba(137, 180, 250, 0.5);
+    font-weight: 400; /* Staatliches is often bold by default */
 }
 
 #playerCountLabel {
-    font-size: 1.1em;
-    margin-bottom: 25px;
-    color: #aaa;
+    font-size: 1em;
+    margin-bottom: 20px;
+    color: #7f849c; /* Grey-blue */
 }
-
-#playerCount {
-    font-weight: bold;
-    color: #fff;
-}
+#playerCount { color: #cdd6f4; }
 
 #homeScreen input[type="text"] {
     display: block;
-    width: calc(100% - 22px); /* Adjust width for padding */
-    padding: 12px;
+    width: calc(100% - 24px);
+    padding: 10px 12px;
     margin-bottom: 15px;
-    border: 1px solid #555;
-    border-radius: 5px;
-    background-color: #2a2a3e; /* Darker input background */
-    color: #f0f0f0;
+    border: 1px solid #45475a; /* Darker border */
+    border-radius: 3px;
+    background-color: rgba(17, 24, 32, 0.8); /* Match body bg, slightly transparent */
+    color: #cdd6f4;
     font-size: 1em;
+    font-family: 'Roboto Condensed', sans-serif;
 }
+::placeholder { color: #585b70; opacity: 0.8; } /* Placeholder color */
+
 .phrase-container {
     display: flex;
     align-items: center;
     margin-bottom: 25px;
-    color: #ccc;
+    color: #a6adc8;
+    font-size: 0.95em;
 }
-.phrase-container span {
-    margin-right: 8px;
-    white-space: nowrap; /* Prevent wrapping */
-}
-.phrase-container input[type="text"] {
-    flex-grow: 1; /* Take remaining space */
-    margin-bottom: 0; /* Remove margin for inline */
-}
+.phrase-container span { margin-right: 8px; white-space: nowrap; }
+.phrase-container input[type="text"] { flex-grow: 1; margin-bottom: 0; }
 
 
 #homeScreen button#joinButton {
-    padding: 15px 30px;
-    font-size: 1.2em;
-    font-weight: bold;
-    color: #fff;
-    background-color: #4CAF50; /* Green */
+    padding: 12px 28px;
+    font-size: 1.4em;
+    color: #111820; /* Dark text */
+    background-color: #a6e3a1; /* Muted green */
     border: none;
-    border-radius: 8px;
+    border-radius: 3px;
     cursor: pointer;
-    transition: background-color 0.3s ease, transform 0.1s ease;
-    margin-top: 10px;
+    transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    margin-top: 15px;
+    text-transform: uppercase; /* Uppercase text */
+    box-shadow: inset 0 -2px 4px rgba(0,0,0,0.2);
 }
 
 #homeScreen button#joinButton:hover:not(:disabled) {
-    background-color: #45a049; /* Darker green */
-    transform: scale(1.05);
+    background-color: #b4e8b1; /* Lighter green */
+    box-shadow: 0 0 10px rgba(166, 227, 161, 0.5), inset 0 -2px 4px rgba(0,0,0,0.2);
 }
 #homeScreen button#joinButton:active:not(:disabled) {
-    transform: scale(1.0);
+    transform: translateY(1px);
+    box-shadow: inset 0 -1px 2px rgba(0,0,0,0.3);
 }
 
 #homeScreen button#joinButton:disabled {
-    background-color: #555;
+    background-color: #585b70; /* Dark grey disabled */
+    color: #313244;
     cursor: not-allowed;
     opacity: 0.7;
+     box-shadow: inset 0 -2px 4px rgba(0,0,0,0.2);
 }
 
 .error-message {
-    color: #ff6666;
+    color: #f38ba8; /* Red */
     margin-top: 15px;
     min-height: 1.2em; /* Reserve space */
     font-weight: bold;
@@ -163,9 +218,9 @@ body {
 }
 
 
-/* Game Canvas */
+/* --- Game UI --- */
 #gameCanvas {
-    display: block; /* Remove extra space below canvas */
+    display: block;
     position: absolute;
     top: 0;
     left: 0;
@@ -175,7 +230,6 @@ body {
     z-index: 1; /* Behind UI screens */
 }
 
-/* In-Game UI */
 #gameUI {
     position: absolute;
     top: 0;
@@ -193,20 +247,20 @@ body {
     left: 50%;
     transform: translate(-50%, -50%);
     font-size: 24px;
-    color: rgba(0, 255, 0, 0.7); /* Lime green, slightly transparent */
-    pointer-events: none;
-    text-shadow: 0 0 3px black;
+    color: rgba(166, 227, 161, 0.8); /* Muted green crosshair */
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.7);
 }
 
 #info {
     position: absolute;
     top: 15px;
     left: 15px;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: rgba(17, 24, 32, 0.7); /* Dark background */
     padding: 8px 12px;
-    border-radius: 5px;
+    border-radius: 3px;
     font-size: 0.9em;
-    color: #eee;
+    color: #bac2de; /* Light blue-grey */
+    border: 1px solid rgba(70, 72, 90, 0.5);
 }
 
 /* Health Bar */
@@ -217,8 +271,8 @@ body {
     transform: translateX(-50%);
     width: 300px;
     height: 25px;
-    background-color: rgba(50, 50, 50, 0.7); /* Dark grey background */
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    background-color: rgba(49, 50, 68, 0.7); /* Darker grey background */
+    border: 1px solid rgba(137, 180, 250, 0.3); /* Muted blue border */
     border-radius: 5px;
     overflow: hidden; /* Clip the fill */
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
@@ -227,8 +281,8 @@ body {
 #healthBarFill {
     height: 100%;
     width: 100%; /* Start full */
-    /* Dynamic gradient: Bright green -> Yellow -> Red */
-    background: linear-gradient(to right, #ff4d4d, #ffcc00, #4CAF50);
+    /* Dynamic gradient: Red -> Yellow -> Green */
+    background: linear-gradient(to right, #f38ba8, #fab387, #a6e3a1); /* Catppuccin Mocha colors: Red, Peach, Green */
     background-size: 200% 100%; /* Size for shifting effect */
     background-position: 0% 0%; /* Start at green (100% health = 0% position) */
     transition: width 0.3s ease-out, background-position 0.3s ease-out; /* Smooth transitions */
@@ -240,31 +294,31 @@ body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    color: white;
+    color: #111820; /* Dark text for contrast */
     font-weight: bold;
     font-size: 0.9em;
-    text-shadow: 1px 1px 2px black;
+    text-shadow: 0 0 2px rgba(205, 214, 244, 0.5); /* Light text shadow */
 }
 
 /* Kill Message */
 #killMessage {
     position: absolute;
-    top: 15px; /* Position below info */
+    top: 15px;
     right: 15px;
-    /* Adjust position if info is large */
-    /* top: calc(15px + #info height + 10px); */
-    background-color: rgba(200, 0, 0, 0.6); /* Reddish background */
-    color: white;
+    background-color: rgba(243, 139, 168, 0.7); /* Reddish background */
+    color: #111820; /* Dark text */
     padding: 10px 15px;
-    border-radius: 5px;
-    font-size: 1.1em;
+    border-radius: 3px;
+    font-size: 1.0em; /* Slightly smaller */
     font-weight: bold;
     text-align: center;
     opacity: 0; /* Hidden by default */
     transition: opacity 0.5s ease-in-out;
-    max-width: 400px; /* Prevent excessive width */
+    max-width: 400px;
+    border: 1px solid rgba(205, 214, 244, 0.3);
 }
 
 #killMessage.visible {
     opacity: 1;
 }
+/* --- END OF FULL style.css FILE --- */
