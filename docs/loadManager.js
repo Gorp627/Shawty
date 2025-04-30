@@ -42,14 +42,14 @@ const loadManager = {
              if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message: 'FATAL: Graphics Library Failed!', error: true});
              return;
         }
-        if (typeof window === 'undefined' || typeof window.loader === 'undefined' || !window.loader || typeof THREE === 'undefined' || typeof THREE.GLTFLoader === 'undefined' || !(window.loader instanceof THREE.GLTFLoader) ||
-            typeof window.dracoLoader === 'undefined' || !window.dracoLoader || typeof THREE.DRACOLoader === 'undefined' || !(window.dracoLoader instanceof THREE.DRACOLoader)) {
+        // Use global loaders created in game.js setupLoaders
+        if (typeof window === 'undefined' || !window.loader || !window.dracoLoader) {
              console.error("[LoadManager] CRITICAL: Global GLTFLoader or DRACOLoader reference is missing or invalid!");
              this.trigger('error',{message:'GFX Loader Ref Missing!'});
              if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message: 'FATAL: Graphics Loader Ref Failed!', error: true});
              return;
         }
-        this.loaders.gltf = window.loader;
+        this.loaders.gltf = window.loader; // Use global loader
 
         this.loaders.texture = new THREE.TextureLoader();
         this.loaders.audio = new THREE.AudioLoader();
@@ -114,6 +114,14 @@ const loadManager = {
                  break;
             case 'audio':
                  if (!this.loaders.audio) { onError("Audio Loader not available"); return; }
+                 // Need AudioListener from Effects.js to be ready before loading sounds
+                 if (!window.listener) {
+                     console.warn(`[LoadManager] AudioListener not ready, delaying load for ${key}`);
+                     // Simple delay - a better approach involves event listeners or promises
+                     setTimeout(() => this.loadAsset(key), 500);
+                     asset.state = 'pending'; // Reset state to retry
+                     return;
+                 }
                  this.loaders.audio.load(assetPath, onSuccess, onProg, onError);
                  break;
             default:
@@ -129,7 +137,7 @@ const loadManager = {
 
         assetEntry.state = success ? 'processing' : 'error';
         assetEntry.data = success ? loadedAssetOrError : (loadedAssetOrError || 'Unknown load error');
-        console.log(`[LM CB] Asset: ${assetKey}, Load Success: ${success}. State set to: '${assetEntry.state}'.`);
+        // console.log(`[LM CB] Asset: ${assetKey}, Load Success: ${success}. State set to: '${assetEntry.state}'.`);
 
         if (typeof THREE === 'undefined') {
              console.error("[LM CB] THREE not found during processing!");
@@ -144,14 +152,14 @@ const loadManager = {
                 if (assetType === 'gltf') {
                     const gltf = loadedAssetOrError;
                     if (!gltf?.scene || !(gltf.scene instanceof THREE.Object3D)) throw new Error("Loaded GLTF invalid or no scene.");
-                    processedData = gltf;
-                    console.log(`[LM Process] GLTF OK: ${assetKey}.`);
+                    processedData = gltf; // Store the whole GLTF object (includes scene, animations etc)
+                    // console.log(`[LM Process] GLTF OK: ${assetKey}.`);
                     const applyShadows = (obj) => { obj.traverse(c => { if(c.isMesh){c.castShadow=true; c.receiveShadow=true;} }); };
 
                     // Assign crucial data to global scope AND ADD MAP TO SCENE
                     if (assetKey === 'map') {
-                        window.mapMesh = processedData.scene;
-                        applyShadows(processedData.scene);
+                        window.mapMesh = processedData.scene; // Assign the scene Object3D
+                        applyShadows(window.mapMesh);
                         // ***** ADD MAP TO SCENE HERE *****
                         if (window.scene) {
                              console.log("[LoadManager] Adding map mesh to the scene.");
@@ -162,15 +170,25 @@ const loadManager = {
                         }
                         // *********************************
                     }
-                    else if (assetKey === 'playerModel') { applyShadows(processedData.scene); window.playerModelData = processedData; }
-                    else if (assetKey === 'gunModel') { processedData.scene.traverse(c=>{if(c.isMesh)c.castShadow=true;}); window.gunModelData = processedData; }
+                    else if (assetKey === 'playerModel') {
+                        applyShadows(processedData.scene);
+                        window.playerModelData = processedData; // Store the whole GLTF object
+                    }
+                    else if (assetKey === 'gunModel') {
+                        processedData.scene.traverse(c=>{if(c.isMesh)c.castShadow=true;});
+                        window.gunModelData = processedData; // Store the whole GLTF object
+                    }
                 } else if (assetType === 'texture') {
                     if (!(loadedAssetOrError instanceof THREE.Texture)) throw new Error("Loaded texture not THREE.Texture.");
+                    // Assign texture to global scope if needed, e.g.:
+                    // if (assetKey === 'someTexture') window.someTexture = loadedAssetOrError;
                 } else if (assetType === 'audio') {
                      if (!(loadedAssetOrError instanceof AudioBuffer)) throw new Error("Loaded audio not AudioBuffer.");
+                     // Assign audio buffer to global scope
                      if (assetKey === 'gunSound') window.gunSoundBuffer = loadedAssetOrError;
+                     // if (assetKey === 'explosionSound') window.explosionSoundBuffer = loadedAssetOrError; // Example
                 }
-                assetEntry.data = processedData;
+                assetEntry.data = processedData; // Store the processed data (GLTF object, Texture, AudioBuffer)
                 assetEntry.state = 'loaded';
             } else {
                 assetEntry.state = 'error';
@@ -194,23 +212,19 @@ const loadManager = {
             if (assetState === 'error') { anyRequiredError = true; console.warn(`[LM Check] Req asset '${key}' failed.`); }
             else if (assetState !== 'loaded') { console.error(`[LM Check] Req asset '${key}' unexpected state: ${assetState}`); anyRequiredError = true; }
         }
+        // Only proceed if nothing is still loading/processing
         if (stillInProgress) return;
 
-        if (allRequiredDone) {
-             if (anyRequiredError) {
-                 console.error("[LM Check] Triggering global 'error' due to failed required asset(s).");
-                 this.trigger('error', { message: 'One or more required assets failed to load.' });
-                 if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message:"Required Assets Failed!", error:true});
-             } else {
-                 console.log("[LM Check] All required assets loaded successfully. Triggering 'ready'.");
-                 if (typeof window !== 'undefined') window.assetsAreReady = true;
-                 this.trigger('ready');
-             }
-        } else {
-             console.error("[LM Check] Cannot trigger 'ready', required asset definitions missing.");
-             this.trigger('error', { message: 'Missing required asset definitions.' });
-              if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message:"Asset Def Missing!", error:true});
+        if (allRequiredDone && !anyRequiredError) {
+             console.log("[LM Check] All required assets loaded successfully. Triggering 'ready'.");
+             if (typeof window !== 'undefined') window.assetsAreReady = true; // Set global flag
+             this.trigger('ready');
+        } else if (anyRequiredError) { // Check for errors only after confirming nothing is in progress
+             console.error("[LM Check] Triggering global 'error' due to failed required asset(s).");
+             this.trigger('error', { message: 'One or more required assets failed to load.' });
+             if(typeof stateMachine !== 'undefined') stateMachine.transitionTo('loading', {message:"Required Assets Failed!", error:true});
         }
+        // Implicitly handles the case where definitions might be missing if `allRequiredDone` remains false without errors
     },
 
     on: function(eventName, callback) {
