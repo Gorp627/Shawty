@@ -1,4 +1,5 @@
-// docs/gameLogic.js (Rapier - Add Shooting, Rocket Jump, Shockwave)
+// --- START OF FULL gameLogic.js FILE ---
+// docs/gameLogic.js (Rapier - Add Shooting Debug Logs)
 
 // Accesses globals: camera, controls, players, localPlayerId, CONFIG, THREE, RAPIER, rapierWorld, Network, Input, UIManager, stateMachine, Effects, scene
 
@@ -101,6 +102,9 @@ function updateLocalPlayer(deltaTime, playerBody) {
             // --- Handle Shooting ---
             const now = Date.now();
             if (Input.mouseButtons[0] && now > (window.lastShootTime || 0) + SHOOT_COOLDOWN_MS) {
+                 // ***** ADD SHOOTING LOG 1 *****
+                 console.log("[GameLogic] Shoot condition met (Click & Cooldown OK)");
+                 // ****************************
                  window.lastShootTime = now; // Update last shoot time immediately
                  performShoot(playerBody); // Pass player body for rocket jump logic
                  Input.mouseButtons[0] = false; // Consume the click (for semi-auto feel, remove for auto)
@@ -181,11 +185,23 @@ function updateLocalPlayer(deltaTime, playerBody) {
 
 /** Performs shooting logic: Raycast, send hit, trigger effects/rocket jump */
 function performShoot(playerBody) {
-     if (!camera || !Network || !scene) return;
-     // console.log("Bang!"); // DEBUG
+     // ***** ADD SHOOTING LOG 2 *****
+     console.log("[GameLogic] performShoot called");
+     // ****************************
+
+     if (!camera || !Network || !scene) {
+        console.warn("[GameLogic] performShoot returning early: Missing camera, Network, or scene.");
+        return;
+     }
+     // console.log("Bang!"); // More specific log above is better
 
      // Play Gun Sound (non-positional, attached to camera/listener)
-     if (window.gunSoundBuffer) Effects.playSound(window.gunSoundBuffer, null, false, 0.4);
+     if (window.gunSoundBuffer) {
+        // console.log("[GameLogic] Attempting to play gun sound."); // Optional detail
+        Effects.playSound(window.gunSoundBuffer, null, false, 0.4);
+     } else {
+        console.warn("[GameLogic] Gun sound buffer not loaded, cannot play sound.");
+     }
 
      // --- Raycast ---
      const raycaster = new THREE.Raycaster();
@@ -207,8 +223,17 @@ function performShoot(playerBody) {
      // Add map mesh if needed for bullet impacts on walls (optional)
      // if (window.mapMesh) potentialTargets.push(window.mapMesh);
 
+     // ***** ADD SHOOTING LOG 3 *****
+     console.log(`[GameLogic] Raycasting from camera. Targets: ${potentialTargets.length}`);
+     // ****************************
+
      // Perform raycast
      const intersects = raycaster.intersectObjects(potentialTargets, true); // `true` checks descendants
+
+     // ***** ADD SHOOTING LOG 4 *****
+     console.log(`[GameLogic] Raycast intersects: ${intersects.length}`);
+     // ****************************
+
 
      let hitDetected = false;
      if (intersects.length > 0) {
@@ -302,4 +327,5 @@ function applyShockwave(originPosition, deadPlayerId) {
     }
 }
 
-console.log("gameLogic.js loaded (Added Shooting, RJ, Shockwave)");
+console.log("gameLogic.js loaded (Added Shooting Debug Logs)");
+// --- END OF FULL gameLogic.js FILE ---
