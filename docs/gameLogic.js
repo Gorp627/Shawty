@@ -1,5 +1,5 @@
 // --- START OF FULL gameLogic.js FILE ---
-// docs/gameLogic.js (Rapier - v20 Use Impulse for WASD)
+// docs/gameLogic.js (Rapier - v22 SIMPLIFIED DEBUGGING - Full Code Commented)
 
 // Accesses globals: players, localPlayerId, CONFIG, THREE, RAPIER, rapierWorld, Network, Input, UIManager, stateMachine, Effects, scene
 
@@ -16,8 +16,9 @@ const ROCKET_JUMP_THRESH = CONFIG?.ROCKET_JUMP_ANGLE_THRESHOLD || -0.7;
 const DEATH_SHOCKWAVE_FORCE = CONFIG?.DEATH_EXPLOSION_FORCE || 600.0;
 const DEATH_SHOCKWAVE_RADIUS = CONFIG?.DEATH_EXPLOSION_RADIUS || 15.0;
 
+
 /**
- * Updates the local player's physics BODY based on input and handles shooting, effects, void checks.
+ * Updates the local player's physics BODY based on input.
  * @param {number} deltaTime Time since last frame.
  * @param {RAPIER.RigidBody} playerBody Reference to the local player's dynamic physics body.
  * @param {THREE.PerspectiveCamera} camera Reference to the main camera.
@@ -41,7 +42,9 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
     const isAlive = localPlayerData.health > 0;
 
     // --- Ground Check (Raycast) ---
-    let isGrounded = false;
+    // ***** DISABLED FOR DEBUGGING *****
+    let isGrounded = false; // Assume not grounded temporarily
+    /*
     if (isAlive) {
         try {
             const bodyPos = playerBody.translation();
@@ -55,30 +58,41 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
             const maxToi = GROUND_CHECK_BUFFER + 0.05;
 
             const hit = rapierWorld.castRay(
-                ray, maxToi, true, undefined, undefined, playerBody.collider(0)
+                ray,
+                maxToi,
+                true, // Query solid shapes
+                undefined, // interactionGroups (use default filtering)
+                undefined, // filter flags
+                playerBody.collider(0) // Collider to exclude (player's own)
             );
 
             if (hit != null) {
                 isGrounded = true;
+                 // console.log("[GameLogic Ground Check] Ground detected!"); // Uncomment if needed
             }
         } catch(e) {
-            console.error("!!! Rapier ground check error:", e);
+            console.error("!!! Rapier ground check error:", e); // Log the actual error
             isGrounded = false;
+            // If ground check itself fails critically, maybe skip applying forces this frame
+            // return; // Optional: exit here if ground check error is fatal
         }
     }
+    */
+    // *******************************
+     // console.log(`[GameLogic Update] IsGrounded: ${isGrounded}`); // Uncomment if needed
+
 
     // --- Apply Input Forces/Impulses (Only if Alive) ---
     if (isAlive) {
         try {
-            // Read current velocity components
+            // Read current vertical velocity *once* safely
             const currentLinvel = playerBody.linvel();
             const currentVelY = currentLinvel ? currentLinvel.y : 0;
-            const currentVelX = currentLinvel ? currentLinvel.x : 0;
-            const currentVelZ = currentLinvel ? currentLinvel.z : 0;
+            // Note: currentVelX/Z are not needed for the simplified setLinvel approach below
 
+            // ***** SIMPLIFIED MOVEMENT *****
             const moveSpeed = Input.keys['ShiftLeft'] ? (CONFIG?.MOVEMENT_SPEED_SPRINTING || 10.5) : (CONFIG?.MOVEMENT_SPEED || 7.0);
 
-            // --- Horizontal Movement Calculation ---
             const forward = new THREE.Vector3(), right = new THREE.Vector3();
             const moveDirectionInput = new THREE.Vector3(0, 0, 0);
             camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
@@ -89,42 +103,35 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
             if (Input.keys['KeyA']) { moveDirectionInput.sub(right); }
             if (Input.keys['KeyD']) { moveDirectionInput.add(right); }
 
-            // Calculate desired velocity based on input
-            let desiredVelX = 0, desiredVelZ = 0;
+            let targetVelocityX = 0, targetVelocityZ = 0;
             if (moveDirectionInput.lengthSq() > 0.0001) {
                 moveDirectionInput.normalize();
-                desiredVelX = moveDirectionInput.x * moveSpeed;
-                desiredVelZ = moveDirectionInput.z * moveSpeed;
+                targetVelocityX = moveDirectionInput.x * moveSpeed;
+                targetVelocityZ = moveDirectionInput.z * moveSpeed;
             }
 
-            // ***** APPLY MOVEMENT AS IMPULSE *****
-            // Calculate the change needed
-            const deltaVelX = desiredVelX - currentVelX;
-            const deltaVelZ = desiredVelZ - currentVelZ;
-
-            // Apply an impulse proportional to the change needed.
-            // Tune this factor for responsiveness. Start with mass * small_factor or a fixed value.
-            // Example: If PLAYER_MASS is 70, try factors like 70 * 0.1 = 7, or just 5, 10, etc.
-            const moveForceFactor = (CONFIG.PLAYER_MASS || 70) * 0.1; // Adjust 0.1 based on feel
-
-            if (Math.abs(deltaVelX) > 0.01 || Math.abs(deltaVelZ) > 0.01) { // Only apply if change is significant
-                 playerBody.applyImpulse({ x: deltaVelX * moveForceFactor, y: 0, z: deltaVelZ * moveForceFactor }, true);
-                 // console.log(`Applying move impulse: dx=${(deltaVelX * moveForceFactor).toFixed(1)}, dz=${(deltaVelZ * moveForceFactor).toFixed(1)}`); // Debug if needed
-            }
-             // We removed the setLinvel here, relying only on impulse for horizontal changes.
-            // Gravity will still affect the Y velocity naturally via the physics step.
-            // *************************************
+            // Apply horizontal movement using setLinvel, keep existing vertical velocity
+            playerBody.setLinvel({ x: targetVelocityX, y: currentVelY, z: targetVelocityZ }, true);
+            // *****************************
 
 
             // --- Handle Jump ---
+            // ***** DISABLED FOR DEBUGGING *****
+            /*
             if (Input.keys['Space'] && isGrounded) {
-                 if (currentVelY < 1.0) { // Use the separately read currentVelY here
+                 // Use the separately read currentVelY
+                 if (currentVelY < 1.0) {
                     console.log("[GameLogic Update] Applying Jump Impulse");
                     playerBody.applyImpulse({ x: 0, y: JUMP_IMPULSE_VALUE, z: 0 }, true);
                  }
             }
+            */
+            // *******************************
+
 
             // --- Handle Dash ---
+             // ***** DISABLED FOR DEBUGGING *****
+            /*
             if (Input.requestingDash) {
                  console.log("[GameLogic Update] Applying Dash Impulse");
                  const impulse = {
@@ -135,15 +142,22 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
                  playerBody.applyImpulse(impulse, true);
                  Input.requestingDash = false;
             }
+            */
+             // *******************************
+
 
             // --- Handle Shooting ---
+             // ***** DISABLED FOR DEBUGGING *****
+            /*
             const now = Date.now();
             if (Input.mouseButtons[0] && now > (window.lastShootTime || 0) + SHOOT_COOLDOWN_MS) {
                  console.log("[GameLogic] Shoot condition met (Click & Cooldown OK)");
                  window.lastShootTime = now;
-                 performShoot(playerBody, camera);
+                 performShoot(playerBody, camera); // Pass camera ref
                  Input.mouseButtons[0] = false;
             }
+            */
+             // *******************************
 
         } catch (e) { console.error("!!! Error applying input physics:", e); }
     } // End if(isAlive)
@@ -288,5 +302,5 @@ function applyShockwave(originPosition, deadPlayerId) {
     }
 }
 
-console.log("gameLogic.js loaded (v20 Use Impulse for WASD)");
+console.log("gameLogic.js loaded (v22 SIMPLIFIED DEBUGGING)");
 // --- END OF FULL gameLogic.js FILE ---
