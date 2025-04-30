@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. (Rapier Physics)</title>
+    <title>Shawty. (Cannon.js Physics)</title> <!-- Updated title -->
     <link rel="stylesheet" href="style.css">
     <!-- Optional: Add Google Fonts link -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,12 +13,12 @@
 <body>
     <!-- UI Screens -->
     <div id="loadingScreen" class="screen visible">
-        <div class="spinner"></div> <!-- Added spinner element -->
+        <div class="spinner"></div>
         <p>Loading...</p>
     </div>
 
     <div id="homeScreen" class="screen">
-        <div class="home-content"> <!-- Wrapper for centering -->
+        <div class="home-content">
             <h1>Shawty.</h1>
             <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
             <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
@@ -32,10 +32,8 @@
     </div>
 
     <!-- In-Game UI -->
-    <div id="gameUI"> <!-- Hidden by default -->
-        <!-- Crosshair - Added -->
+    <div id="gameUI">
         <div id="crosshair">+</div>
-        <!-- Existing UI elements -->
         <div id="info"></div>
         <div id="healthBarContainer">
             <div id="healthBarFill"></div>
@@ -50,15 +48,18 @@
     <!-- Libraries -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- ADDED CANNON.JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js" integrity="sha512-avAWgGBprBY4/JWzE2b5X9TQJNlr69Gz+OrubUAYko3ZGM6fO9/GDXmBsyv/QzncOEP6GWSg+iQVV0g2T7KkfA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- THREE Loaders & Controls -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- Rapier Physics Engine Init -->
-    <script type="module" src="rapier_init.js"></script>
+    <!-- REMOVED RAPIER INIT -->
+    <!-- <script type="module" src="rapier_init.js"></script> -->
 
-    <!-- Core & Game Logic -->
+    <!-- Core & Game Logic - ORDER MATTERS -->
     <script src="config.js"></script>
     <script src="utils.js"></script>
     <script src="stateMachine.js"></script>
@@ -67,9 +68,9 @@
     <script src="uiManager.js"></script>
     <script src="input.js"></script>
     <script src="effects.js"></script>
-    <script src="network.js"></script> <!-- Load updated network.js -->
-    <script src="gameLogic.js"></script>
-    <script src="game.js"></script>
+    <script src="network.js"></script>
+    <script src="gameLogic.js"></script>      <!-- Load Cannon.js version -->
+    <script src="game.js"></script>           <!-- Load Cannon.js version -->
 
 </body>
 </html>
