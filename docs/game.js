@@ -1,14 +1,19 @@
-// --- START OF FULL game.js FILE (Cannon.js Version 1 - Setup) ---
-// docs/game.js - Main Game Orchestrator (Cannon.js v1 - Setup)
+// --- START OF FULL game.js FILE (Cannon.js v4 - Robust Homescreen Transition) ---
+// docs/game.js - Main Game Orchestrator (Cannon.js v4 - Robust Homescreen Transition)
 
-// ** ADD Cannon.js specific globals **
+// --- Global variables ---
+// Expect these to be defined in config.js and accessible via window scope
+// e.g., window.players, window.keys, window.localPlayerId, etc.
+
+// ** Cannon.js specific globals **
 var cannonWorld = null; // Holds the Cannon.js physics world
 const cannonTimeStep = 1 / 60; // Physics timestep
 const cannonMaxSubSteps = 3; // Max physics substeps per frame
 
-var currentGameInstance = null;
+var currentGameInstance = null; // Holds the single Game instance
 
 class Game {
+    // --- Constructor ---
     constructor() {
         // Core components to be initialized
         this.scene = null;
@@ -16,70 +21,84 @@ class Game {
         this.renderer = null;
         this.controls = null;
         this.clock = null;
-        // Game state references
-        this.players = window.players;
-        this.keys = window.keys;
-        this.localPlayerMesh = null;
+        // Game state references - Use globals from config.js (via window scope)
+        this.players = window.players; // Reference global players object
+        this.keys = window.keys; // Reference global keys object
+        this.localPlayerMesh = null; // Reference to the local player's VISUAL mesh
 
         // ** ADD Cannon.js specific properties **
         this.playerBodies = {}; // Map of playerId to Cannon.js Body objects
         this.mapBody = null; // Reference to the map/ground body
 
         this.lastNetworkSendTime = 0;
-        this.debugMeshes = {};
+        this.debugMeshes = {}; // Map of playerId to debug meshes
         this.DEBUG_SHOW_PLAYER_COLLIDERS = false; // Set true to show collision shapes
+        this.attemptCounter = 0; // Initialize attempt counter for debugging transitions
     }
 
     // --- Main Initialization Sequence ---
     async init() {
         console.log("--- Game Init Sequence (Cannon.js) ---");
-        if (currentGameInstance) { console.warn("Game instance already exists!"); return; }
-        currentGameInstance = this;
+        if (currentGameInstance) {
+            console.warn("Game instance already exists! Aborting new init.");
+            return;
+        }
+        currentGameInstance = this; // Set global reference to this instance
 
+        // Ensure THREE is loaded globally before proceeding
         if (typeof THREE === 'undefined') {
-            console.error("!!! CRITICAL: THREE.js library not loaded!");
+            console.error("!!! CRITICAL: THREE.js library not loaded before Game.init()!");
             document.body.innerHTML = "<p style='color:red; text-align:center;'>FATAL ERROR: Graphics Library (THREE.js) failed to load. Check index.html script order.</p>";
             return;
         }
 
-        // 1. Setup State Machine & UI
+        // 1. Setup State Machine & UI Listeners
         stateMachine.transitionTo('loading', { message: 'Initializing Core...' });
         if (!UIManager.initialize()) {
              console.error("UIManager initialization failed!");
              document.body.innerHTML = "<p style='color:red; text-align:center;'>FATAL ERROR: UI System Failed to Initialize. Check console (F12).</p>";
-             return;
+             return; // Stop
         }
         UIManager.bindStateListeners(stateMachine);
 
-        // 2. Setup Three.js Core
+        // 2. Setup Three.js Core Components
         stateMachine.transitionTo('loading', { message: 'Setting up Graphics...' });
         this.clock = new THREE.Clock();
-        this.scene = new THREE.Scene(); window.scene = this.scene;
+        this.scene = new THREE.Scene(); window.scene = this.scene; // Assign to global AND instance
         this.scene.background = new THREE.Color(0x87CEEB); // Sky Blue
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500); window.camera = this.camera;
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500); window.camera = this.camera; // Assign to global AND instance
         this.renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
-        this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; window.renderer = this.renderer;
+        this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; window.renderer = this.renderer; // Assign to global AND instance
 
         // 3. Setup PointerLockControls
         if (typeof THREE.PointerLockControls === 'undefined') {
              console.error("!!! THREE.PointerLockControls not found! Check index.html script order.");
              stateMachine.transitionTo('loading', { message: 'FATAL: Controls Library Failed!', error: true }); return;
         }
-        this.controls = new THREE.PointerLockControls(this.camera, this.renderer.domElement); window.controls = this.controls;
-        this.controls.addEventListener('lock', () => { if(stateMachine?.is('playing') && UIManager?.gameUI) { UIManager.gameUI.style.cursor = 'none'; } });
-        this.controls.addEventListener('unlock', () => { if(stateMachine?.is('playing') && UIManager?.gameUI) { UIManager.gameUI.style.cursor = 'default'; } });
+        // Pass THIS camera instance to the controls
+        this.controls = new THREE.PointerLockControls(this.camera, this.renderer.domElement); window.controls = this.controls; // Assign to global AND instance
+        this.controls.addEventListener('lock', () => {
+            if(stateMachine?.is('playing') && UIManager?.gameUI) { UIManager.gameUI.style.cursor = 'none'; }
+             // Resume Audio Context on lock
+            const audioListener = window.listener; // Access global listener
+            if (audioListener && audioListener.context && audioListener.context.state === 'suspended') {
+                console.log('AudioContext suspended, attempting to resume...');
+                audioListener.context.resume().then(() => console.log('AudioContext resumed.')).catch(e => console.error('Error resuming AC:', e));
+            }
+        });
+        this.controls.addEventListener('unlock', () => {
+            if(stateMachine?.is('playing') && UIManager?.gameUI) { UIManager.gameUI.style.cursor = 'default'; }
+        });
+        // Add the controls' object (which CONTAINS the camera) to THIS scene instance
         this.scene.add(this.controls.getObject());
 
-        // 4. Setup Scene Lighting
+        // 4. Setup Scene Lighting (Add lights to THIS scene instance)
         this.scene.add(new THREE.AmbientLight(0x606070, 1.0));
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(40, 50, 30);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
         dirLight.shadow.camera.near = 0.5; dirLight.shadow.camera.far = 500;
-        // Optional shadow camera adjustment
-        // dirLight.shadow.camera.left = -100; dirLight.shadow.camera.right = 100;
-        // dirLight.shadow.camera.top = 100; dirLight.shadow.camera.bottom = -100;
         this.scene.add(dirLight);
         const hemisphereLight = new THREE.HemisphereLight( 0x87CEEB, 0x404020, 0.6 );
         this.scene.add( hemisphereLight );
@@ -87,7 +106,7 @@ class Game {
         // 5. Initialize Input System
         if (!Input.init(this.controls)) { stateMachine.transitionTo('loading', { message: 'Input Init Failed!', error: true }); return; }
 
-        // 6. Initialize Effects System
+        // 6. Initialize Effects System (Pass THIS scene and camera instances)
         if (!Effects.initialize(this.scene, this.camera)) { stateMachine.transitionTo('loading', { message: 'Effects Init Failed!', error: true }); return; }
 
         // 7. Initialize Physics (CANNON.js)
@@ -97,7 +116,7 @@ class Game {
             stateMachine.transitionTo('loading', { message: 'FATAL: Physics Library Failed!', error: true });
             return;
         }
-        this.setupPhysics(); // Setup Cannon world
+        this.setupPhysics();
 
         // 8. Setup Asset Loaders
         stateMachine.transitionTo('loading', { message: 'Preparing Asset Loaders...' });
@@ -125,19 +144,16 @@ class Game {
 
     // --- Setup Sub-functions ---
     setupPhysics() {
-        // Setup CANNON.js World
+        if (!CANNON) { console.error("!!! CANNON global object is missing during physics setup!"); return; }
         cannonWorld = new CANNON.World();
         cannonWorld.gravity.set(0, CONFIG.GRAVITY, 0);
         cannonWorld.broadphase = new CANNON.NaiveBroadphase();
         cannonWorld.solver.iterations = 10;
-
         window.cannonWorld = cannonWorld; // Assign to global scope
-        physicsIsReady = true; // Set global flag
+        // Access global flag defined in config.js scope
+        window.physicsIsReady = true; // Set flag *after* world is created
         console.log("[Game] Cannon.js Physics World Initialized.");
-
-        // Create a simple ground plane immediately
-        this.createMapCollider();
-
+        this.createMapCollider(); // Create ground immediately
         this.attemptProceedToGame();
     }
 
@@ -170,11 +186,10 @@ class Game {
     // --- Loading Callbacks ---
     onAssetsReady() {
         console.log("[Game] Asset Load Manager reported 'ready'.");
-        assetsAreReady = true;
-        // Map collider (simple plane) created during setupPhysics
-        // If using Trimesh, might create it here instead:
-        // this.createTrimeshMapCollider();
-        this.attemptProceedToGame();
+        // Access global flag defined in config.js scope
+        window.assetsAreReady = true;
+        // Map collider (simple plane) is created during setupPhysics now
+        this.attemptProceedToGame(); // Check prerequisites again
     }
 
     onLoadError(errorData) {
@@ -184,27 +199,51 @@ class Game {
 
     // --- Check Prerequisites & Transition Logic ---
     attemptProceedToGame() {
-        console.log(`[Game] Checking prerequisites: Assets=${assetsAreReady}, Physics=${physicsIsReady}, Network=${networkIsInitialized}, InitData=${!!initializationData}`);
-        if (assetsAreReady && physicsIsReady && networkIsInitialized && initializationData) {
-            if (!stateMachine.is('playing')) {
-                console.log("[Game] All prerequisites met! Starting gameplay...");
-                this.startGamePlay(initializationData);
-                initializationData = null;
+        this.attemptCounter++;
+        const callCount = this.attemptCounter;
+
+        // Access global flags directly
+        const physicsReady = window.physicsIsReady; // Use the global flag
+        const assetsReady = window.assetsAreReady; // Use the global flag
+        const networkReady = window.networkIsInitialized; // Use the global flag
+        const initDataPresent = !!window.initializationData; // Use the global var
+        const mapBodyPresent = !!this.mapBody; // Check instance map body
+
+        console.log(`[Game attempt #${callCount}] Checking prerequisites: Assets=${assetsReady}, Physics=${physicsReady}, MapBody=${mapBodyPresent}, Network=${networkReady}, InitData=${initDataPresent}, State=${stateMachine.currentState}`);
+
+        // Condition 1: Ready for ACTUAL GAMEPLAY?
+        if (assetsReady && physicsReady && mapBodyPresent && networkReady && initDataPresent) {
+            // Make sure we are not already playing or joining
+            if (!stateMachine.is('playing') && !stateMachine.is('joining')) {
+                console.log(`[Game attempt #${callCount}] All prerequisites met! Starting gameplay...`);
+                this.startGamePlay(window.initializationData); // Use global initData
+                window.initializationData = null; // Consume global initData
             } else {
-                 console.log("[Game] Already in playing state, ignoring redundant attemptProceedToGame for gameplay start.");
+                 console.log(`[Game attempt #${callCount}] Already playing/joining, ignoring redundant attemptProceedToGame for gameplay start.`);
             }
         }
-        else if (assetsAreReady && physicsIsReady && networkIsInitialized && !initializationData && stateMachine.is('loading')) {
-            console.log("[Game] Core components ready, transitioning to Homescreen...");
-            stateMachine.transitionTo('homescreen');
+        // ***** MODIFIED CONDITION 2 *****
+        // Condition 2: Ready for HOMESCREEN? (Assets, Physics, Network ready, No Init Data yet, AND NOT already on homescreen/joining/playing)
+        else if (assetsReady && physicsReady && mapBodyPresent && networkReady && !initDataPresent &&
+                 !stateMachine.is('homescreen') && !stateMachine.is('joining') && !stateMachine.is('playing'))
+        {
+            console.log(`[Game attempt #${callCount}] Core components ready, transitioning to Homescreen... (Current state: ${stateMachine.currentState})`);
+            stateMachine.transitionTo('homescreen'); // <<< TRANSITION TO HOMESCREEN
         }
+        // *******************************
+        // Condition 3: Still waiting... Update loading message if appropriate
         else {
             if (stateMachine.is('loading') && !stateMachine.options.error) {
                 let waitMsg = "Initializing...";
-                if (!assetsAreReady) waitMsg = "Loading Assets...";
-                else if (!physicsIsReady) waitMsg = "Loading Physics...";
-                else if (!networkIsInitialized) waitMsg = "Connecting...";
+                if (!assetsReady) waitMsg = "Loading Assets...";
+                else if (!physicsReady) waitMsg = "Loading Physics...";
+                else if (!mapBodyPresent) waitMsg = "Creating Map Physics...";
+                else if (!networkReady) waitMsg = "Connecting...";
+                console.log(`[Game attempt #${callCount}] Prerequisites not met. Updating loading message: ${waitMsg}`);
                 stateMachine.transitionTo('loading', { message: waitMsg });
+            } else {
+                // Log why we aren't proceeding if not in loading state
+                console.log(`[Game attempt #${callCount}] Prerequisites not met or invalid state for transition. State: ${stateMachine.currentState}, Error: ${stateMachine.options.error || 'none'}`);
             }
         }
     }
@@ -214,16 +253,18 @@ class Game {
         console.log("[Game] --- Starting Gameplay (Cannon.js) ---");
         stateMachine.transitionTo('playing');
         this.cleanupAllPlayers();
-        localPlayerId = initData.id;
-        console.log(`[Game] Local Player ID set: ${localPlayerId}`);
+        // Access global var defined in config.js
+        window.localPlayerId = initData.id;
+        console.log(`[Game] Local Player ID set: ${window.localPlayerId}`);
 
         for (const id in initData.players) {
             const playerData = initData.players[id]; if (!playerData) continue;
 
-            if (id === localPlayerId) {
+            if (id === window.localPlayerId) {
                 // --- Create LOCAL Player ---
                 console.log("[Game] Creating LOCAL player objects...");
-                players[id] = {
+                // Access global var defined in config.js
+                window.players[id] = {
                     id: id, name: playerData.name, phrase: playerData.phrase,
                     health: playerData.health, isLocal: true, mesh: null,
                     x: playerData.x, y: playerData.y, z: playerData.z, rotationY: playerData.rotationY,
@@ -231,12 +272,10 @@ class Game {
                 window.localPlayerName = playerData.name; window.localPlayerPhrase = playerData.phrase;
                 UIManager.updateInfo(`Playing as ${playerData.name}`); UIManager.updateHealthBar(playerData.health);
 
-                // Create Physics Body (Cannon.js)
                 const playerHeight = CONFIG.PLAYER_HEIGHT;
                 const startPos = new CANNON.Vec3(playerData.x, playerData.y + playerHeight / 2.0, playerData.z);
                 this.createPlayerPhysicsBody(id, startPos, playerData.rotationY, true); // true = isLocal
 
-                // Create Visual Mesh
                 const playerModelAsset = window.playerModelData;
                 if (playerModelAsset?.scene) {
                     try {
@@ -246,20 +285,20 @@ class Game {
                         this.localPlayerMesh.userData = { entityId: id, isPlayer: true, isLocal: true };
                         this.localPlayerMesh.traverse(child => { if(child.isMesh){ child.castShadow=true; child.receiveShadow=true; child.visible=false; } });
                         this.scene.add(this.localPlayerMesh);
-                        players[id].mesh = this.localPlayerMesh;
+                        window.players[id].mesh = this.localPlayerMesh; // Assign mesh to global players object
                         console.log("[Game] Created local player GLTF mesh (hidden).");
                     } catch(e) { console.error("Error cloning/adding local player mesh:", e); }
                 } else { console.error("!!! Local player model asset not found!"); }
 
-                // Attach Gun Model
                  const gunModelAsset = window.gunModelData;
                  if(gunModelAsset?.scene && this.camera) {
-                     gunMesh = gunModelAsset.scene.clone();
-                     gunMesh.scale.set(0.3, 0.3, 0.3); // Adjusted scale
-                     gunMesh.position.set(0.15, -0.15, -0.4);
-                     gunMesh.rotation.set(0, Math.PI, 0);
-                     gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; });
-                     this.camera.add(gunMesh);
+                     // Access global var defined in config.js
+                     window.gunMesh = gunModelAsset.scene.clone();
+                     window.gunMesh.scale.set(0.3, 0.3, 0.3); // Adjusted scale
+                     window.gunMesh.position.set(0.15, -0.15, -0.4);
+                     window.gunMesh.rotation.set(0, Math.PI, 0);
+                     window.gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; });
+                     this.camera.add(window.gunMesh);
                      console.log("[Game] Attached gun model to camera.");
                  } else if (!this.camera) {
                      console.error("!!! Cannot attach gun model: Game camera not initialized.");
@@ -268,8 +307,8 @@ class Game {
             } else {
                 // --- Create REMOTE Player ---
                 console.log(`[Game] Creating REMOTE player objects for ${playerData.name || id}...`);
-                const remotePlayer = new ClientPlayer(playerData);
-                players[id] = remotePlayer;
+                const remotePlayer = new ClientPlayer(playerData); // ClientPlayer should use window.scene
+                window.players[id] = remotePlayer; // Assign to global players object
 
                 if (remotePlayer.mesh) {
                     const playerHeight = CONFIG.PLAYER_HEIGHT;
@@ -293,8 +332,7 @@ class Game {
         const playerShape = new CANNON.Sphere(playerRadius);
 
         const physicsMaterial = new CANNON.Material("playerMaterial");
-        physicsMaterial.friction = 0.4;
-        physicsMaterial.restitution = 0.0;
+        physicsMaterial.friction = 0.4; physicsMaterial.restitution = 0.0;
 
         const playerBody = new CANNON.Body({
             mass: isLocal ? playerMass : 0,
@@ -314,7 +352,7 @@ class Game {
         playerBody.userData = { entityId: playerId, isLocal: isLocal, isPlayer: true };
 
         cannonWorld.addBody(playerBody);
-        this.playerBodies[playerId] = playerBody;
+        this.playerBodies[playerId] = playerBody; // Store reference in instance map
 
         console.log(`[Game] Created ${isLocal ? 'DYNAMIC' : 'KINEMATIC'} Cannon.js body for player ${playerId}`);
 
@@ -329,14 +367,13 @@ class Game {
         if (!cannonWorld) { console.error("!!! Cannon world missing for map creation!"); return; }
         console.log("[Game] Creating simple Cannon.js ground plane...");
         const groundMaterial = new CANNON.Material("groundMaterial");
-        groundMaterial.friction = 0.6;
-        groundMaterial.restitution = 0.1;
+        groundMaterial.friction = 0.6; groundMaterial.restitution = 0.1;
         const groundShape = new CANNON.Plane();
         const groundBody = new CANNON.Body({ mass: 0, shape: groundShape, material: groundMaterial });
         groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
         groundBody.position.set(0, 0, 0); // Position plane at Y=0
         cannonWorld.addBody(groundBody);
-        this.mapBody = groundBody;
+        this.mapBody = groundBody; // Store reference in instance variable
         console.log("[Game] Added Cannon.js ground plane.");
 
         // Setup default contact material (adjust friction/restitution between everything)
@@ -346,118 +383,45 @@ class Game {
             { friction: 0.4, restitution: 0.1 }
         );
         cannonWorld.defaultContactMaterial = defaultContactMaterial;
-
-        // Specific contact for player/ground (optional override)
-        // Need a default player material defined or get it from player body after creation
-        // const playerMat = new CANNON.Material("playerMaterial"); // Or reference existing one
-        // const playerGroundContact = new CANNON.ContactMaterial(groundMaterial, playerMat, { friction: 0.5, restitution: 0.0 });
-        // cannonWorld.addContactMaterial(playerGroundContact);
     }
-
-    // Optional: Trimesh Map Collider (More complex, use if simple plane isn't enough)
-    /*
-    createTrimeshMapCollider() {
-        if (!cannonWorld || !window.mapMesh) {
-            console.warn("Cannon world or map mesh missing for Trimesh creation.");
-            return;
-        }
-        console.log("[Game] Attempting to create Cannon.js Trimesh map collider...");
-        try {
-            const vertices = [];
-            const indices = [];
-            let indexOffset = 0;
-
-            window.mapMesh.traverse(child => {
-                if (child.isMesh) {
-                    const geometry = child.geometry;
-                    const positionAttribute = geometry.attributes.position;
-                    const indexAttribute = geometry.index;
-
-                    if (!positionAttribute) return;
-
-                    // Apply world matrix manually to vertices before adding
-                    const worldMatrix = child.matrixWorld;
-                    const tempVec = new THREE.Vector3();
-
-                    for (let i = 0; i < positionAttribute.count; i++) {
-                        tempVec.fromBufferAttribute(positionAttribute, i);
-                        tempVec.applyMatrix4(worldMatrix);
-                        vertices.push(tempVec.x, tempVec.y, tempVec.z);
-                    }
-
-                    if (indexAttribute) {
-                        for (let i = 0; i < indexAttribute.count; i++) {
-                            indices.push(indexAttribute.getX(i) + indexOffset);
-                        }
-                    } else {
-                        for (let i = 0; i < positionAttribute.count; i += 3) {
-                            indices.push(indexOffset + i, indexOffset + i + 1, indexOffset + i + 2);
-                        }
-                    }
-                    indexOffset += positionAttribute.count;
-                }
-            });
-
-            if (vertices.length > 0 && indices.length > 0) {
-                const trimeshShape = new CANNON.Trimesh(vertices, indices);
-                const trimeshBody = new CANNON.Body({ mass: 0 }); // Static
-                trimeshBody.addShape(trimeshShape);
-                // Position/rotate trimesh body if needed (usually not if vertices are world space)
-                // trimeshBody.position.set(0, 0, 0);
-                // trimeshBody.quaternion.set(0, 0, 0, 1);
-                cannonWorld.addBody(trimeshBody);
-                this.mapBody = trimeshBody; // Store reference
-                console.log(`[Game] Cannon.js Trimesh map collider created. Vertices: ${vertices.length / 3}, Triangles: ${indices.length / 3}`);
-            } else {
-                throw new Error("No valid vertices/indices for Trimesh.");
-            }
-        } catch (e) {
-            console.error("!!! Error creating Cannon.js Trimesh map collider:", e);
-            console.warn("Falling back to simple ground plane.");
-            this.createMapCollider(); // Create plane as fallback
-        }
-    }
-    */
-
 
     // --- Debug Mesh Creation ---
     addDebugMesh(playerId, radius, height, cannonPosition, cannonQuaternion) {
          if (!this.scene || !THREE) return;
          const capsuleHeight = height - 2 * radius;
          const shapeGeom = new THREE.SphereGeometry(radius, 8, 8); // Match simple sphere shape
-         // const shapeGeom = new THREE.CapsuleGeometry(radius, capsuleHeight, 4, 8); // If using capsule
-         const wireframeMat = new THREE.MeshBasicMaterial({ color: playerId === localPlayerId ? 0x00ff00 : 0xffff00, wireframe: true });
+         const wireframeMat = new THREE.MeshBasicMaterial({ color: playerId === window.localPlayerId ? 0x00ff00 : 0xffff00, wireframe: true }); // Use global window.localPlayerId
          const wireframeMesh = new THREE.Mesh(shapeGeom, wireframeMat);
          wireframeMesh.position.copy(cannonPosition); // Copy Cannon Vec3
          wireframeMesh.quaternion.copy(cannonQuaternion); // Copy Cannon Quaternion
-         this.scene.add(wireframeMesh);
-         this.debugMeshes[playerId] = wireframeMesh;
+         this.scene.add(wireframeMesh); // Add to instance scene
+         this.debugMeshes[playerId] = wireframeMesh; // Store in instance map
     }
 
     // --- Player Cleanup (CANNON.js) ---
     cleanupPlayer(playerId) {
-        const player = players[playerId];
-        if (player && player.mesh && this.scene) { this.scene.remove(player.mesh); player.mesh = null; }
-        if (players[playerId]) delete players[playerId];
-        if(playerId === localPlayerId) { this.localPlayerMesh = null; }
-        if (this.debugMeshes[playerId] && this.scene) { this.scene.remove(this.debugMeshes[playerId]); this.debugMeshes[playerId].geometry?.dispose(); this.debugMeshes[playerId].material?.dispose(); delete this.debugMeshes[playerId]; }
-        const body = this.playerBodies[playerId];
-        if (body && cannonWorld) { cannonWorld.removeBody(body); delete this.playerBodies[playerId]; }
+        const player = window.players[playerId]; // Use global players
+        if (player && player.mesh && this.scene) { this.scene.remove(player.mesh); player.mesh = null; } // Use instance scene
+        if (window.players[playerId]) delete window.players[playerId];
+        if(playerId === window.localPlayerId) { this.localPlayerMesh = null; } // Use global window.localPlayerId
+        if (this.debugMeshes[playerId] && this.scene) { this.scene.remove(this.debugMeshes[playerId]); this.debugMeshes[playerId].geometry?.dispose(); this.debugMeshes[playerId].material?.dispose(); delete this.debugMeshes[playerId]; } // Use instance scene
+        const body = this.playerBodies[playerId]; // Use instance map
+        if (body && cannonWorld) { cannonWorld.removeBody(body); delete this.playerBodies[playerId]; } // Use instance map
      }
 
      cleanupAllPlayers() {
          console.log("[Game] Cleaning up all player objects (Cannon.js)...");
-         const playerIds = Object.keys(players);
+         const playerIds = Object.keys(window.players); // Use global players
          playerIds.forEach(id => this.cleanupPlayer(id));
-         localPlayerId = null; this.localPlayerMesh = null;
-         this.playerBodies = {}; players = {};
+         window.localPlayerId = null; this.localPlayerMesh = null; // Use global window.localPlayerId
+         this.playerBodies = {}; window.players = {}; // Use instance map & global players
          console.log("[Game] Player cleanup finished.");
      }
 
     // --- Main Update Loop (CANNON.js) ---
     update() {
         requestAnimationFrame(this.update.bind(this));
-        if (!this.clock || !this.renderer || !this.scene || !this.camera || !cannonWorld) return;
+        if (!this.clock || !this.renderer || !this.scene || !this.camera || !cannonWorld) return; // Check instance variables
 
         const deltaTime = this.clock.getDelta();
 
@@ -465,13 +429,11 @@ class Game {
             // --- Physics Simulation Step (Cannon.js) ---
             try {
                 cannonWorld.step(cannonTimeStep, deltaTime, cannonMaxSubSteps);
-            } catch (e) {
-                console.error("!!! Cannon.js world step error:", e);
-                 // Consider pausing or handling the error state
-            }
+            } catch (e) { console.error("!!! Cannon.js world step error:", e); }
 
             // --- Update Local Player Logic ---
-            const localPlayerBody = this.playerBodies[localPlayerId];
+            // Use global localPlayerId
+            const localPlayerBody = this.playerBodies[window.localPlayerId];
             if (localPlayerBody) {
                  updateLocalPlayer(deltaTime, localPlayerBody, this.camera, this.controls);
             }
@@ -479,7 +441,7 @@ class Game {
             // --- Synchronize THREE.js Meshes with Cannon.js Bodies ---
             for (const id in this.playerBodies) {
                 const body = this.playerBodies[id];
-                const player = players[id]; // Could be local or remote
+                const player = window.players[id]; // Use global players
 
                 if (player && player.mesh) {
                     try {
@@ -488,15 +450,13 @@ class Game {
                         player.mesh.position.y -= CONFIG.PLAYER_HEIGHT / 2.0;
 
                         // Only sync local player mesh Y rotation with camera
-                        if (id === localPlayerId) {
+                        if (id === window.localPlayerId) { // Use global localPlayerId
                             const cameraEuler = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
                             player.mesh.rotation.y = cameraEuler.y;
-                            // Cannon body rotation is handled by physics, no need to copy body.quaternion to local mesh
                         } else {
                             // Sync remote player mesh rotation directly with physics body
                             player.mesh.quaternion.copy(body.quaternion);
                         }
-
 
                         // Update debug mesh if enabled
                         if (this.DEBUG_SHOW_PLAYER_COLLIDERS && this.debugMeshes[id]) {
@@ -513,13 +473,11 @@ class Game {
                      const targetCameraPos = new THREE.Vector3();
                      targetCameraPos.copy(localPlayerBody.position); // Copy body center position
                      targetCameraPos.y += CONFIG.CAMERA_Y_OFFSET; // Add eye height offset
-                     // Camera position is directly controlled by PointerLockControls now
-                     // Only copy if NOT using PointerLockControls, or maybe lerp very gently?
-                     // this.camera.position.copy(targetCameraPos); // Snapping example
+                     // Let PointerLockControls handle camera position/rotation
                  } catch(e) { console.error("Error updating camera position:", e); }
             }
 
-            Effects?.update(deltaTime);
+            Effects?.update(deltaTime); // Effects uses globals ok
 
         } // End if(stateMachine.is('playing'))
 
@@ -549,5 +507,5 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     startGameInit();
 });
-console.log("game.js loaded (Cannon.js v1 - Setup)");
+console.log("game.js loaded (Cannon.js v4 - Robust Homescreen Transition)");
 // --- END OF FULL game.js FILE ---
