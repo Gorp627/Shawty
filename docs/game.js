@@ -1,5 +1,5 @@
-// --- START OF FULL game.js FILE (Manual Raycasting v5 - Update Loop Logging) ---
-// docs/game.js - Main Game Orchestrator (Manual Raycasting v5 - Update Loop Logging)
+// --- START OF FULL game.js FILE (Manual Raycasting v6 - Update Loop State Logging) ---
+// docs/game.js - Main Game Orchestrator (Manual Raycasting v6 - Update Loop State Logging)
 
 var currentGameInstance = null; // Holds the single Game instance
 
@@ -326,13 +326,18 @@ class Game {
 
     // --- Main Update Loop (Manual Raycasting) ---
     update() {
-        requestAnimationFrame(this.update.bind(this));
+        requestAnimationFrame(this.update.bind(this)); // Keep this at the top
+
+        // ***** NEW LOG: Check if update loop is running and current state *****
+        // Use optional chaining for safety in case stateMachine isn't ready yet
+        // console.log(`Game Update Loop Running - Current State: ${stateMachine?.currentState}`);
+
         if (!this.clock || !this.renderer || !this.scene || !this.camera || !window.mapMesh) {
-            return;
+            return; // Skip update if core components or map aren't ready
         }
 
         const deltaTime = this.clock.getDelta();
-        const clampedDeltaTime = Math.min(deltaTime, 0.05);
+        const clampedDeltaTime = Math.min(deltaTime, 0.05); // Clamp delta time
 
         if (stateMachine.is('playing')) {
              // ***** NEW LOG 1: Confirm 'playing' state check passes *****
@@ -373,13 +378,13 @@ class Game {
                 if (id === localPlayerId) continue;
                 const player = window.players[id];
                 const playerMesh = player?.mesh;
-                const playerVelocity = this.playerVelocities ? this.playerVelocities[id] : undefined; // Check if map exists
+                const playerVelocity = this.playerVelocities ? this.playerVelocities[id] : undefined;
 
-                if (player instanceof ClientPlayer && playerMesh && playerVelocity !== undefined) { // Check velocity exists
+                if (player instanceof ClientPlayer && playerMesh && playerVelocity !== undefined) {
                     try {
                         // Simple physics simulation if velocity exists
                         if (playerVelocity.lengthSq() > 0.01) {
-                             if (this.playerIsGrounded && !this.playerIsGrounded[id]) { // Check if map exists
+                             if (this.playerIsGrounded && !this.playerIsGrounded[id]) {
                                 playerVelocity.y -= (CONFIG?.GRAVITY_ACCELERATION ?? 28.0) * clampedDeltaTime;
                              }
                              playerMesh.position.addScaledVector(playerVelocity, clampedDeltaTime);
@@ -439,5 +444,5 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     startGameInit();
 });
-console.log("game.js loaded (Manual Raycasting v5 - Update Loop Logging)");
-// --- END OF FULL game.js FILE (Manual Raycasting v5 - Update Loop Logging) ---
+console.log("game.js loaded (Manual Raycasting v6 - Update Loop State Logging)");
+// --- END OF FULL game.js FILE (Manual Raycasting v6 - Update Loop State Logging) ---
