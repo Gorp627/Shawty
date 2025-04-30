@@ -150,8 +150,9 @@ body {
     display: flex; /* Center placeholder content */
     justify-content: center;
     align-items: center;
+    color: #585b70; /* Make placeholder text less prominent */
+    font-style: italic;
 }
-/* previewCanvas styles removed */
 
 #characterNameDisplay {
     font-size: 1.5em; font-weight: bold; color: #cdd6f4; margin-bottom: 25px;
