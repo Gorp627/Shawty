@@ -1,26 +1,6 @@
 // --- START OF FULL game.js FILE (Cannon.js Version 1 - Setup) ---
 // docs/game.js - Main Game Orchestrator (Cannon.js v1 - Setup)
 
-// --- Global variables ---
-var players = {}; // Re-declare players if it was only in config.js before
-var keys = {}; // Re-declare keys if it was only in config.js before
-var localPlayerId = null;
-var localPlayerName = 'Anonymous';
-var localPlayerPhrase = '...';
-var lastDashTime = 0;
-var lastShootTime = 0;
-var scene, camera, renderer, controls, clock, loader, dracoLoader;
-var gunMesh = null;
-var gunSoundBuffer = null;
-var listener; // THREE.AudioListener
-var assetsAreReady = false;
-var networkIsInitialized = false;
-var physicsIsReady = false;
-var initializationData = null;
-var mapMesh = null; // THREE.Object3D for visual map
-var playerModelData = null; // Loaded player GLTF data
-var gunModelData = null; // Loaded gun GLTF data
-
 // ** ADD Cannon.js specific globals **
 var cannonWorld = null; // Holds the Cannon.js physics world
 const cannonTimeStep = 1 / 60; // Physics timestep
