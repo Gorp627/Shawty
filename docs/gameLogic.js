@@ -1,5 +1,5 @@
-// --- START OF FULL gameLogic.js FILE (Manual Raycasting v4 - Internal Logs Commented) ---
-// docs/gameLogic.js (Manual Raycasting v4 - Internal Logs Commented)
+// --- START OF FULL gameLogic.js FILE (Manual Raycasting v5 - Entry Point Logs) ---
+// docs/gameLogic.js (Manual Raycasting v5 - Entry Point Logs)
 
 // Accesses globals: players, localPlayerId, CONFIG, THREE, Network, Input, UIManager, stateMachine, Effects, scene, mapMesh, playerVelocities, playerIsGrounded
 
@@ -33,23 +33,30 @@ const tempGroundRay = new THREE.Raycaster();
  * Updates the local player's velocity based on input.
  */
 function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
-    // console.log("UpdateLocalPlayerInput called");
-    if (!localPlayerId || !window.players || !window.playerVelocities || !window.playerIsGrounded) return;
-    const localPlayer = window.players[localPlayerId];
-    if (!localPlayer || !localPlayerMesh || !window.playerVelocities[localPlayerId]) return;
+    console.log("Entered updateLocalPlayerInput"); // <-- VERY FIRST LINE LOG
 
-    const currentVel = playerVelocities[localPlayerId];
-    const isGrounded = playerIsGrounded[localPlayerId];
+    // --- Temporarily Comment Out Guards for Debugging Entry ---
+    // if (!localPlayerId || !window.players || !window.playerVelocities || !window.playerIsGrounded) return;
+    // const localPlayer = window.players[localPlayerId];
+    // if (!localPlayer || !localPlayerMesh || !window.playerVelocities[localPlayerId]) return;
+    // --- End Temporary Comment Out ---
+
+    // Use default values if guards are commented out
+    const localPlayer = window.players[localPlayerId] || { health: 100 }; // Default health > 0
+    const currentVel = window.playerVelocities[localPlayerId] || new THREE.Vector3(); // Use default if missing
+    const isGrounded = window.playerIsGrounded[localPlayerId] || false; // Default to false
 
     const isPlaying = stateMachine?.is('playing');
     const isLocked = window.controls?.isLocked;
+
+    // Check these conditions AFTER the entry log
     if (!isPlaying || !isLocked || localPlayer.health <= 0) {
         currentVel.x *= 0.9; currentVel.z *= 0.9;
         if (Math.abs(currentVel.x) < 0.1) currentVel.x = 0;
         if (Math.abs(currentVel.z) < 0.1) currentVel.z = 0;
         if (!isGrounded) currentVel.y -= GRAVITY * deltaTime;
         // console.log(`Velocity (Paused/Dead): X=${currentVel.x.toFixed(2)}, Y=${currentVel.y.toFixed(2)}, Z=${currentVel.z.toFixed(2)}, Grounded=${isGrounded}`);
-        return;
+        return; // Still return if paused/dead
     }
 
     // --- Horizontal Movement ---
@@ -84,7 +91,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
     // --- Handle Jump ---
     if (Input.keys['Space'] && isGrounded) {
         currentVel.y = JUMP_VELOCITY;
-        playerIsGrounded[localPlayerId] = false;
+        if(window.playerIsGrounded) window.playerIsGrounded[localPlayerId] = false; // Update global directly
         Input.keys['Space'] = false;
     }
 
@@ -94,7 +101,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
         currentVel.x += dashDir.x * DASH_VELOCITY;
         currentVel.z += dashDir.z * DASH_VELOCITY;
         currentVel.y = Math.max(currentVel.y + DASH_VELOCITY * DASH_UP_FACTOR, currentVel.y * 0.5 + DASH_VELOCITY * DASH_UP_FACTOR * 0.5);
-        playerIsGrounded[localPlayerId] = false;
+        if(window.playerIsGrounded) window.playerIsGrounded[localPlayerId] = false; // Update global directly
         Input.requestingDash = false;
     }
 
@@ -106,7 +113,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
         Input.mouseButtons[0] = false;
     }
 
-    // console.log(`Velocity after input: X=${currentVel.x.toFixed(2)}, Y=${currentVel.y.toFixed(2)}, Z=${currentVel.z.toFixed(2)}, Grounded=${isGrounded}`);
+    console.log(`Velocity after input: X=${currentVel.x.toFixed(2)}, Y=${currentVel.y.toFixed(2)}, Z=${currentVel.z.toFixed(2)}, Grounded=${isGrounded}`);
 } // End of updateLocalPlayerInput
 
 
@@ -115,7 +122,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
  * Updates the player's position directly.
  */
 function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
-    // console.log(`CheckPlayerCollisionAndMove called - VelIn: Y=${playerVelocity.y.toFixed(3)}`);
+    console.log("Entered checkPlayerCollisionAndMove"); // <-- VERY FIRST LINE LOG
 
     /** Helper for Wall Collision Check */
     function checkWallCollision(currentPosFeet, direction, distance, collisionObjects) {
@@ -132,7 +139,6 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
         }
         return false;
     }
-
     /** Helper for Ceiling/Floor Collision Check */
     function checkCeilingFloorCollision(currentPosFeet, direction, distance, movingUp, collisionObjects) {
         const offset = movingUp ? PLAYER_HEIGHT - 0.1 : 0.1;
@@ -145,8 +151,19 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
         return intersects.length > 0;
     }
 
-    // --- Main collision logic ---
-    if (!playerMesh || !playerVelocity || !window.mapMesh) { return playerIsGrounded[localPlayerId] ?? false; }
+    // --- Temporarily Comment Out Guards for Debugging Entry ---
+    // if (!playerMesh || !playerVelocity || !window.mapMesh) {
+    //     return playerIsGrounded[localPlayerId] ?? false;
+    // }
+    // Use defaults if guards are commented out
+    playerMesh = playerMesh || window.players[localPlayerId]?.mesh; // Try to get mesh if passed null
+    playerVelocity = playerVelocity || window.playerVelocities[localPlayerId] || new THREE.Vector3(); // Use default vel if missing
+    if (!playerMesh || !window.mapMesh) {
+        console.warn("Skipping collision check - mesh or map missing");
+        return false; // Cannot proceed
+    }
+     // --- End Temporary Comment Out ---
+
 
     const currentPosition = playerMesh.position;
     const movementVector = tempVec.copy(playerVelocity).multiplyScalar(deltaTime);
@@ -231,12 +248,20 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
  * Performs shooting logic: Raycast, send hit, trigger effects/rocket jump.
  */
 function performShoot(camera) {
-    // console.log("PerformShoot called");
-    if (!camera || !Network || !scene) { return; }
+    console.log("Entered performShoot"); // <-- VERY FIRST LINE LOG
+
+    // --- Temporarily Comment Out Guards for Debugging Entry ---
+    // if (!camera || !Network || !scene) { return; }
+    // --- End Temporary Comment Out ---
+
     if (window.gunSoundBuffer) { Effects.playSound(window.gunSoundBuffer, null, false, 0.4); }
 
     const raycaster = new THREE.Raycaster();
     const origin = new THREE.Vector3(); const direction = new THREE.Vector3();
+    // Use defaults if guards commented
+    camera = camera || window.camera;
+    if (!camera) { console.error("performShoot: Camera missing!"); return; }
+
     camera.getWorldPosition(origin); camera.getWorldDirection(direction);
     raycaster.set(origin, direction); raycaster.far = BULLET_MAX_RANGE;
 
@@ -257,8 +282,8 @@ function performShoot(camera) {
         const worldDown = new THREE.Vector3(0, -1, 0); const dotProd = direction.dot(worldDown);
         // console.log("Rocket Jump Dot Product:", dotProd);
         if (dotProd < ROCKET_JUMP_THRESH) {
-            const localPlayerVelocity = playerVelocities[localPlayerId];
-            if (localPlayerVelocity) { console.log("Applying Rocket Jump Velocity"); localPlayerVelocity.y += ROCKET_JUMP_VEL; playerIsGrounded[localPlayerId] = false; }
+            const localPlayerVelocity = window.playerVelocities[localPlayerId];
+            if (localPlayerVelocity) { console.log("Applying Rocket Jump Velocity"); localPlayerVelocity.y += ROCKET_JUMP_VEL; if(window.playerIsGrounded) window.playerIsGrounded[localPlayerId] = false; }
         }
     }
 }
@@ -307,5 +332,5 @@ function sendLocalPlayerUpdateIfNeeded(localPlayerMesh, camera) {
 }
 
 
-console.log("gameLogic.js loaded (Manual Raycasting v4 - Internal Logs Commented)");
+console.log("gameLogic.js loaded (Manual Raycasting v5 - Entry Point Logs)");
 // --- END OF FULL gameLogic.js FILE ---
