@@ -1,5 +1,5 @@
 // --- START OF FULL gameLogic.js FILE ---
-// docs/gameLogic.js (Rapier - Ground Check Fix, Debug Logs)
+// docs/gameLogic.js (Rapier - v19 Fix Recursive Use Error)
 
 // Accesses globals: players, localPlayerId, CONFIG, THREE, RAPIER, rapierWorld, Network, Input, UIManager, stateMachine, Effects, scene
 
@@ -47,48 +47,38 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
             const bodyPos = playerBody.translation();
             const playerHeight = CONFIG.PLAYER_HEIGHT;
             const playerRadius = CONFIG.PLAYER_RADIUS;
-            // Calculate the bottom of the capsule's cylindrical part
             const capsuleCylinderHalfHeight = Math.max(0.01, playerHeight / 2.0 - playerRadius);
-            // Start the ray slightly above the absolute bottom sphere center
             const rayOriginY = (bodyPos.y - capsuleCylinderHalfHeight - playerRadius) + 0.05;
             const rayOrigin = { x: bodyPos.x, y: rayOriginY, z: bodyPos.z };
             const rayDirection = { x: 0, y: -1, z: 0 };
             const ray = new RAPIER.Ray(rayOrigin, rayDirection);
-            // How far down to check: a small buffer distance
             const maxToi = GROUND_CHECK_BUFFER + 0.05;
 
-            // ***** FIX: REMOVE InteractionGroup.all() *****
             const hit = rapierWorld.castRay(
-                ray,
-                maxToi,
-                true, // Query solid shapes
-                undefined, // interactionGroups (use default filtering)
-                undefined, // filter flags
-                playerBody.collider(0) // Collider to exclude (player's own)
+                ray, maxToi, true, undefined, undefined, playerBody.collider(0)
             );
-            // ********************************************
 
             if (hit != null) {
                 isGrounded = true;
-                // console.log("[GameLogic Ground Check] Ground detected!"); // Uncomment if needed
             }
         } catch(e) {
-            console.error("!!! Rapier ground check error:", e); // Log the actual error
+            console.error("!!! Rapier ground check error:", e);
             isGrounded = false;
+            // If ground check itself fails critically, maybe skip applying forces this frame
+            // return; // Optional: exit here if ground check error is fatal
         }
     }
-     // console.log(`[GameLogic Update] IsGrounded: ${isGrounded}`); // Uncomment if needed
 
     // --- Apply Input Forces/Impulses (Only if Alive) ---
     if (isAlive) {
         try {
-            const currentVel = playerBody.linvel();
+            // Read current vertical velocity *once* safely
+            const currentLinvel = playerBody.linvel();
+            const currentVelY = currentLinvel ? currentLinvel.y : 0;
+
             const moveSpeed = Input.keys['ShiftLeft'] ? (CONFIG?.MOVEMENT_SPEED_SPRINTING || 10.5) : (CONFIG?.MOVEMENT_SPEED || 7.0);
 
-            // console.log("[GameLogic Update] Input Keys:", JSON.stringify(Input.keys)); // Uncomment if needed
-            // console.log("[GameLogic Update] Input Mouse:", JSON.stringify(Input.mouseButtons)); // Uncomment if needed
-
-            // --- Horizontal Movement (using setLinvel) ---
+            // --- Horizontal Movement Calculation ---
             const forward = new THREE.Vector3(), right = new THREE.Vector3();
             const moveDirectionInput = new THREE.Vector3(0, 0, 0);
             camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
@@ -96,34 +86,34 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
 
             if (Input.keys['KeyW']) { moveDirectionInput.add(forward); }
             if (Input.keys['KeyS']) { moveDirectionInput.sub(forward); }
-            // Keep Original A/D logic (Subtract Right for Left)
             if (Input.keys['KeyA']) { moveDirectionInput.sub(right); }
             if (Input.keys['KeyD']) { moveDirectionInput.add(right); }
-
 
             let targetVelocityX = 0, targetVelocityZ = 0;
             if (moveDirectionInput.lengthSq() > 0.0001) {
                 moveDirectionInput.normalize();
                 targetVelocityX = moveDirectionInput.x * moveSpeed;
                 targetVelocityZ = moveDirectionInput.z * moveSpeed;
-                // console.log(`[GameLogic Update] Applying Movement Vel: x=${targetVelocityX.toFixed(1)}, z=${targetVelocityZ.toFixed(1)}`); // Uncomment if needed
             }
-            // Apply calculated horizontal velocity, maintain existing vertical velocity
-            playerBody.setLinvel({ x: targetVelocityX, y: currentVel.y, z: targetVelocityZ }, true);
+
+            // --- Apply Movement Velocity ---
+            // Use the separately read currentVelY
+            playerBody.setLinvel({ x: targetVelocityX, y: currentVelY, z: targetVelocityZ }, true);
+
 
             // --- Handle Jump ---
             if (Input.keys['Space'] && isGrounded) {
-                 // Add a small tolerance to prevent tiny bounces stopping jump
-                 if (currentVel.y < 1.0) {
-                    console.log("[GameLogic Update] Applying Jump Impulse"); // Keep active for testing
+                 // Use the separately read currentVelY
+                 if (currentVelY < 1.0) {
+                    console.log("[GameLogic Update] Applying Jump Impulse");
                     playerBody.applyImpulse({ x: 0, y: JUMP_IMPULSE_VALUE, z: 0 }, true);
-                    isGrounded = false; // Assume left ground after jump impulse
+                    // No need to set isGrounded = false here, physics will handle it
                  }
             }
 
             // --- Handle Dash ---
             if (Input.requestingDash) {
-                 console.log("[GameLogic Update] Applying Dash Impulse"); // Keep active for testing
+                 console.log("[GameLogic Update] Applying Dash Impulse");
                  const impulse = {
                      x: Input.dashDirection.x * DASH_IMPULSE_MAGNITUDE,
                      y: DASH_IMPULSE_MAGNITUDE * DASH_UP_FACTOR,
@@ -136,7 +126,7 @@ function updateLocalPlayer(deltaTime, playerBody, camera, controls) {
             // --- Handle Shooting ---
             const now = Date.now();
             if (Input.mouseButtons[0] && now > (window.lastShootTime || 0) + SHOOT_COOLDOWN_MS) {
-                 console.log("[GameLogic] Shoot condition met (Click & Cooldown OK)"); // Keep active for testing
+                 console.log("[GameLogic] Shoot condition met (Click & Cooldown OK)");
                  window.lastShootTime = now;
                  performShoot(playerBody, camera);
                  Input.mouseButtons[0] = false;
@@ -251,7 +241,7 @@ function performShoot(playerBody, camera) {
          const worldDown = new THREE.Vector3(0, -1, 0);
          const dotProduct = direction.dot(worldDown);
          if (dotProduct > -ROCKET_JUMP_THRESH) {
-             console.log("Rocket Jump Triggered!"); // Keep active for testing
+             console.log("Rocket Jump Triggered!");
              playerBody.applyImpulse({ x: 0, y: ROCKET_JUMP_IMPULSE, z: 0 }, true);
          }
      }
@@ -285,5 +275,5 @@ function applyShockwave(originPosition, deadPlayerId) {
     }
 }
 
-console.log("gameLogic.js loaded (Ground Check Fix, Debug Logs)");
+console.log("gameLogic.js loaded (v19 Fix Recursive Use Error)");
 // --- END OF FULL gameLogic.js FILE ---
