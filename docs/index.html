@@ -5,31 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shawty. (Cannon.js Physics)</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Optional: Add Google Fonts link -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Staatliches&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- UI Screens -->
     <div id="loadingScreen" class="screen visible">
-        <div class="spinner"></div>
-        <p>Loading...</p>
+        <!-- Replace spinner with new loader structure -->
+        <div class="loader-bars">
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+        </div>
+        <p data-text="Loading...">Loading...</p> <!-- Added data-text for potential effect -->
     </div>
+
     <div id="homeScreen" class="screen">
-        <div class="home-content">
-            <h1>Shawty.</h1>
+        <div class="home-content"> <!-- Keep wrapper -->
+            <h1 class="stencil-font">SHAWTY.</h1> <!-- Use class for font -->
             <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
-            <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
+            <input type="text" id="playerNameInput" placeholder="Enter Callsign" maxlength="16"> <!-- Changed placeholder -->
             <div class="phrase-container">
-                 <span>Kill phrase: </span>
-                 <input type="text" id="playerPhraseInput" placeholder="..............." maxlength="20">
+                 <span>Kill Phrase: </span> <!-- Changed text -->
+                 <input type="text" id="playerPhraseInput" placeholder="Target Neutralized..." maxlength="20"> <!-- Changed placeholder -->
             </div>
-            <button id="joinButton">Join Game</button>
+            <button id="joinButton" class="stencil-font">DEPLOY</button> <!-- Changed text -->
             <p id="homeScreenError" class="error-message"></p>
         </div>
+        <div class="scanlines"></div> <!-- Added overlay effect -->
     </div>
+
     <!-- In-Game UI -->
-    <div id="gameUI">
+    <div id="gameUI"> <!-- Hidden by default -->
         <div id="crosshair">+</div>
         <div id="info"></div>
         <div id="healthBarContainer">
@@ -38,21 +49,22 @@
         </div>
         <div id="killMessage"></div>
     </div>
+
     <!-- Game Canvas -->
     <canvas id="gameCanvas"></canvas>
 
     <!-- Libraries -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- MODIFIED CANNON.JS SCRIPT TAG -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script> <!-- Removed integrity and crossorigin -->
+    <!-- Using CANNON.JS (Integrity check removed) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
     <!-- THREE Loaders & Controls -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
-    <!-- Core & Game Logic -->
+    <!-- Core & Game Logic - ORDER MATTERS -->
     <script src="config.js"></script>
     <script src="utils.js"></script>
     <script src="stateMachine.js"></script>
@@ -61,9 +73,9 @@
     <script src="uiManager.js"></script>
     <script src="input.js"></script>
     <script src="effects.js"></script>
-    <script src="network.js"></script>
-    <script src="gameLogic.js"></script>
-    <script src="game.js"></script>
+    <script src="network.js"></script> <!-- Load updated network.js -->
+    <script src="gameLogic.js"></script> <!-- Load Cannon.js version -->
+    <script src="game.js"></script> <!-- Load Cannon.js version -->
 
 </body>
 </html>
