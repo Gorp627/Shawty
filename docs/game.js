@@ -1,5 +1,5 @@
-// --- START OF FULL game.js FILE (Manual Raycasting v7 - Focused Logging) ---
-// docs/game.js - Main Game Orchestrator (Manual Raycasting v7 - Focused Logging)
+// --- START OF FULL game.js FILE (Manual Raycasting v8 - Global Map Fix) ---
+// docs/game.js - Main Game Orchestrator (Manual Raycasting v8 - Global Map Fix)
 
 var currentGameInstance = null; // Holds the single Game instance
 
@@ -144,15 +144,28 @@ class Game {
     // --- Start Actual Gameplay Logic ---
     startGamePlay(initData) {
         if (stateMachine?.is('playing')) { console.warn("[Game] startGamePlay called while already in 'playing' state. Ignoring."); return; }
-        this.cleanupAllPlayers();
+        this.cleanupAllPlayers(); // Cleanup BEFORE setting state and processing
         stateMachine.transitionTo('playing');
         console.log("[Game] --- Starting Gameplay (Manual Raycasting) ---");
         window.localPlayerId = initData.id;
         console.log(`[Game] Local Player ID set: ${window.localPlayerId}`);
 
+        // Ensure the global maps exist before the loop
+        if (typeof window.playerVelocities !== 'object' || window.playerVelocities === null) {
+             console.log("[Game] Initializing global playerVelocities map.");
+             window.playerVelocities = {};
+        }
+        if (typeof window.playerIsGrounded !== 'object' || window.playerIsGrounded === null) {
+             console.log("[Game] Initializing global playerIsGrounded map.");
+             window.playerIsGrounded = {};
+        }
+
+
         for (const id in initData.players) {
             const playerData = initData.players[id]; if (!playerData) continue;
+
             if (id === window.localPlayerId) {
+                // Create LOCAL Player representation
                 window.players[id] = { id: id, name: playerData.name, phrase: playerData.phrase, health: playerData.health, isLocal: true, mesh: null, x: playerData.x, y: playerData.y, z: playerData.z, rotationY: playerData.rotationY, lastSentX: playerData.x, lastSentY: playerData.y, lastSentZ: playerData.z, lastSentRotY: playerData.rotationY };
                 UIManager.updateInfo(`Playing as ${window.localPlayerName}`); UIManager.updateHealthBar(playerData.health);
                 const playerModelAsset = window.playerModelData;
@@ -167,18 +180,23 @@ class Game {
                  } else if (!this.camera) { console.error("!!! Cannot attach gun model: Game camera not initialized."); } else { console.warn("Gun model asset not ready, cannot attach gun."); }
                  if (this.controls) { const startPos = new THREE.Vector3(playerData.x, playerData.y + CONFIG.CAMERA_Y_OFFSET, playerData.z); this.controls.getObject().position.copy(startPos); this.camera.rotation.set(0, playerData.rotationY, 0); }
             } else {
+                // Create REMOTE Player representation
                 const remotePlayer = new ClientPlayer(playerData); window.players[id] = remotePlayer; if (!remotePlayer.mesh) { console.warn(`Remote player ${id} mesh failed to load.`); }
             }
-            // Ensure the global maps exist before trying to add entries
-            if (typeof window.playerVelocities !== 'object' || window.playerVelocities === null) window.playerVelocities = {};
-            if (typeof window.playerIsGrounded !== 'object' || window.playerIsGrounded === null) window.playerIsGrounded = {};
 
-            this.playerVelocities[id] = new THREE.Vector3(0, 0, 0); this.playerIsGrounded[id] = false;
-        }
+            // ***** MODIFIED: Explicitly populate GLOBAL maps *****
+            console.log(`[Game] Initializing physics state for player ${id}`);
+            window.playerVelocities[id] = new THREE.Vector3(0, 0, 0);
+            window.playerIsGrounded[id] = false;
+            // ***** END MODIFICATION *****
+
+        } // End for loop over players
+
         if (window.mapMesh) { console.log("Map Mesh Check:", window.mapMesh instanceof THREE.Object3D, "Visible:", window.mapMesh.visible); let hasMeshChild = false; window.mapMesh.traverse(child => { if (child.isMesh) hasMeshChild = true; }); console.log("Map Mesh has Mesh children:", hasMeshChild); }
         else { console.error("!!! Map Mesh (window.mapMesh) is missing when starting gameplay!"); }
         console.log("[Game] Finished initial player processing.");
-    }
+    } // End startGamePlay
+
 
     // --- Player Cleanup ---
     cleanupPlayer(playerId) {
@@ -186,14 +204,24 @@ class Game {
         if (player?.mesh && this.scene) { this.scene.remove(player.mesh); if (player instanceof ClientPlayer) { player.remove(); } player.mesh = null; }
         if (window.players && window.players[playerId]) { delete window.players[playerId]; }
         if(playerId === window.localPlayerId) { this.localPlayerMesh = null; }
-        if (this.playerVelocities && this.playerVelocities[playerId]) { delete this.playerVelocities[playerId]; }
-        if (this.playerIsGrounded && this.playerIsGrounded.hasOwnProperty(playerId)) { delete this.playerIsGrounded[playerId]; }
+        // Use window directly for safety, though instance refs should be fine
+        if (window.playerVelocities && window.playerVelocities[playerId]) { delete window.playerVelocities[playerId]; }
+        if (window.playerIsGrounded && window.playerIsGrounded.hasOwnProperty(playerId)) { delete window.playerIsGrounded[playerId]; }
      }
      cleanupAllPlayers() {
          console.log("[Game] Cleaning up all player objects (Manual Raycasting)...");
          const playerIds = (window.players && typeof window.players === 'object') ? Object.keys(window.players) : [];
-         playerIds.forEach(id => this.cleanupPlayer(id));
-         window.localPlayerId = null; this.localPlayerMesh = null; this.playerVelocities = {}; this.playerIsGrounded = {}; window.players = {};
+         playerIds.forEach(id => this.cleanupPlayer(id)); // Call cleanup for each existing player FIRST
+         // Then reset globals
+         window.localPlayerId = null;
+         this.localPlayerMesh = null; // Reset instance ref
+         window.players = {};
+         window.playerVelocities = {};
+         window.playerIsGrounded = {};
+         // Also reset instance refs just in case
+         this.players = window.players;
+         this.playerVelocities = window.playerVelocities;
+         this.playerIsGrounded = window.playerIsGrounded;
          console.log("[Game] Player cleanup finished.");
      }
 
@@ -201,8 +229,7 @@ class Game {
     update() {
         requestAnimationFrame(this.update.bind(this)); // Keep this at the top
 
-        // ***** NEW LOG: Check if update loop is running and current state *****
-        // Use optional chaining for safety in case stateMachine isn't ready yet
+        // ***** Log checks current state *****
         console.log(`>>> GAME UPDATE - State: ${stateMachine?.currentState}`); // <-- UNCOMMENTED
 
         if (!this.clock || !this.renderer || !this.scene || !this.camera || !window.mapMesh) {
@@ -234,9 +261,8 @@ class Game {
             // --- 1. Update Local Player Input & Intent ---
             if (canUpdateInput) {
                 // console.log("Game Update Loop: Calling updateLocalPlayerInput...");
-                 // Pass the global velocity and grounded maps explicitly if needed, but gameLogic uses globals too
                 updateLocalPlayerInput(clampedDeltaTime, this.camera, this.localPlayerMesh);
-            } else if (stateMachine.is('playing')) { // Log only once if prerequisites fail while playing
+            } else if (stateMachine.is('playing')) {
                  // console.warn("Cannot update input - prerequisites failed.");
              }
 
@@ -252,7 +278,7 @@ class Game {
                     window.playerIsGrounded[window.localPlayerId] = groundedResult; // Update direct global access
                 }
                  // console.log("Game Update Loop: Grounded state updated to:", window.playerIsGrounded[window.localPlayerId]);
-             } else if (stateMachine.is('playing')) { // Log only once if prerequisites fail while playing
+             } else if (stateMachine.is('playing')) {
                  // console.warn("Cannot check collision - prerequisites failed.");
              }
 
@@ -324,5 +350,5 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     startGameInit();
 });
-console.log("game.js loaded (Manual Raycasting v7 - Focused Logging)");
-// --- END OF FULL game.js FILE (Manual Raycasting v7 - Focused Logging) ---
+console.log("game.js loaded (Manual Raycasting v8 - Global Map Fix)");
+// --- END OF FULL game.js FILE (Manual Raycasting v8 - Global Map Fix) ---
