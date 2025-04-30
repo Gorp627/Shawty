@@ -1,5 +1,5 @@
-// --- START OF FULL gameLogic.js FILE (Manual Raycasting v5 - Entry Point Logs) ---
-// docs/gameLogic.js (Manual Raycasting v5 - Entry Point Logs)
+// --- START OF FULL gameLogic.js FILE (Manual Raycasting v6 - Simplified Collision) ---
+// docs/gameLogic.js (Manual Raycasting v6 - Simplified Collision)
 
 // Accesses globals: players, localPlayerId, CONFIG, THREE, Network, Input, UIManager, stateMachine, Effects, scene, mapMesh, playerVelocities, playerIsGrounded
 
@@ -33,30 +33,25 @@ const tempGroundRay = new THREE.Raycaster();
  * Updates the local player's velocity based on input.
  */
 function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
-    console.log("Entered updateLocalPlayerInput"); // <-- VERY FIRST LINE LOG
+    // console.log("Entered updateLocalPlayerInput"); // Keep commented unless needed
 
-    // --- Temporarily Comment Out Guards for Debugging Entry ---
-    // if (!localPlayerId || !window.players || !window.playerVelocities || !window.playerIsGrounded) return;
-    // const localPlayer = window.players[localPlayerId];
-    // if (!localPlayer || !localPlayerMesh || !window.playerVelocities[localPlayerId]) return;
-    // --- End Temporary Comment Out ---
-
-    // Use default values if guards are commented out
-    const localPlayer = window.players[localPlayerId] || { health: 100 }; // Default health > 0
-    const currentVel = window.playerVelocities[localPlayerId] || new THREE.Vector3(); // Use default if missing
-    const isGrounded = window.playerIsGrounded[localPlayerId] || false; // Default to false
+    // Use guards - ensure player/velocity/grounded maps exist
+    if (!localPlayerId || !window.players || !window.playerVelocities || !window.playerIsGrounded) return;
+    const localPlayer = window.players[localPlayerId];
+    if (!localPlayer || !localPlayerMesh || !window.playerVelocities[localPlayerId]) return;
+    // Check if grounded entry exists, default to false if not (should be created in game.js)
+    const isGrounded = window.playerIsGrounded.hasOwnProperty(localPlayerId) ? window.playerIsGrounded[localPlayerId] : false;
+    const currentVel = window.playerVelocities[localPlayerId]; // Must exist if we pass guard
 
     const isPlaying = stateMachine?.is('playing');
     const isLocked = window.controls?.isLocked;
-
-    // Check these conditions AFTER the entry log
     if (!isPlaying || !isLocked || localPlayer.health <= 0) {
         currentVel.x *= 0.9; currentVel.z *= 0.9;
         if (Math.abs(currentVel.x) < 0.1) currentVel.x = 0;
         if (Math.abs(currentVel.z) < 0.1) currentVel.z = 0;
         if (!isGrounded) currentVel.y -= GRAVITY * deltaTime;
         // console.log(`Velocity (Paused/Dead): X=${currentVel.x.toFixed(2)}, Y=${currentVel.y.toFixed(2)}, Z=${currentVel.z.toFixed(2)}, Grounded=${isGrounded}`);
-        return; // Still return if paused/dead
+        return;
     }
 
     // --- Horizontal Movement ---
@@ -91,7 +86,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
     // --- Handle Jump ---
     if (Input.keys['Space'] && isGrounded) {
         currentVel.y = JUMP_VELOCITY;
-        if(window.playerIsGrounded) window.playerIsGrounded[localPlayerId] = false; // Update global directly
+        window.playerIsGrounded[localPlayerId] = false; // Update global directly
         Input.keys['Space'] = false;
     }
 
@@ -101,7 +96,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
         currentVel.x += dashDir.x * DASH_VELOCITY;
         currentVel.z += dashDir.z * DASH_VELOCITY;
         currentVel.y = Math.max(currentVel.y + DASH_VELOCITY * DASH_UP_FACTOR, currentVel.y * 0.5 + DASH_VELOCITY * DASH_UP_FACTOR * 0.5);
-        if(window.playerIsGrounded) window.playerIsGrounded[localPlayerId] = false; // Update global directly
+        window.playerIsGrounded[localPlayerId] = false; // Update global directly
         Input.requestingDash = false;
     }
 
@@ -113,7 +108,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
         Input.mouseButtons[0] = false;
     }
 
-    console.log(`Velocity after input: X=${currentVel.x.toFixed(2)}, Y=${currentVel.y.toFixed(2)}, Z=${currentVel.z.toFixed(2)}, Grounded=${isGrounded}`);
+    // console.log(`Velocity after input: X=${currentVel.x.toFixed(2)}, Y=${currentVel.y.toFixed(2)}, Z=${currentVel.z.toFixed(2)}, Grounded=${isGrounded}`);
 } // End of updateLocalPlayerInput
 
 
@@ -122,7 +117,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
  * Updates the player's position directly.
  */
 function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
-    console.log("Entered checkPlayerCollisionAndMove"); // <-- VERY FIRST LINE LOG
+    // console.log("Entered checkPlayerCollisionAndMove"); // Keep commented unless needed
 
     /** Helper for Wall Collision Check */
     function checkWallCollision(currentPosFeet, direction, distance, collisionObjects) {
@@ -132,10 +127,7 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
             const checkOrigin = currentPosFeet.clone().add(new THREE.Vector3(0, offsetY, 0));
             tempRaycaster.set(checkOrigin, direction); tempRaycaster.far = checkDistance;
             const intersects = tempRaycaster.intersectObjects(collisionObjects, true);
-            if (intersects.length > 0 && intersects[0].distance <= checkDistance + 0.01) {
-                // console.log(`Wall Collision: Dir=${direction.x.toFixed(1)},${direction.z.toFixed(1)} OffsetY=${offsetY.toFixed(1)} HitDist=${intersects[0].distance.toFixed(2)} CheckDist=${checkDistance.toFixed(2)}`);
-                return true;
-            }
+            if (intersects.length > 0 && intersects[0].distance <= checkDistance + 0.01) { return true; }
         }
         return false;
     }
@@ -145,62 +137,68 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
         const checkOrigin = currentPosFeet.clone().add(new THREE.Vector3(0, offset, 0));
         tempRaycaster.set(checkOrigin, direction); tempRaycaster.far = distance + 0.05;
         const intersects = tempRaycaster.intersectObjects(collisionObjects, true);
-        // if (intersects.length > 0) {
-            // console.log(`Y Collision: Dir=${direction.y} OffsetY=${offset.toFixed(1)} HitDist=${intersects[0].distance.toFixed(2)} CheckDist=${(distance+0.05).toFixed(2)}`);
-        // }
         return intersects.length > 0;
     }
 
-    // --- Temporarily Comment Out Guards for Debugging Entry ---
-    // if (!playerMesh || !playerVelocity || !window.mapMesh) {
-    //     return playerIsGrounded[localPlayerId] ?? false;
-    // }
-    // Use defaults if guards are commented out
-    playerMesh = playerMesh || window.players[localPlayerId]?.mesh; // Try to get mesh if passed null
-    playerVelocity = playerVelocity || window.playerVelocities[localPlayerId] || new THREE.Vector3(); // Use default vel if missing
-    if (!playerMesh || !window.mapMesh) {
-        console.warn("Skipping collision check - mesh or map missing");
-        return false; // Cannot proceed
+    // --- Main collision logic ---
+    // Use guards
+    if (!playerMesh || !playerVelocity || !window.mapMesh) {
+        return window.playerIsGrounded[localPlayerId] ?? false; // Return previous state if possible
     }
-     // --- End Temporary Comment Out ---
-
 
     const currentPosition = playerMesh.position;
     const movementVector = tempVec.copy(playerVelocity).multiplyScalar(deltaTime);
     const collisionObjects = [window.mapMesh];
-
-    const groundRayOriginOffset = 0.1;
-    const groundRayOriginBefore = currentPosition.clone().add(new THREE.Vector3(0, groundRayOriginOffset, 0));
     const groundRayDirection = new THREE.Vector3(0, -1, 0);
+    const groundRayOriginOffset = 0.1;
+
+    // --- Ground Check (Before Movement) ---
+    const groundRayOriginBefore = currentPosition.clone().add(new THREE.Vector3(0, groundRayOriginOffset, 0));
     tempGroundRay.set(groundRayOriginBefore, groundRayDirection);
     tempGroundRay.far = groundRayOriginOffset + STEP_HEIGHT + GROUND_CHECK_DIST;
     const groundIntersectsBefore = tempGroundRay.intersectObjects(collisionObjects, true);
     const onGroundBeforeMove = groundIntersectsBefore.length > 0 && groundIntersectsBefore[0].distance <= groundRayOriginOffset + GROUND_CHECK_DIST * 0.5;
 
-    let finalPosition = currentPosition.clone();
-    let collidedX = false, collidedY = false, collidedZ = false;
+    // --- Movement ---
+    // Apply movement directly without wall/ceiling checks for now
+    let finalPosition = currentPosition.clone().add(movementVector); // Apply full movement initially
+    let collidedX = false; // Flags still needed for step-up logic if uncommented later
+    let collidedY = false;
+    let collidedZ = false;
 
+    // --- Collision Checks Temporarily Disabled ---
+    /*
     // Move X
     if (Math.abs(movementVector.x) > 0.001) {
-        const wallHitX = checkWallCollision(finalPosition, new THREE.Vector3(Math.sign(movementVector.x), 0, 0), Math.abs(movementVector.x), collisionObjects);
-        // console.log(`Move X Check: Target=${(finalPosition.x + movementVector.x).toFixed(2)}, Hit=${wallHitX}`);
-        if (!wallHitX) { finalPosition.x += movementVector.x; } else { playerVelocity.x = 0; collidedX = true; }
+        if (checkWallCollision(currentPosition, new THREE.Vector3(Math.sign(movementVector.x), 0, 0), Math.abs(movementVector.x), collisionObjects)) {
+             finalPosition.x = currentPosition.x; // Don't move in X
+             playerVelocity.x = 0;
+             collidedX = true;
+        }
     }
     // Move Z
     if (Math.abs(movementVector.z) > 0.001) {
-        const wallHitZ = checkWallCollision(finalPosition, new THREE.Vector3(0, 0, Math.sign(movementVector.z)), Math.abs(movementVector.z), collisionObjects);
-        // console.log(`Move Z Check: Target=${(finalPosition.z + movementVector.z).toFixed(2)}, Hit=${wallHitZ}`);
-        if (!wallHitZ) { finalPosition.z += movementVector.z; } else { playerVelocity.z = 0; collidedZ = true; }
+        if (checkWallCollision(finalPosition, new THREE.Vector3(0, 0, Math.sign(movementVector.z)), Math.abs(movementVector.z), collisionObjects)) {
+            finalPosition.z = currentPosition.z; // Don't move in Z (use potentially updated finalPosition from X check)
+            playerVelocity.z = 0;
+            collidedZ = true;
+        }
     }
      // Move Y
     if (Math.abs(movementVector.y) > 0.001) {
         const movingUp = movementVector.y > 0;
         const yDir = movingUp ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, -1, 0);
-        const ceilingFloorHit = checkCeilingFloorCollision(finalPosition, yDir, Math.abs(movementVector.y), movingUp, collisionObjects);
-        // console.log(`Move Y Check: Target=${(finalPosition.y + movementVector.y).toFixed(2)}, Up=${movingUp}, Hit=${ceilingFloorHit}`);
-        if (!ceilingFloorHit) { finalPosition.y += movementVector.y; } else { if (!movingUp) { collidedY = true; } playerVelocity.y = 0; }
+        if (checkCeilingFloorCollision(finalPosition, yDir, Math.abs(movementVector.y), movingUp, collisionObjects)) {
+            finalPosition.y = currentPosition.y; // Don't move in Y (use potentially updated finalPosition from X/Z checks)
+            if (!movingUp) { collidedY = true; } // Mark floor collision
+            playerVelocity.y = 0;
+        }
     }
+    */
+    // --- End Disabled Collision Checks ---
 
+
+    // --- Final Ground Check & Step Up Logic (Still perform this) ---
     let isGrounded = false;
     const groundRayOriginFinal = finalPosition.clone().add(new THREE.Vector3(0, groundRayOriginOffset, 0));
     tempGroundRay.set(groundRayOriginFinal, groundRayDirection);
@@ -208,36 +206,50 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
     tempGroundRay.far = currentGroundCheckDist;
     const finalGroundIntersects = tempGroundRay.intersectObjects(collisionObjects, true);
 
-    // let groundCheckDebug = `GChk: OY=${groundRayOriginFinal.y.toFixed(2)}, Far=${tempGroundRay.far.toFixed(2)}, Hits=${finalGroundIntersects.length}`;
+    // let groundCheckDebug = `GChk (Simplified): OY=${groundRayOriginFinal.y.toFixed(2)}, Far=${tempGroundRay.far.toFixed(2)}, Hits=${finalGroundIntersects.length}`;
 
     if (finalGroundIntersects.length > 0) {
         const hitPoint = finalGroundIntersects[0].point;
         const hitDistance = finalGroundIntersects[0].distance;
         // groundCheckDebug += `, HDist=${hitDistance.toFixed(2)}`;
         if (hitDistance <= groundRayOriginOffset + GROUND_CHECK_DIST * 0.5) {
-            isGrounded = true; finalPosition.y = hitPoint.y; if (playerVelocity.y < 0) playerVelocity.y = 0;
-        } else if (hitDistance <= groundRayOriginOffset + STEP_HEIGHT && (onGroundBeforeMove || collidedY) && (collidedX || collidedZ || playerVelocity.y <=0) ) {
+            isGrounded = true;
+            finalPosition.y = hitPoint.y; // Snap feet
+            if (playerVelocity.y < 0) playerVelocity.y = 0;
+        }
+        // Step up logic (keep commented out if focusing only on falling/basic movement)
+        /*
+        else if (hitDistance <= groundRayOriginOffset + STEP_HEIGHT && onGroundBeforeMove && (collidedX || collidedZ || playerVelocity.y <=0) ) {
             const stepUpOrigin = hitPoint.clone().add(new THREE.Vector3(0, PLAYER_HEIGHT - 0.1, 0));
             tempRaycaster.set(stepUpOrigin, new THREE.Vector3(0,-1,0)); tempRaycaster.far = PLAYER_HEIGHT - 0.2;
              if (tempRaycaster.intersectObjects(collisionObjects, true).length === 0) {
-                isGrounded = true; finalPosition.y = hitPoint.y; if (playerVelocity.y < 0) playerVelocity.y = 0;
-                // groundCheckDebug += ", StepUp=OK";
-            } else { isGrounded = false; /* groundCheckDebug += ", StepUp=Blk"; */ }
-        } else { isGrounded = false; /* groundCheckDebug += ", StepUp=No"; */ }
-    } else { isGrounded = false; /* groundCheckDebug += ", NoHits"; */ }
+                isGrounded = true; finalPosition.y = hitPoint.y; if (playerVelocity.y < 0) playerVelocity.y = 0; // groundCheckDebug += ", StepUp=OK";
+            } else { isGrounded = false; // groundCheckDebug += ", StepUp=Blk";
+             }
+        } else { isGrounded = false; // groundCheckDebug += ", StepUp=No";
+         }
+        */
+        else { isGrounded = false; } // If hit but too far and not stepping up
+
+    } else {
+        isGrounded = false; // groundCheckDebug += ", NoHits";
+    }
 
     // if(localPlayerId) {
         // console.log(groundCheckDebug + `, Grounded=${isGrounded}, VelY=${playerVelocity.y.toFixed(3)}, PosY=${finalPosition.y.toFixed(3)}`);
     // }
 
+
+    // --- Void Check ---
     if (finalPosition.y < CONFIG.VOID_Y_LEVEL) {
-        console.log(`Player ${localPlayerId} fell into void.`);
-        const localPlayer = window.players[localPlayerId];
-        if (localPlayer?.health > 0) { localPlayer.health = 0; UIManager?.updateHealthBar(0); Network?.sendVoidDeath(); }
-        return false;
+         console.log(`Player ${localPlayerId} fell into void.`);
+         const localPlayer = window.players[localPlayerId];
+         if (localPlayer?.health > 0) { localPlayer.health = 0; UIManager?.updateHealthBar(0); Network?.sendVoidDeath(); }
+         return false; // Prevent position update below
     }
 
-    playerMesh.position.copy(finalPosition);
+    // Update the actual player mesh position
+    playerMesh.position.copy(finalPosition); // <--- CRUCIAL LINE
 
     // console.log(`Collision Check Result: Grounded=${isGrounded}, Final Pos Y=${finalPosition.y.toFixed(2)}, Vel Y=${playerVelocity.y.toFixed(2)}`);
     return isGrounded;
@@ -248,20 +260,13 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
  * Performs shooting logic: Raycast, send hit, trigger effects/rocket jump.
  */
 function performShoot(camera) {
-    console.log("Entered performShoot"); // <-- VERY FIRST LINE LOG
-
-    // --- Temporarily Comment Out Guards for Debugging Entry ---
-    // if (!camera || !Network || !scene) { return; }
-    // --- End Temporary Comment Out ---
+    // console.log("Entered performShoot"); // Keep commented unless needed
+    if (!camera || !Network || !scene) { return; }
 
     if (window.gunSoundBuffer) { Effects.playSound(window.gunSoundBuffer, null, false, 0.4); }
 
     const raycaster = new THREE.Raycaster();
     const origin = new THREE.Vector3(); const direction = new THREE.Vector3();
-    // Use defaults if guards commented
-    camera = camera || window.camera;
-    if (!camera) { console.error("performShoot: Camera missing!"); return; }
-
     camera.getWorldPosition(origin); camera.getWorldDirection(direction);
     raycaster.set(origin, direction); raycaster.far = BULLET_MAX_RANGE;
 
@@ -272,8 +277,18 @@ function performShoot(camera) {
         intersects.sort((a, b) => a.distance - b.distance);
         for (const hit of intersects) {
             let hitObject = hit.object; let hitPlayerId = null;
-            while (hitObject && !hitPlayerId) { if (hitObject.userData?.isPlayer && hitObject.userData?.entityId !== localPlayerId) { hitPlayerId = hitObject.userData.entityId; } hitObject = hitObject.parent; }
-            if (hitPlayerId && window.players[hitPlayerId]?.health > 0) { console.log(`Hit player ${hitPlayerId} at distance ${hit.distance}`); Network.sendPlayerHit({ targetId: hitPlayerId, damage: BULLET_DMG }); break; }
+            while (hitObject && !hitPlayerId) {
+                 // Fix: Check for self-hit BEFORE checking if it's a player
+                 if (hitObject.userData?.entityId === window.localPlayerId) { break; } // Stop check if self
+                 if (hitObject.userData?.isPlayer) { hitPlayerId = hitObject.userData.entityId; }
+                hitObject = hitObject.parent;
+            }
+            // Ensure hitPlayerId is set AND it's not the local player
+            if (hitPlayerId && hitPlayerId !== window.localPlayerId && window.players[hitPlayerId]?.health > 0) {
+                 console.log(`Hit player ${hitPlayerId} at distance ${hit.distance}`);
+                 Network.sendPlayerHit({ targetId: hitPlayerId, damage: BULLET_DMG });
+                 break; // Process first valid hit
+            }
         }
     }
 
@@ -332,5 +347,5 @@ function sendLocalPlayerUpdateIfNeeded(localPlayerMesh, camera) {
 }
 
 
-console.log("gameLogic.js loaded (Manual Raycasting v5 - Entry Point Logs)");
+console.log("gameLogic.js loaded (Manual Raycasting v6 - Simplified Collision)");
 // --- END OF FULL gameLogic.js FILE ---
