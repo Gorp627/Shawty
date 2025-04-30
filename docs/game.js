@@ -1,14 +1,8 @@
-// --- START OF FULL game.js FILE (Cannon.js v4 - Robust Homescreen Transition) ---
-// docs/game.js - Main Game Orchestrator (Cannon.js v4 - Robust Homescreen Transition)
+// --- START OF FULL game.js FILE (Manual Raycasting v1) ---
+// docs/game.js - Main Game Orchestrator (Manual Raycasting v1)
 
 // --- Global variables ---
 // Expect these to be defined in config.js and accessible via window scope
-// e.g., window.players, window.keys, window.localPlayerId, etc.
-
-// ** Cannon.js specific globals **
-var cannonWorld = null; // Holds the Cannon.js physics world
-const cannonTimeStep = 1 / 60; // Physics timestep
-const cannonMaxSubSteps = 3; // Max physics substeps per frame
 
 var currentGameInstance = null; // Holds the single Game instance
 
@@ -23,22 +17,20 @@ class Game {
         this.clock = null;
         // Game state references - Use globals from config.js (via window scope)
         this.players = window.players; // Reference global players object
-        this.keys = window.keys; // Reference global keys object
         this.localPlayerMesh = null; // Reference to the local player's VISUAL mesh
 
-        // ** ADD Cannon.js specific properties **
-        this.playerBodies = {}; // Map of playerId to Cannon.js Body objects
-        this.mapBody = null; // Reference to the map/ground body
+        // ** Manual Physics Globals (referenced from config.js) **
+        this.playerVelocities = window.playerVelocities; // Reference global velocity map
+        this.playerIsGrounded = window.playerIsGrounded; // Reference global grounded map
 
-        this.lastNetworkSendTime = 0;
-        this.debugMeshes = {}; // Map of playerId to debug meshes
-        this.DEBUG_SHOW_PLAYER_COLLIDERS = false; // Set true to show collision shapes
+        this.lastNetworkSendTime = 0; // Not currently used, but kept for potential future use
         this.attemptCounter = 0; // Initialize attempt counter for debugging transitions
+        this.interpolationFactor = 0.15; // How quickly remote players snap to server position (lower = smoother, higher = snappier)
     }
 
     // --- Main Initialization Sequence ---
     async init() {
-        console.log("--- Game Init Sequence (Cannon.js) ---");
+        console.log("--- Game Init Sequence (Manual Raycasting) ---");
         if (currentGameInstance) {
             console.warn("Game instance already exists! Aborting new init.");
             return;
@@ -68,7 +60,10 @@ class Game {
         this.scene.background = new THREE.Color(0x87CEEB); // Sky Blue
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500); window.camera = this.camera; // Assign to global AND instance
         this.renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
-        this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; window.renderer = this.renderer; // Assign to global AND instance
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.shadowMap.enabled = true;
+        // this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Optional: Softer shadows
+        window.renderer = this.renderer; // Assign to global AND instance
 
         // 3. Setup PointerLockControls
         if (typeof THREE.PointerLockControls === 'undefined') {
@@ -78,8 +73,9 @@ class Game {
         // Pass THIS camera instance to the controls
         this.controls = new THREE.PointerLockControls(this.camera, this.renderer.domElement); window.controls = this.controls; // Assign to global AND instance
         this.controls.addEventListener('lock', () => {
+            // Only lock cursor styling if actually playing
             if(stateMachine?.is('playing') && UIManager?.gameUI) { UIManager.gameUI.style.cursor = 'none'; }
-             // Resume Audio Context on lock
+             // Resume Audio Context on lock (essential for user interaction requirement)
             const audioListener = window.listener; // Access global listener
             if (audioListener && audioListener.context && audioListener.context.state === 'suspended') {
                 console.log('AudioContext suspended, attempting to resume...');
@@ -87,20 +83,29 @@ class Game {
             }
         });
         this.controls.addEventListener('unlock', () => {
-            if(stateMachine?.is('playing') && UIManager?.gameUI) { UIManager.gameUI.style.cursor = 'default'; }
+            // Reset cursor when unlocked
+            if(UIManager?.gameUI) { UIManager.gameUI.style.cursor = 'default'; }
+             // If playing and unlocked, transition to pause/menu? (Optional future feature)
+             // if (stateMachine?.is('playing')) {
+             //     // stateMachine.transitionTo('paused'); // Example
+             // }
         });
         // Add the controls' object (which CONTAINS the camera) to THIS scene instance
-        this.scene.add(this.controls.getObject());
+        this.scene.add(this.controls.getObject()); // Camera is a child of this object
 
         // 4. Setup Scene Lighting (Add lights to THIS scene instance)
-        this.scene.add(new THREE.AmbientLight(0x606070, 1.0));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        this.scene.add(new THREE.AmbientLight(0x606070, 1.0)); // Ambient light
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2); // Increased intensity
         dirLight.position.set(40, 50, 30);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
-        dirLight.shadow.camera.near = 0.5; dirLight.shadow.camera.far = 500;
+        dirLight.shadow.camera.near = 1; dirLight.shadow.camera.far = 150; // Adjusted shadow camera range
+        dirLight.shadow.camera.left = -60; dirLight.shadow.camera.right = 60;
+        dirLight.shadow.camera.top = 60; dirLight.shadow.camera.bottom = -60;
+        dirLight.shadow.bias = -0.001; // Adjust shadow bias to prevent artifacts
         this.scene.add(dirLight);
-        const hemisphereLight = new THREE.HemisphereLight( 0x87CEEB, 0x404020, 0.6 );
+        // this.scene.add( new THREE.CameraHelper( dirLight.shadow.camera ) ); // Optional: Visualize shadow camera
+        const hemisphereLight = new THREE.HemisphereLight( 0x87CEEB, 0x404020, 0.6 ); // Sky/Ground light
         this.scene.add( hemisphereLight );
 
         // 5. Initialize Input System
@@ -109,14 +114,7 @@ class Game {
         // 6. Initialize Effects System (Pass THIS scene and camera instances)
         if (!Effects.initialize(this.scene, this.camera)) { stateMachine.transitionTo('loading', { message: 'Effects Init Failed!', error: true }); return; }
 
-        // 7. Initialize Physics (CANNON.js)
-        stateMachine.transitionTo('loading', { message: 'Loading Physics Engine...' });
-        if (typeof CANNON === 'undefined') {
-            console.error("!!! CRITICAL: CANNON.js library not loaded! Check index.html script order.");
-            stateMachine.transitionTo('loading', { message: 'FATAL: Physics Library Failed!', error: true });
-            return;
-        }
-        this.setupPhysics();
+        // 7. Physics: Not needed, map collision relies on loaded mapMesh
 
         // 8. Setup Asset Loaders
         stateMachine.transitionTo('loading', { message: 'Preparing Asset Loaders...' });
@@ -143,31 +141,17 @@ class Game {
     }
 
     // --- Setup Sub-functions ---
-    setupPhysics() {
-        if (!CANNON) { console.error("!!! CANNON global object is missing during physics setup!"); return; }
-        cannonWorld = new CANNON.World();
-        cannonWorld.gravity.set(0, CONFIG.GRAVITY, 0);
-        cannonWorld.broadphase = new CANNON.NaiveBroadphase();
-        cannonWorld.solver.iterations = 10;
-        window.cannonWorld = cannonWorld; // Assign to global scope
-        // Access global flag defined in config.js scope
-        window.physicsIsReady = true; // Set flag *after* world is created
-        console.log("[Game] Cannon.js Physics World Initialized.");
-        this.createMapCollider(); // Create ground immediately
-        this.attemptProceedToGame();
-    }
-
     setupLoaders() {
         if (!THREE) { console.error("!!! THREE missing during loader setup!"); return; }
         if (typeof THREE.DRACOLoader === 'undefined' || typeof THREE.GLTFLoader === 'undefined') {
-             console.error("!!! THREE.DRACOLoader or THREE.GLTFLoader constructors not found! Check index.html script order."); return;
+             console.error("!!! THREE.DRACOLoader or THREE.GLTFLoader constructors not found! Check index.html script order.");
+             stateMachine.transitionTo('loading', { message: 'FATAL: GFX Loader Failed!', error: true }); return;
         }
-        dracoLoader = new THREE.DRACOLoader();
-        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
-        loader = new THREE.GLTFLoader();
-        loader.setDRACOLoader(dracoLoader);
-        window.dracoLoader = dracoLoader;
-        window.loader = loader;
+        // Use global loaders defined in config.js scope
+        window.dracoLoader = new THREE.DRACOLoader();
+        window.dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+        window.loader = new THREE.GLTFLoader();
+        window.loader.setDRACOLoader(window.dracoLoader);
         console.log("[Game] GLTF/DRACO Loaders Initialized.");
     }
 
@@ -186,15 +170,14 @@ class Game {
     // --- Loading Callbacks ---
     onAssetsReady() {
         console.log("[Game] Asset Load Manager reported 'ready'.");
-        // Access global flag defined in config.js scope
         window.assetsAreReady = true;
-        // Map collider (simple plane) is created during setupPhysics now
+        // Map visual mesh (mapMesh) is loaded by LoadManager and added to scene. Collision uses this mesh.
         this.attemptProceedToGame(); // Check prerequisites again
     }
 
     onLoadError(errorData) {
         console.error("[Game] Asset Load Manager reported 'error':", errorData.message);
-        stateMachine.transitionTo('loading', { message: `Asset Load Failed!<br/>${errorData.message}`, error: true });
+        stateMachine?.transitionTo('loading', { message: `Asset Load Failed!<br/>${errorData.message}`, error: true });
     }
 
     // --- Check Prerequisites & Transition Logic ---
@@ -202,59 +185,57 @@ class Game {
         this.attemptCounter++;
         const callCount = this.attemptCounter;
 
-        // Access global flags directly
-        const physicsReady = window.physicsIsReady; // Use the global flag
-        const assetsReady = window.assetsAreReady; // Use the global flag
-        const networkReady = window.networkIsInitialized; // Use the global flag
+        // Access global flags and check for mapMesh
+        const assetsReady = window.assetsAreReady;
+        const networkReady = window.networkIsInitialized;
         const initDataPresent = !!window.initializationData; // Use the global var
-        const mapBodyPresent = !!this.mapBody; // Check instance map body
+        const mapMeshReady = !!window.mapMesh; // Check if the map VISUAL mesh is loaded
 
-        console.log(`[Game attempt #${callCount}] Checking prerequisites: Assets=${assetsReady}, Physics=${physicsReady}, MapBody=${mapBodyPresent}, Network=${networkReady}, InitData=${initDataPresent}, State=${stateMachine.currentState}`);
+        console.log(`[Game attempt #${callCount}] Checking prerequisites: Assets=${assetsReady}, MapMesh=${mapMeshReady}, Network=${networkReady}, InitData=${initDataPresent}, State=${stateMachine?.currentState}`);
 
-        // Condition 1: Ready for ACTUAL GAMEPLAY?
-        if (assetsReady && physicsReady && mapBodyPresent && networkReady && initDataPresent) {
+        // Condition 1: Ready for ACTUAL GAMEPLAY? (Assets, Map Mesh, Network, AND Init Data are ready)
+        if (assetsReady && mapMeshReady && networkReady && initDataPresent) {
             // Make sure we are not already playing or joining
-            if (!stateMachine.is('playing') && !stateMachine.is('joining')) {
+            if (!stateMachine?.is('playing') && !stateMachine?.is('joining')) {
                 console.log(`[Game attempt #${callCount}] All prerequisites met! Starting gameplay...`);
                 this.startGamePlay(window.initializationData); // Use global initData
-                window.initializationData = null; // Consume global initData
+                window.initializationData = null; // Consume data
             } else {
                  console.log(`[Game attempt #${callCount}] Already playing/joining, ignoring redundant attemptProceedToGame for gameplay start.`);
             }
         }
-        // ***** MODIFIED CONDITION 2 *****
-        // Condition 2: Ready for HOMESCREEN? (Assets, Physics, Network ready, No Init Data yet, AND NOT already on homescreen/joining/playing)
-        else if (assetsReady && physicsReady && mapBodyPresent && networkReady && !initDataPresent &&
-                 !stateMachine.is('homescreen') && !stateMachine.is('joining') && !stateMachine.is('playing'))
+        // Condition 2: Ready for HOMESCREEN? (Assets, Map Mesh, Network ready, No Init Data yet, AND NOT already on homescreen/charSelect/joining/playing)
+        else if (assetsReady && mapMeshReady && networkReady && !initDataPresent &&
+                 !stateMachine?.is('homescreen') && !stateMachine?.is('characterSelect') && !stateMachine?.is('joining') && !stateMachine?.is('playing'))
         {
             console.log(`[Game attempt #${callCount}] Core components ready, transitioning to Homescreen... (Current state: ${stateMachine.currentState})`);
-            stateMachine.transitionTo('homescreen'); // <<< TRANSITION TO HOMESCREEN
+            stateMachine?.transitionTo('homescreen'); // <<< TRANSITION TO HOMESCREEN
         }
-        // *******************************
         // Condition 3: Still waiting... Update loading message if appropriate
         else {
-            if (stateMachine.is('loading') && !stateMachine.options.error) {
+            if (stateMachine?.is('loading') && !stateMachine.options?.error) {
                 let waitMsg = "Initializing...";
                 if (!assetsReady) waitMsg = "Loading Assets...";
-                else if (!physicsReady) waitMsg = "Loading Physics...";
-                else if (!mapBodyPresent) waitMsg = "Creating Map Physics...";
+                else if (!mapMeshReady) waitMsg = "Loading Map Mesh...";
+                // else if (!physicsReady) waitMsg = "Loading Physics..."; // Removed physics check
                 else if (!networkReady) waitMsg = "Connecting...";
                 console.log(`[Game attempt #${callCount}] Prerequisites not met. Updating loading message: ${waitMsg}`);
-                stateMachine.transitionTo('loading', { message: waitMsg });
+                stateMachine?.transitionTo('loading', { message: waitMsg });
             } else {
                 // Log why we aren't proceeding if not in loading state
-                console.log(`[Game attempt #${callCount}] Prerequisites not met or invalid state for transition. State: ${stateMachine.currentState}, Error: ${stateMachine.options.error || 'none'}`);
+                 if (!stateMachine?.is('loading')) { // Only log if not in loading state
+                    console.log(`[Game attempt #${callCount}] Prerequisites not met or invalid state for transition. State: ${stateMachine?.currentState}, Error: ${stateMachine?.options?.error || 'none'}`);
+                 }
             }
         }
     }
 
     // --- Start Actual Gameplay Logic ---
     startGamePlay(initData) {
-        console.log("[Game] --- Starting Gameplay (Cannon.js) ---");
+        console.log("[Game] --- Starting Gameplay (Manual Raycasting) ---");
         stateMachine.transitionTo('playing');
-        this.cleanupAllPlayers();
-        // Access global var defined in config.js
-        window.localPlayerId = initData.id;
+        this.cleanupAllPlayers(); // Ensure clean slate before adding new players
+        window.localPlayerId = initData.id; // Use global scope
         console.log(`[Game] Local Player ID set: ${window.localPlayerId}`);
 
         for (const id in initData.players) {
@@ -263,221 +244,189 @@ class Game {
             if (id === window.localPlayerId) {
                 // --- Create LOCAL Player ---
                 console.log("[Game] Creating LOCAL player objects...");
-                // Access global var defined in config.js
+                // Store lastSent values used by gameLogic's network update check
                 window.players[id] = {
                     id: id, name: playerData.name, phrase: playerData.phrase,
                     health: playerData.health, isLocal: true, mesh: null,
-                    x: playerData.x, y: playerData.y, z: playerData.z, rotationY: playerData.rotationY,
+                    x: playerData.x, y: playerData.y, z: playerData.z, rotationY: playerData.rotationY, // Current server state
+                    lastSentX: playerData.x, lastSentY: playerData.y, lastSentZ: playerData.z, lastSentRotY: playerData.rotationY, // Last sent state
                 };
-                window.localPlayerName = playerData.name; window.localPlayerPhrase = playerData.phrase;
-                UIManager.updateInfo(`Playing as ${playerData.name}`); UIManager.updateHealthBar(playerData.health);
+                // window.localPlayerName = playerData.name; // Name is set in UI flow now
+                // window.localPlayerPhrase = playerData.phrase; // Phrase removed from UI/config
+                UIManager.updateInfo(`Playing as ${window.localPlayerName}`); // Use name set in UI
+                UIManager.updateHealthBar(playerData.health);
 
-                const playerHeight = CONFIG.PLAYER_HEIGHT;
-                const startPos = new CANNON.Vec3(playerData.x, playerData.y + playerHeight / 2.0, playerData.z);
-                this.createPlayerPhysicsBody(id, startPos, playerData.rotationY, true); // true = isLocal
-
-                const playerModelAsset = window.playerModelData;
+                const playerModelAsset = window.playerModelData; // Global asset data from LoadManager
                 if (playerModelAsset?.scene) {
                     try {
                         this.localPlayerMesh = playerModelAsset.scene.clone();
                         this.localPlayerMesh.scale.set(0.5, 0.5, 0.5);
-                        this.localPlayerMesh.visible = false;
+                        this.localPlayerMesh.visible = false; // Player mesh is not visible in first person
                         this.localPlayerMesh.userData = { entityId: id, isPlayer: true, isLocal: true };
-                        this.localPlayerMesh.traverse(child => { if(child.isMesh){ child.castShadow=true; child.receiveShadow=true; child.visible=false; } });
+                        // Ensure local player mesh parts don't cast shadows that interfere with the camera view
+                        this.localPlayerMesh.traverse(child => {
+                            if(child.isMesh){
+                                child.castShadow = false; // Usually false for local player
+                                child.receiveShadow = false; // Usually false for local player
+                                child.visible = false; // Keep invisible
+                            }
+                        });
+                        // Set initial MESH position (feet level) based on server data
+                        this.localPlayerMesh.position.set(playerData.x, playerData.y, playerData.z);
+                        this.localPlayerMesh.rotation.set(0, playerData.rotationY, 0);
                         this.scene.add(this.localPlayerMesh);
                         window.players[id].mesh = this.localPlayerMesh; // Assign mesh to global players object
                         console.log("[Game] Created local player GLTF mesh (hidden).");
                     } catch(e) { console.error("Error cloning/adding local player mesh:", e); }
                 } else { console.error("!!! Local player model asset not found!"); }
 
-                 const gunModelAsset = window.gunModelData;
+                 const gunModelAsset = window.gunModelData; // Global asset data
                  if(gunModelAsset?.scene && this.camera) {
-                     // Access global var defined in config.js
                      window.gunMesh = gunModelAsset.scene.clone();
                      window.gunMesh.scale.set(0.3, 0.3, 0.3); // Adjusted scale
-                     window.gunMesh.position.set(0.15, -0.15, -0.4);
-                     window.gunMesh.rotation.set(0, Math.PI, 0);
-                     window.gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; });
-                     this.camera.add(window.gunMesh);
+                     window.gunMesh.position.set(0.15, -0.15, -0.4); // Position relative to camera
+                     window.gunMesh.rotation.set(0, Math.PI, 0); // Orient gun
+                     window.gunMesh.traverse(child => { if (child.isMesh) child.castShadow = true; }); // Gun can cast shadow
+                     this.camera.add(window.gunMesh); // Attach gun TO THE CAMERA
                      console.log("[Game] Attached gun model to camera.");
                  } else if (!this.camera) {
                      console.error("!!! Cannot attach gun model: Game camera not initialized.");
                  } else { console.warn("Gun model asset not ready, cannot attach gun."); }
 
+                 // Teleport controls/camera to start position
+                 if (this.controls) {
+                     const startPos = new THREE.Vector3(playerData.x, playerData.y + CONFIG.CAMERA_Y_OFFSET, playerData.z);
+                     this.controls.getObject().position.copy(startPos);
+                     // Ensure camera rotation matches initial server rotation
+                     this.camera.rotation.set(0, playerData.rotationY, 0);
+                      console.log("[Game] Set initial camera position and rotation.");
+                 }
+
+
             } else {
                 // --- Create REMOTE Player ---
                 console.log(`[Game] Creating REMOTE player objects for ${playerData.name || id}...`);
-                const remotePlayer = new ClientPlayer(playerData); // ClientPlayer should use window.scene
+                const remotePlayer = new ClientPlayer(playerData); // ClientPlayer constructor uses global scene, sets mesh pos/rot
                 window.players[id] = remotePlayer; // Assign to global players object
 
-                if (remotePlayer.mesh) {
-                    const playerHeight = CONFIG.PLAYER_HEIGHT;
-                    const startPos = new CANNON.Vec3(playerData.x, playerData.y + playerHeight / 2.0, playerData.z);
-                    this.createPlayerPhysicsBody(id, startPos, playerData.rotationY, false); // false = remote player
-                } else { console.warn(`Skipping physics body for remote player ${id}, mesh failed.`); }
+                if (!remotePlayer.mesh) {
+                     console.warn(`Remote player ${id} mesh failed to load.`);
+                }
             }
+            // Initialize velocity and grounded state for ALL players (local and remote)
+            this.playerVelocities[id] = new THREE.Vector3(0, 0, 0);
+            this.playerIsGrounded[id] = false; // Assume airborne initially, will be checked/updated
         }
          console.log("[Game] Finished initial player processing.");
     }
 
-    // --- Physics Body Creation (CANNON.js) ---
-    createPlayerPhysicsBody(playerId, initialPositionVec3, initialRotationY, isLocal) {
-        if (!cannonWorld) { console.error("!!! Cannon world missing for body creation!"); return; }
-
-        const playerMass = CONFIG.PLAYER_MASS || 70;
-        const playerRadius = CONFIG.PLAYER_RADIUS || 0.4;
-        const playerHeight = CONFIG.PLAYER_HEIGHT || 1.8;
-
-        // Using Sphere shape for simplicity initially
-        const playerShape = new CANNON.Sphere(playerRadius);
-
-        const physicsMaterial = new CANNON.Material("playerMaterial");
-        physicsMaterial.friction = 0.4; physicsMaterial.restitution = 0.0;
-
-        const playerBody = new CANNON.Body({
-            mass: isLocal ? playerMass : 0,
-            position: initialPositionVec3,
-            shape: playerShape,
-            material: physicsMaterial,
-            type: isLocal ? CANNON.Body.DYNAMIC : CANNON.Body.KINEMATIC,
-            angularDamping: 0.95, // Increased damping to prevent spin
-            linearDamping: 0.1,
-        });
-
-        playerBody.angularFactor.set(0, 1, 0); // Allow rotation only around Y
-        playerBody.updateAngularFactor();
-
-        playerBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), initialRotationY);
-
-        playerBody.userData = { entityId: playerId, isLocal: isLocal, isPlayer: true };
-
-        cannonWorld.addBody(playerBody);
-        this.playerBodies[playerId] = playerBody; // Store reference in instance map
-
-        console.log(`[Game] Created ${isLocal ? 'DYNAMIC' : 'KINEMATIC'} Cannon.js body for player ${playerId}`);
-
-        if (this.DEBUG_SHOW_PLAYER_COLLIDERS) {
-            // Pass Cannon Vec3 and Quaternion
-            this.addDebugMesh(playerId, playerRadius, playerHeight, playerBody.position, playerBody.quaternion);
-        }
-    }
-
-    // --- Map Collider Creation (CANNON.js - Simple Plane) ---
-    createMapCollider() {
-        if (!cannonWorld) { console.error("!!! Cannon world missing for map creation!"); return; }
-        console.log("[Game] Creating simple Cannon.js ground plane...");
-        const groundMaterial = new CANNON.Material("groundMaterial");
-        groundMaterial.friction = 0.6; groundMaterial.restitution = 0.1;
-        const groundShape = new CANNON.Plane();
-        const groundBody = new CANNON.Body({ mass: 0, shape: groundShape, material: groundMaterial });
-        groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-        groundBody.position.set(0, 0, 0); // Position plane at Y=0
-        cannonWorld.addBody(groundBody);
-        this.mapBody = groundBody; // Store reference in instance variable
-        console.log("[Game] Added Cannon.js ground plane.");
-
-        // Setup default contact material (adjust friction/restitution between everything)
-        const defaultMaterial = new CANNON.Material("default");
-        const defaultContactMaterial = new CANNON.ContactMaterial(
-            defaultMaterial, defaultMaterial,
-            { friction: 0.4, restitution: 0.1 }
-        );
-        cannonWorld.defaultContactMaterial = defaultContactMaterial;
-    }
-
-    // --- Debug Mesh Creation ---
-    addDebugMesh(playerId, radius, height, cannonPosition, cannonQuaternion) {
-         if (!this.scene || !THREE) return;
-         const capsuleHeight = height - 2 * radius;
-         const shapeGeom = new THREE.SphereGeometry(radius, 8, 8); // Match simple sphere shape
-         const wireframeMat = new THREE.MeshBasicMaterial({ color: playerId === window.localPlayerId ? 0x00ff00 : 0xffff00, wireframe: true }); // Use global window.localPlayerId
-         const wireframeMesh = new THREE.Mesh(shapeGeom, wireframeMat);
-         wireframeMesh.position.copy(cannonPosition); // Copy Cannon Vec3
-         wireframeMesh.quaternion.copy(cannonQuaternion); // Copy Cannon Quaternion
-         this.scene.add(wireframeMesh); // Add to instance scene
-         this.debugMeshes[playerId] = wireframeMesh; // Store in instance map
-    }
-
-    // --- Player Cleanup (CANNON.js) ---
+    // --- Player Cleanup ---
     cleanupPlayer(playerId) {
         const player = window.players[playerId]; // Use global players
-        if (player && player.mesh && this.scene) { this.scene.remove(player.mesh); player.mesh = null; } // Use instance scene
+        // Remove visual mesh
+        if (player?.mesh && this.scene) {
+            this.scene.remove(player.mesh);
+            // Proper disposal if ClientPlayer doesn't handle it
+            if (player instanceof ClientPlayer) {
+                 player.remove(); // ClientPlayer.remove should handle disposal
+            } else {
+                // Manual disposal for local player mesh if needed (shouldn't be necessary if ClientPlayer handles it)
+            }
+             player.mesh = null;
+        }
+        // Remove from global players map
         if (window.players[playerId]) delete window.players[playerId];
-        if(playerId === window.localPlayerId) { this.localPlayerMesh = null; } // Use global window.localPlayerId
-        if (this.debugMeshes[playerId] && this.scene) { this.scene.remove(this.debugMeshes[playerId]); this.debugMeshes[playerId].geometry?.dispose(); this.debugMeshes[playerId].material?.dispose(); delete this.debugMeshes[playerId]; } // Use instance scene
-        const body = this.playerBodies[playerId]; // Use instance map
-        if (body && cannonWorld) { cannonWorld.removeBody(body); delete this.playerBodies[playerId]; } // Use instance map
+
+        // Clear local player references if it's the local player
+        if(playerId === window.localPlayerId) { this.localPlayerMesh = null; }
+
+        // Clean up manual physics state maps
+        if (this.playerVelocities[playerId]) delete this.playerVelocities[playerId];
+        if (this.playerIsGrounded.hasOwnProperty(playerId)) delete this.playerIsGrounded[playerId];
      }
 
      cleanupAllPlayers() {
-         console.log("[Game] Cleaning up all player objects (Cannon.js)...");
+         console.log("[Game] Cleaning up all player objects (Manual Raycasting)...");
          const playerIds = Object.keys(window.players); // Use global players
          playerIds.forEach(id => this.cleanupPlayer(id));
-         window.localPlayerId = null; this.localPlayerMesh = null; // Use global window.localPlayerId
-         this.playerBodies = {}; window.players = {}; // Use instance map & global players
+         window.localPlayerId = null; this.localPlayerMesh = null;
+         this.playerVelocities = {}; this.playerIsGrounded = {}; window.players = {}; // Reset state maps & global players
          console.log("[Game] Player cleanup finished.");
      }
 
-    // --- Main Update Loop (CANNON.js) ---
+    // --- Main Update Loop (Manual Raycasting) ---
     update() {
         requestAnimationFrame(this.update.bind(this));
-        if (!this.clock || !this.renderer || !this.scene || !this.camera || !cannonWorld) return; // Check instance variables
+        if (!this.clock || !this.renderer || !this.scene || !this.camera || !window.mapMesh) return; // Ensure map mesh is ready too
 
         const deltaTime = this.clock.getDelta();
+        // Clamp delta time to prevent massive jumps if the tab loses focus or frame rate drops significantly
+        const clampedDeltaTime = Math.min(deltaTime, 0.05); // Max step 50ms (20 FPS)
 
         if (stateMachine.is('playing')) {
-            // --- Physics Simulation Step (Cannon.js) ---
-            try {
-                cannonWorld.step(cannonTimeStep, deltaTime, cannonMaxSubSteps);
-            } catch (e) { console.error("!!! Cannon.js world step error:", e); }
 
-            // --- Update Local Player Logic ---
-            // Use global localPlayerId
-            const localPlayerBody = this.playerBodies[window.localPlayerId];
-            if (localPlayerBody) {
-                 updateLocalPlayer(deltaTime, localPlayerBody, this.camera, this.controls);
+            // --- 1. Update Local Player Input & Intent (Calculate Velocity Changes) ---
+            if (this.localPlayerMesh && localPlayerId && this.playerVelocities[localPlayerId]) {
+                updateLocalPlayerInput(clampedDeltaTime, this.camera, this.localPlayerMesh);
             }
 
-            // --- Synchronize THREE.js Meshes with Cannon.js Bodies ---
-            for (const id in this.playerBodies) {
-                const body = this.playerBodies[id];
-                const player = window.players[id]; // Use global players
+            // --- 2. Apply Physics & Collision (Local Player) ---
+            if (this.localPlayerMesh && localPlayerId && this.playerVelocities[localPlayerId]) {
+                // This function now handles gravity, collision checks, and updates mesh position
+                this.playerIsGrounded[localPlayerId] = checkPlayerCollisionAndMove(
+                    this.localPlayerMesh,
+                    this.playerVelocities[localPlayerId],
+                    clampedDeltaTime
+                );
+            }
 
-                if (player && player.mesh) {
+            // --- 3. Update Remote Players (Interpolation & Basic Simulation) ---
+            for (const id in window.players) {
+                if (id === localPlayerId) continue; // Skip local player
+                const player = window.players[id];
+                const playerMesh = player?.mesh;
+                const playerVelocity = this.playerVelocities[id]; // Remote players also have velocity for shockwaves etc.
+
+                if (player instanceof ClientPlayer && playerMesh && playerVelocity) {
                     try {
-                        player.mesh.position.copy(body.position);
-                        // Adjust Y pos based on shape origin (center for sphere/capsule) vs mesh origin (feet)
-                        player.mesh.position.y -= CONFIG.PLAYER_HEIGHT / 2.0;
+                        // Apply simple gravity to remote players for basic simulation (e.g., after shockwave)
+                        // More advanced: could check ground collision for remote players too, but can be costly
+                        // For now, just interpolate visually based on server data primarily.
+                        // playerVelocity.y -= (CONFIG?.GRAVITY_ACCELERATION ?? 28.0) * clampedDeltaTime;
+                        // playerMesh.position.addScaledVector(playerVelocity, clampedDeltaTime);
+                        // playerVelocity.multiplyScalar(0.98); // Dampen velocity
 
-                        // Only sync local player mesh Y rotation with camera
-                        if (id === window.localPlayerId) { // Use global localPlayerId
-                            const cameraEuler = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
-                            player.mesh.rotation.y = cameraEuler.y;
-                        } else {
-                            // Sync remote player mesh rotation directly with physics body
-                            player.mesh.quaternion.copy(body.quaternion);
-                        }
+                        // Interpolate mesh position towards the latest known server position
+                        playerMesh.position.lerp(new THREE.Vector3(player.serverX, player.serverY, player.serverZ), this.interpolationFactor);
 
-                        // Update debug mesh if enabled
-                        if (this.DEBUG_SHOW_PLAYER_COLLIDERS && this.debugMeshes[id]) {
-                            this.debugMeshes[id].position.copy(body.position);
-                            this.debugMeshes[id].quaternion.copy(body.quaternion);
-                        }
-                    } catch(e) { console.error(`Error syncing mesh for player ${id}:`, e); }
+                        // Interpolate mesh rotation towards the latest known server rotation
+                        const targetQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), player.serverRotY);
+                        playerMesh.quaternion.slerp(targetQuat, this.interpolationFactor);
+
+                    } catch(e) { console.error(`Error updating remote player ${id}:`, e); }
                 }
             }
 
-            // --- Update Camera Position (Relative to Physics Body) ---
-            if (localPlayerBody && this.camera) {
+
+            // --- 4. Update Camera Position/Rotation (Based on Controls) ---
+            // PointerLockControls automatically handles camera rotation based on mouse input.
+            // We need to position the *controls object* (camera's parent) based on the local player mesh position.
+            if (this.localPlayerMesh && this.camera && this.controls) {
                  try {
-                     const targetCameraPos = new THREE.Vector3();
-                     targetCameraPos.copy(localPlayerBody.position); // Copy body center position
-                     targetCameraPos.y += CONFIG.CAMERA_Y_OFFSET; // Add eye height offset
-                     // Let PointerLockControls handle camera position/rotation
-                 } catch(e) { console.error("Error updating camera position:", e); }
+                     // Camera's PARENT object position should follow the mesh's FEET position + offset
+                     const targetCameraParentPos = this.localPlayerMesh.position.clone();
+                     targetCameraParentPos.y += CONFIG.CAMERA_Y_OFFSET; // Add eye height offset FROM FEET
+                     this.controls.getObject().position.copy(targetCameraParentPos);
+
+                 } catch(e) { console.error("Error updating camera/controls position:", e); }
             }
 
-            Effects?.update(deltaTime); // Effects uses globals ok
+            // --- 5. Send Network Update (Local Player State) ---
+            // This function checks if enough movement/rotation occurred before sending
+            sendLocalPlayerUpdateIfNeeded(this.localPlayerMesh, this.camera);
+
+            // --- 6. Update Effects ---
+            Effects?.update(deltaTime); // Use original deltaTime for effects timing?
 
         } // End if(stateMachine.is('playing'))
 
@@ -491,11 +440,7 @@ class Game {
 
 // --- Global Initialization Trigger ---
 document.addEventListener('DOMContentLoaded', () => {
-    if (typeof CANNON === 'undefined') {
-        console.error("!!! CANNON.js not loaded before DOMContentLoaded!");
-        document.body.innerHTML = `<p style='color:red; font-size: 1.5em;'>FATAL ERROR: Physics Engine (Cannon.js) failed to load!</p>`;
-        return;
-    }
+    // Physics engine check removed
     const startGameInit = () => {
          console.log("DOM ready. Starting Game Initialization...");
          const game = new Game();
@@ -507,5 +452,5 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     startGameInit();
 });
-console.log("game.js loaded (Cannon.js v4 - Robust Homescreen Transition)");
-// --- END OF FULL game.js FILE ---
+console.log("game.js loaded (Manual Raycasting v1)");
+// --- END OF FULL game.js FILE (Manual Raycasting v1) ---
