@@ -20,9 +20,9 @@ class ClientPlayer {
         this.loadMesh(); // Attempt to load the visual mesh
     }
 
-    // Update non-physics data (name, phrase, health)
+    // Update non-physics data (name, phrase, health, server position cache)
     updateData(serverData) {
-        this.health = serverData.h ?? serverData.health ?? this.health;
+        this.health = serverData.h ?? serverData.health ?? this.health; // 'h' from gameStateUpdate
         this.name = serverData.n ?? serverData.name ?? this.name;
         this.phrase = serverData.p ?? serverData.phrase ?? this.phrase;
         // Update server position cache if provided in update
@@ -34,7 +34,7 @@ class ClientPlayer {
     }
 
     loadMesh() {
-        const playerModelAsset = loadManager.getAssetData('playerModel'); // Get loaded asset
+        const playerModelAsset = loadManager.getAssetData('playerModel'); // Get loaded asset data from loadManager
 
         if (playerModelAsset && playerModelAsset.scene) {
             try {
@@ -56,10 +56,8 @@ class ClientPlayer {
 
                 if (window.scene) { // Use global scene reference
                     window.scene.add(this.mesh);
-                    // Set initial position/rotation based on server data
-                    // Note: Rapier body handles the authoritative position, mesh will follow in game loop
-                    const playerHeight = CONFIG.PLAYER_HEIGHT || 1.8;
-                    this.mesh.position.set(this.serverX, this.serverY, this.serverZ); // Set initial mesh position at feet
+                    // Set initial position/rotation based on server data (feet level)
+                    this.mesh.position.set(this.serverX, this.serverY, this.serverZ);
                     this.mesh.rotation.set(0, this.serverRotY, 0); // Set initial Y rotation
                     console.log(`[Entities] Added GLTF mesh for remote player ${this.id}`);
                 } else {
@@ -89,9 +87,8 @@ class ClientPlayer {
 
             if (window.scene) {
                 window.scene.add(this.mesh);
-                 // Set initial position/rotation based on server data
-                const playerHeight = CONFIG.PLAYER_HEIGHT || 1.8;
-                this.mesh.position.set(this.serverX, this.serverY, this.serverZ); // Position mesh at feet
+                 // Set initial position/rotation based on server data (feet level)
+                this.mesh.position.set(this.serverX, this.serverY, this.serverZ);
                 this.mesh.rotation.set(0, this.serverRotY, 0); // Set initial Y rotation
                 console.log(`[Entities] Added remote FALLBACK mesh ${this.id}`);
             } else {
@@ -116,9 +113,9 @@ class ClientPlayer {
                         if (c.material) {
                             // Handle both single and multi-materials
                             if (Array.isArray(c.material)) {
-                                c.material.forEach(m => m.dispose());
+                                c.material.forEach(m => m?.dispose()); // Add null check for materials
                             } else {
-                                c.material.dispose();
+                                c.material?.dispose(); // Add null check
                             }
                         }
                     }
@@ -130,4 +127,4 @@ class ClientPlayer {
     }
 }
 window.ClientPlayer = ClientPlayer; // Make class globally accessible
-// No window assignment needed if Network.js uses `new ClientPlayer()`
+console.log("entities.js loaded");
