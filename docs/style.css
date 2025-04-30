@@ -237,7 +237,7 @@ body {
     width: 100%;
     height: 100%;
     pointer-events: none; /* Allow game interaction underneath */
-    display: none; /* Hidden by default, shown by JS */
+    display: none; /* Manage visibility with JS */
     z-index: 5; /* Above canvas */
 }
 
