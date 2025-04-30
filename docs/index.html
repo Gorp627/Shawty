@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty. (Manual Raycasting)</title> <!-- UPDATED TITLE -->
+    <title>Shawty. (Manual Raycasting)</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Optional: Add Google Fonts link -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Staatliches&display=swap" rel="stylesheet">
@@ -24,33 +23,29 @@
             <h1 class="stencil-font">SHAWTY.</h1>
             <p id="playerCountLabel">Online: <span id="playerCount">?</span></p>
             <input type="text" id="playerNameInput" placeholder="Enter Callsign" maxlength="16">
-            <!-- Phrase input removed -->
-            <button id="nextButton" class="stencil-font">NEXT</button> <!-- CHANGED ID and text -->
+            <button id="nextButton" class="stencil-font">NEXT</button>
             <p id="homeScreenError" class="error-message"></p>
         </div>
         <div class="scanlines"></div>
     </div>
 
-    <!-- NEW Character Select Screen -->
+    <!-- Character Select Screen (Simplified) -->
     <div id="characterSelectScreen" class="screen">
-        <div class="select-content"> <!-- New content wrapper -->
+        <div class="select-content">
             <h2 class="stencil-font">SELECT OPERATOR</h2>
-            <div id="characterPreview">
-                 <!-- Preview will be rendered here by Three.js later -->
-                 <canvas id="previewCanvas"></canvas> <!-- Separate canvas for preview -->
+            <!-- Removed characterPreview div and previewCanvas -->
+             <div id="characterPreview"> <!-- Keep div for spacing/styling if desired -->
+                <!-- Placeholder Text or Image (Optional) -->
+                 <p style="color:#585b70; font-style: italic;">[Character Image]</p>
             </div>
-            <p id="characterNameDisplay">Shawty</p> <!-- Display current character name -->
-            <!-- Add Arrow buttons later if more characters exist -->
-            <!-- <button id="prevCharButton"><</button>
-            <button id="nextCharButton">></button> -->
+            <p id="characterNameDisplay">Billy</p> <!-- Hardcoded name -->
             <button id="confirmDeployButton" class="stencil-font">DEPLOY</button>
             <p id="characterSelectError" class="error-message"></p>
         </div>
-        <!-- Optional: Add scanlines or other effects -->
     </div>
 
     <!-- In-Game UI -->
-    <div id="gameUI"> <!-- Hidden by default -->
+    <div id="gameUI">
         <div id="crosshair">+</div>
         <div id="info"></div>
         <div id="healthBarContainer">
@@ -66,8 +61,6 @@
     <!-- Libraries -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Physics Engine Script Removed -->
-    <!-- THREE Loaders & Controls -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/draco_decoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -78,13 +71,13 @@
     <script src="utils.js"></script>
     <script src="stateMachine.js"></script>
     <script src="loadManager.js"></script>
-    <script src="entities.js"></script> <!-- ClientPlayer used by Network -->
+    <script src="entities.js"></script>
     <script src="uiManager.js"></script>
     <script src="input.js"></script>
     <script src="effects.js"></script>
-    <script src="network.js"></script> <!-- Load updated network.js -->
-    <script src="gameLogic.js"></script> <!-- Load Manual Raycasting version -->
-    <script src="game.js"></script> <!-- Load Manual Raycasting version -->
+    <script src="network.js"></script>
+    <script src="gameLogic.js"></script>
+    <script src="game.js"></script>
 
 </body>
 </html>
