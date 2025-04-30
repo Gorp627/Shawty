@@ -1,17 +1,17 @@
 /* --- START OF FULL style.css FILE --- */
 /* General Body Styles */
-@import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Staatliches&display=swap'); /* Roboto Condensed & Staatliches (stencil-like) */
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Staatliches&display=swap');
 
 body {
     margin: 0;
-    overflow: hidden; /* Prevent scrollbars */
-    background-color: #111820; /* Dark charcoal/almost black */
-    color: #cdd6f4; /* Off-white / light lavender */
-    font-family: 'Roboto Condensed', sans-serif; /* Use Roboto Condensed */
-    display: flex; /* Use flex for easier centering */
+    overflow: hidden;
+    background-color: #111820;
+    color: #cdd6f4;
+    font-family: 'Roboto Condensed', sans-serif;
+    display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh; /* Full viewport height */
+    height: 100vh;
 }
 
 /* Screen Base Styles */
@@ -21,387 +21,167 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    display: none; /* Hidden by default */
+    display: none;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
-    /* Slightly transparent dark background */
     background-color: rgba(17, 24, 32, 0.95);
-    backdrop-filter: blur(3px); /* Add blur effect */
-    transition: opacity 0.4s ease-in-out; /* Smooth transition */
+    backdrop-filter: blur(3px);
+    transition: opacity 0.4s ease-in-out;
     opacity: 0;
-    z-index: 10; /* Ensure screens are above canvas initially */
+    z-index: 10;
 }
 
 .screen.visible {
-    display: flex; /* Show when visible class is added */
+    display: flex;
     opacity: 1;
 }
 
 /* --- Loading Screen --- */
-#loadingScreen {
-    /* background: #111820; Optional solid background */
-}
+#loadingScreen {}
 
-/* Bar Loader */
 .loader-bars {
   display: flex;
   justify-content: center;
-  align-items: flex-end; /* Align bars at the bottom */
-  height: 50px; /* Container height */
+  align-items: flex-end;
+  height: 50px;
 }
 
 .loader-bars div {
-  width: 8px; /* Bar width */
-  height: 10px; /* Start height */
-  margin: 0 3px; /* Spacing between bars */
-  background-color: #a6e3a1; /* Muted Green */
+  width: 8px;
+  height: 10px;
+  margin: 0 3px;
+  background-color: #a6e3a1;
   animation: bar-grow 1.2s infinite ease-in-out;
-  border-radius: 2px 2px 0 0; /* Slightly rounded top */
+  border-radius: 2px 2px 0 0;
 }
-
-/* Stagger the animation delays */
 .loader-bars div:nth-child(2) { animation-delay: 0.1s; }
 .loader-bars div:nth-child(3) { animation-delay: 0.2s; }
 .loader-bars div:nth-child(4) { animation-delay: 0.3s; }
 .loader-bars div:nth-child(5) { animation-delay: 0.4s; }
 
 @keyframes bar-grow {
-  0%, 40%, 100% {
-    height: 10px; /* Min height */
-    opacity: 0.5;
-    transform: scaleY(1); /* Start/end scale */
-  }
-  20% {
-    height: 50px; /* Max height */
-    opacity: 1;
-    transform: scaleY(1.1); /* Slight bounce effect */
-   }
+  0%, 40%, 100% { height: 10px; opacity: 0.5; transform: scaleY(1); }
+  20% { height: 50px; opacity: 1; transform: scaleY(1.1); }
 }
 
 #loadingScreen p {
     font-size: 1.4em;
-    color: #a6adc8; /* Lighter grey */
+    color: #a6adc8;
     margin-top: 25px;
     letter-spacing: 1px;
-    position: relative; /* Needed for pseudo-elements if using glitch */
+    position: relative;
 }
-
-/* Style for error state */
-#loadingScreen.error p {
-    color: #f38ba8; /* Reddish */
-    font-weight: bold;
-}
+#loadingScreen.error p { color: #f38ba8; font-weight: bold; }
 
 
 /* --- Homescreen --- */
-/* Scanlines Overlay */
 .scanlines {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    rgba(18, 18, 18, 0) 50%,
-    rgba(0, 0, 0, 0.25) 50%
-  ), linear-gradient(
-    90deg, rgba(255, 0, 0, 0.04), /* Reduced opacity */
-    rgba(0, 255, 0, 0.01),
-    rgba(0, 0, 255, 0.04)
-  );
-  background-size: 100% 3px, 4px 100%; /* Thinner scanlines, slightly wider color bars */
-  pointer-events: none;
-  z-index: 1; /* Below home-content */
-  opacity: 0.2; /* Reduced opacity */
-  animation: scanline-anim 20s linear infinite; /* Slower animation */
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(rgba(18, 18, 18, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+              linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04));
+  background-size: 100% 3px, 4px 100%;
+  pointer-events: none; z-index: 1; opacity: 0.2;
+  animation: scanline-anim 20s linear infinite;
 }
-@keyframes scanline-anim {
-    0% { background-position: 0 0; }
-    100% { background-position: 0 200%; } /* Move further for slower feel */
-}
+@keyframes scanline-anim { 0% { background-position: 0 0; } 100% { background-position: 0 200%; } }
 
 .home-content {
-    background-color: rgba(30, 30, 42, 0.85); /* Darker, less transparent */
+    background-color: rgba(30, 30, 42, 0.85);
     padding: 35px 55px;
-    border-radius: 5px; /* Sharper edges */
-    border: 1px solid rgba(137, 180, 250, 0.2); /* Faint blue border */
+    border-radius: 5px;
+    border: 1px solid rgba(137, 180, 250, 0.2);
     box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
     max-width: 480px;
-    z-index: 2; /* Above scanlines */
-    position: relative; /* Needed for z-index */
+    z-index: 2; position: relative;
 }
 
-.stencil-font {
-     font-family: 'Staatliches', cursive; /* Stencil-like font */
-     letter-spacing: 2px;
-}
+.stencil-font { font-family: 'Staatliches', cursive; letter-spacing: 2px; }
 
 #homeScreen h1.stencil-font {
-    font-size: 4.5em;
-    margin-bottom: 15px;
-    color: #89b4fa; /* Muted blue */
-    text-shadow: 0 0 8px rgba(137, 180, 250, 0.5);
-    font-weight: 400; /* Staatliches is often bold by default */
+    font-size: 4.5em; margin-bottom: 15px; color: #89b4fa;
+    text-shadow: 0 0 8px rgba(137, 180, 250, 0.5); font-weight: 400;
 }
-
-#playerCountLabel {
-    font-size: 1em;
-    margin-bottom: 20px;
-    color: #7f849c; /* Grey-blue */
-}
+#playerCountLabel { font-size: 1em; margin-bottom: 20px; color: #7f849c; }
 #playerCount { color: #cdd6f4; }
 
 #homeScreen input[type="text"] {
-    display: block;
-    width: calc(100% - 24px);
-    padding: 10px 12px;
-    margin-bottom: 25px; /* Adjusted margin */
-    border: 1px solid #45475a; /* Darker border */
-    border-radius: 3px;
-    background-color: rgba(17, 24, 32, 0.8); /* Match body bg, slightly transparent */
-    color: #cdd6f4;
-    font-size: 1em;
-    font-family: 'Roboto Condensed', sans-serif;
+    display: block; width: calc(100% - 24px); padding: 10px 12px;
+    margin-bottom: 25px; border: 1px solid #45475a; border-radius: 3px;
+    background-color: rgba(17, 24, 32, 0.8); color: #cdd6f4;
+    font-size: 1em; font-family: 'Roboto Condensed', sans-serif;
 }
-::placeholder { color: #585b70; opacity: 0.8; } /* Placeholder color */
+::placeholder { color: #585b70; opacity: 0.8; }
 
-/* Phrase container removed */
-
-#homeScreen button#nextButton { /* Style the NEXT button */
-    padding: 12px 28px;
-    font-size: 1.4em;
-    color: #111820; /* Dark text */
-    background-color: #a6e3a1; /* Muted green */
-    border: none;
-    border-radius: 3px;
-    cursor: pointer;
+#homeScreen button#nextButton {
+    padding: 12px 28px; font-size: 1.4em; color: #111820; background-color: #a6e3a1;
+    border: none; border-radius: 3px; cursor: pointer;
     transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
-    margin-top: 15px;
-    text-transform: uppercase; /* Uppercase text */
+    margin-top: 15px; text-transform: uppercase;
     box-shadow: inset 0 -2px 4px rgba(0,0,0,0.2);
 }
+#homeScreen button#nextButton:hover:not(:disabled) { background-color: #b4e8b1; box-shadow: 0 0 10px rgba(166, 227, 161, 0.5), inset 0 -2px 4px rgba(0,0,0,0.2); }
+#homeScreen button#nextButton:active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 -1px 2px rgba(0,0,0,0.3); }
+#homeScreen button#nextButton:disabled { background-color: #585b70; color: #313244; cursor: not-allowed; opacity: 0.7; box-shadow: inset 0 -2px 4px rgba(0,0,0,0.2); }
 
-#homeScreen button#nextButton:hover:not(:disabled) {
-    background-color: #b4e8b1; /* Lighter green */
-    box-shadow: 0 0 10px rgba(166, 227, 161, 0.5), inset 0 -2px 4px rgba(0,0,0,0.2);
-}
-#homeScreen button#nextButton:active:not(:disabled) {
-    transform: translateY(1px);
-    box-shadow: inset 0 -1px 2px rgba(0,0,0,0.3);
-}
-
-#homeScreen button#nextButton:disabled {
-    background-color: #585b70; /* Dark grey disabled */
-    color: #313244;
-    cursor: not-allowed;
-    opacity: 0.7;
-     box-shadow: inset 0 -2px 4px rgba(0,0,0,0.2);
-}
-
-.error-message {
-    color: #f38ba8; /* Red */
-    margin-top: 15px;
-    min-height: 1.2em; /* Reserve space */
-    font-weight: bold;
-    display: none; /* Hidden by default, shown by JS */
-}
+.error-message { color: #f38ba8; margin-top: 15px; min-height: 1.2em; font-weight: bold; display: none; }
 
 
 /* --- Character Select Screen --- */
-#characterSelectScreen {
-    /* Uses .screen base styles */
-    /* background-color: rgba(17, 24, 32, 0.97); Slightly different bg maybe? */
-}
+#characterSelectScreen {}
 
 .select-content {
-    background-color: rgba(30, 30, 42, 0.9); /* Similar to home content */
-    padding: 30px 40px;
-    border-radius: 5px;
-    border: 1px solid rgba(137, 180, 250, 0.25);
-    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
-    max-width: 550px; /* Slightly wider maybe */
-    z-index: 2;
-    position: relative;
-    display: flex; /* Use flex for layout */
-    flex-direction: column;
-    align-items: center;
+    background-color: rgba(30, 30, 42, 0.9);
+    padding: 30px 40px; border-radius: 5px; border: 1px solid rgba(137, 180, 250, 0.25);
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6); max-width: 550px;
+    z-index: 2; position: relative; display: flex; flex-direction: column; align-items: center;
 }
 
 #characterSelectScreen h2.stencil-font {
-    font-size: 3em;
-    margin-bottom: 20px;
-    color: #89b4fa;
-    text-shadow: 0 0 8px rgba(137, 180, 250, 0.5);
-    font-weight: 400;
+    font-size: 3em; margin-bottom: 20px; color: #89b4fa;
+    text-shadow: 0 0 8px rgba(137, 180, 250, 0.5); font-weight: 400;
 }
 
-#characterPreview {
-    width: 250px; /* Adjust size as needed */
-    height: 300px; /* Adjust size as needed */
-    background-color: rgba(17, 24, 32, 0.5); /* Placeholder background */
-    border: 1px solid #45475a;
-    margin-bottom: 15px;
-    border-radius: 4px;
-    position: relative; /* For canvas positioning */
-    overflow: hidden; /* Clip canvas */
+#characterPreview { /* Style the placeholder div */
+    width: 250px; height: 300px;
+    background-color: rgba(17, 24, 32, 0.5); border: 1px solid #45475a;
+    margin-bottom: 15px; border-radius: 4px;
+    display: flex; /* Center placeholder content */
+    justify-content: center;
+    align-items: center;
 }
-
-#previewCanvas {
-    display: block; /* Remove extra space below canvas */
-    width: 100%;
-    height: 100%;
-}
-
+/* previewCanvas styles removed */
 
 #characterNameDisplay {
-    font-size: 1.5em;
-    font-weight: bold;
-    color: #cdd6f4;
-    margin-bottom: 25px;
-    font-family: 'Staatliches', cursive;
-    letter-spacing: 1px;
+    font-size: 1.5em; font-weight: bold; color: #cdd6f4; margin-bottom: 25px;
+    font-family: 'Staatliches', cursive; letter-spacing: 1px;
 }
 
-/* Add styles for arrow buttons later */
-
-#characterSelectScreen button#confirmDeployButton { /* Style the deploy button */
-    padding: 12px 28px;
-    font-size: 1.4em;
-    color: #111820;
-    background-color: #a6e3a1; /* Same green as home */
-    border: none;
-    border-radius: 3px;
-    cursor: pointer;
+#characterSelectScreen button#confirmDeployButton {
+    padding: 12px 28px; font-size: 1.4em; color: #111820; background-color: #a6e3a1;
+    border: none; border-radius: 3px; cursor: pointer;
     transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
-    margin-top: 15px;
-    text-transform: uppercase;
+    margin-top: 15px; text-transform: uppercase;
     box-shadow: inset 0 -2px 4px rgba(0,0,0,0.2);
 }
+#characterSelectScreen button#confirmDeployButton:hover:not(:disabled) { background-color: #b4e8b1; box-shadow: 0 0 10px rgba(166, 227, 161, 0.5), inset 0 -2px 4px rgba(0,0,0,0.2); }
+#characterSelectScreen button#confirmDeployButton:active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 -1px 2px rgba(0,0,0,0.3); }
+#characterSelectScreen button#confirmDeployButton:disabled { background-color: #585b70; color: #313244; cursor: not-allowed; opacity: 0.7; box-shadow: inset 0 -2px 4px rgba(0,0,0,0.2); }
 
-#characterSelectScreen button#confirmDeployButton:hover:not(:disabled) {
-    background-color: #b4e8b1;
-    box-shadow: 0 0 10px rgba(166, 227, 161, 0.5), inset 0 -2px 4px rgba(0,0,0,0.2);
-}
-#characterSelectScreen button#confirmDeployButton:active:not(:disabled) {
-    transform: translateY(1px);
-    box-shadow: inset 0 -1px 2px rgba(0,0,0,0.3);
-}
-#characterSelectScreen button#confirmDeployButton:disabled {
-    background-color: #585b70;
-    color: #313244;
-    cursor: not-allowed;
-    opacity: 0.7;
-     box-shadow: inset 0 -2px 4px rgba(0,0,0,0.2);
-}
-
-#characterSelectError { /* Use .error-message base styles */
-   margin-top: 15px;
-}
+#characterSelectError { margin-top: 15px; }
 
 
 /* --- Game UI --- */
-#gameCanvas {
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    visibility: hidden; /* Controlled by JS */
-    z-index: 1; /* Behind UI screens */
-}
+#gameCanvas { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; visibility: hidden; z-index: 1; }
+#gameUI { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; z-index: 5; }
+#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; color: rgba(166, 227, 161, 0.8); text-shadow: 0 0 3px rgba(0, 0, 0, 0.7); }
+#info { position: absolute; top: 15px; left: 15px; background-color: rgba(17, 24, 32, 0.7); padding: 8px 12px; border-radius: 3px; font-size: 0.9em; color: #bac2de; border: 1px solid rgba(70, 72, 90, 0.5); }
 
-#gameUI {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none; /* Allow game interaction underneath */
-    display: none; /* Manage visibility with JS */
-    z-index: 5; /* Above canvas */
-}
+#healthBarContainer { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 300px; height: 25px; background-color: rgba(49, 50, 68, 0.7); border: 1px solid rgba(137, 180, 250, 0.3); border-radius: 5px; overflow: hidden; box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); }
+#healthBarFill { height: 100%; width: 100%; background: linear-gradient(to right, #f38ba8, #fab387, #a6e3a1); background-size: 200% 100%; background-position: 0% 0%; transition: width 0.3s ease-out, background-position 0.3s ease-out; border-radius: 4px 0 0 4px; }
+#healthText { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #111820; font-weight: bold; font-size: 0.9em; text-shadow: 0 0 2px rgba(205, 214, 244, 0.5); }
 
-#crosshair {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 24px;
-    color: rgba(166, 227, 161, 0.8); /* Muted green crosshair */
-    text-shadow: 0 0 3px rgba(0, 0, 0, 0.7);
-}
-
-#info {
-    position: absolute;
-    top: 15px;
-    left: 15px;
-    background-color: rgba(17, 24, 32, 0.7); /* Dark background */
-    padding: 8px 12px;
-    border-radius: 3px;
-    font-size: 0.9em;
-    color: #bac2de; /* Light blue-grey */
-    border: 1px solid rgba(70, 72, 90, 0.5);
-}
-
-/* Health Bar */
-#healthBarContainer {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 300px;
-    height: 25px;
-    background-color: rgba(49, 50, 68, 0.7); /* Darker grey background */
-    border: 1px solid rgba(137, 180, 250, 0.3); /* Muted blue border */
-    border-radius: 5px;
-    overflow: hidden; /* Clip the fill */
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-}
-
-#healthBarFill {
-    height: 100%;
-    width: 100%; /* Start full */
-    /* Dynamic gradient: Red -> Yellow -> Green */
-    background: linear-gradient(to right, #f38ba8, #fab387, #a6e3a1); /* Catppuccin Mocha colors: Red, Peach, Green */
-    background-size: 200% 100%; /* Size for shifting effect */
-    background-position: 0% 0%; /* Start at green (100% health = 0% position) */
-    transition: width 0.3s ease-out, background-position 0.3s ease-out; /* Smooth transitions */
-    border-radius: 4px 0 0 4px; /* Slightly rounded left edge */
-}
-
-#healthText {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #111820; /* Dark text for contrast */
-    font-weight: bold;
-    font-size: 0.9em;
-    text-shadow: 0 0 2px rgba(205, 214, 244, 0.5); /* Light text shadow */
-}
-
-/* Kill Message */
-#killMessage {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    background-color: rgba(243, 139, 168, 0.7); /* Reddish background */
-    color: #111820; /* Dark text */
-    padding: 10px 15px;
-    border-radius: 3px;
-    font-size: 1.0em; /* Slightly smaller */
-    font-weight: bold;
-    text-align: center;
-    opacity: 0; /* Hidden by default */
-    transition: opacity 0.5s ease-in-out;
-    max-width: 400px;
-    border: 1px solid rgba(205, 214, 244, 0.3);
-}
-
-#killMessage.visible {
-    opacity: 1;
-}
+#killMessage { position: absolute; top: 15px; right: 15px; background-color: rgba(243, 139, 168, 0.7); color: #111820; padding: 10px 15px; border-radius: 3px; font-size: 1.0em; font-weight: bold; text-align: center; opacity: 0; transition: opacity 0.5s ease-in-out; max-width: 400px; border: 1px solid rgba(205, 214, 244, 0.3); }
+#killMessage.visible { opacity: 1; }
 /* --- END OF FULL style.css FILE --- */
