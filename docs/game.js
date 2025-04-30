@@ -1,3 +1,4 @@
+// --- START OF FULL game.js FILE ---
 // docs/game.js - Main Game Orchestrator (Uses Global Scope - v14 Quaternion Fix 2)
 
 // --- Global variables like networkIsInitialized, assetsAreReady, etc., ---
@@ -60,7 +61,10 @@ class Game {
         stateMachine.transitionTo('loading', { message: 'Setting up Graphics...' });
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene(); window.scene = this.scene; // Assign to global window.scene
+
+        // Set Sky Color
         this.scene.background = new THREE.Color(0x87CEEB); // Sky Blue
+
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500); window.camera = this.camera; // Assign to global window.camera
         this.renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.shadowMap.enabled = true; window.renderer = this.renderer; // Assign to global window.renderer
@@ -302,10 +306,8 @@ class Game {
         let colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, r)
             .setFriction(0.7).setRestitution(0.1).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
 
-        // ***** MODIFIED LINE HERE *****
         // Convert Y rotation to Quaternion using global RAPIER
         const quaternion = RAPIER.Quaternion.rotation_from_axis_angle({ x: 0, y: 1, z: 0 }, initialRotationY);
-        // ****************************
         if (!quaternion) { console.error(`Failed to create quaternion for player ${playerId}`); return; }
 
         colliderDesc.userData = { entityId: playerId, isLocal: isLocal, isPlayer: true };
@@ -490,7 +492,15 @@ class Game {
                  }
                  // Handle Collisions
                  rapierEventQueue.drainCollisionEvents((handle1, handle2, started) => {
-                     // Collision logic...
+                    const collider1 = rapierWorld.getCollider(handle1);
+                    const collider2 = rapierWorld.getCollider(handle2);
+                    if(started && collider1?.userData?.isLocal && collider2?.userData?.isPlayer) {
+                       // console.log(`Local player collided with player ${collider2.userData.entityId}`);
+                    } else if (started && collider2?.userData?.isLocal && collider1?.userData?.isPlayer) {
+                       // console.log(`Local player collided with player ${collider1.userData.entityId}`);
+                    } else if (started && (collider1?.userData?.isLocal || collider2?.userData?.isLocal)) {
+                       // console.log(`Local player collided with map/other object.`);
+                    }
                  });
             }
 
@@ -566,3 +576,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 console.log("game.js loaded (Uses Global Scope - v14 Quaternion Fix 2)");
+// --- END OF FULL game.js FILE ---
