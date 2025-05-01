@@ -42,7 +42,7 @@ if (SPAWN_POINTS.length === 0) {
 
 // --- Socket.IO Server Setup ---
 const allowedOrigins = [
-    "https://gerpungus.github.io",
+    "https://grapungus.github.io",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
 ];
