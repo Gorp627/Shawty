@@ -1,4 +1,4 @@
-// --- START OF FULL gameLogic.js FILE (Manual Raycasting v6 - Simplified Collision - FIXED) ---
+// --- START OF FULL gameLogic.js FILE (Manual Raycasting v6 - Simplified Collision - FIXED SCOPE) ---
 // docs/gameLogic.js (Manual Raycasting v6 - Simplified Collision)
 
 // Accesses globals: players, localPlayerId, CONFIG, THREE, Network, Input, UIManager, stateMachine, Effects, scene, mapMesh, playerVelocities, playerIsGrounded
@@ -11,17 +11,16 @@ const DASH_VELOCITY = CONFIG?.DASH_VELOCITY_MAGNITUDE ?? 15.0;
 const DASH_UP_FACTOR = CONFIG?.DASH_UP_FACTOR ?? 0.15;
 const GROUND_CHECK_DIST = CONFIG?.GROUND_CHECK_DISTANCE ?? 0.25;
 const COLLISION_CHECK_DIST = CONFIG?.COLLISION_CHECK_DISTANCE ?? 0.6;
-// const PLAYER_RADIUS = CONFIG?.PLAYER_RADIUS ?? 0.4; // <--- REMOVED THIS LINE
 const PLAYER_HEIGHT = CONFIG?.PLAYER_HEIGHT ?? 1.8;
-const PLAYER_FEET_OFFSET = PLAYER_HEIGHT / 2.0; // Use calculated value based on PLAYER_HEIGHT
-const PLAYER_CENTER_OFFSET = PLAYER_HEIGHT / 2.0; // Use calculated value based on PLAYER_HEIGHT
+const PLAYER_FEET_OFFSET = PLAYER_HEIGHT / 2.0;
+const PLAYER_CENTER_OFFSET = PLAYER_HEIGHT / 2.0;
 const STEP_HEIGHT = CONFIG?.PLAYER_STEP_HEIGHT ?? 0.3;
 
 const SHOOT_COOLDOWN_MS = CONFIG?.SHOOT_COOLDOWN ?? 150;
 const BULLET_DMG = CONFIG?.BULLET_DAMAGE ?? 25;
 const BULLET_MAX_RANGE = CONFIG?.BULLET_RANGE ?? 300;
 const ROCKET_JUMP_VEL = CONFIG?.ROCKET_JUMP_VELOCITY ?? 12.0;
-const ROCKET_JUMP_THRESH = CONFIG?.ROCKET_JUMP_ANGLE_THRESHOLD ?? -0.7;
+// ROCKET_JUMP_THRESH was defined but not used in performShoot fix, using threshold directly
 const DEATH_SHOCKWAVE_VEL = CONFIG?.DEATH_SHOCKWAVE_VELOCITY ?? 18.0;
 const DEATH_SHOCKWAVE_RADIUS = CONFIG?.DEATH_EXPLOSION_RADIUS ?? 15.0;
 
@@ -32,8 +31,9 @@ const tempGroundRay = new THREE.Raycaster();
 
 /**
  * Updates the local player's velocity based on input.
+ * ATTACHED TO WINDOW object to make it globally accessible from game.js
  */
-function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
+window.updateLocalPlayerInput = function(deltaTime, camera, localPlayerMesh) { // <--- Added window.
     // console.log("Entered updateLocalPlayerInput"); // Keep commented unless needed
 
     // Use guards - ensure player/velocity/grounded maps exist
@@ -63,10 +63,12 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
     const right = tempVec2.set(1, 0, 0).applyQuaternion(camera.quaternion); right.y = 0; right.normalize();
     let moveDirectionX = 0;
     let moveDirectionZ = 0;
-    if (Input.keys['KeyW']) { moveDirectionX += forward.x; moveDirectionZ += forward.z; }
-    if (Input.keys['KeyS']) { moveDirectionX -= forward.x; moveDirectionZ -= forward.z; }
-    if (Input.keys['KeyA']) { moveDirectionX -= right.x; moveDirectionZ -= right.z; }
-    if (Input.keys['KeyD']) { moveDirectionX += right.x; moveDirectionZ += right.z; }
+    // Check WASD keys specifically
+    if (Input.keys['KeyW']) { console.log("[DEBUG InputLogic] W Detected"); moveDirectionX += forward.x; moveDirectionZ += forward.z; } // DEBUG
+    if (Input.keys['KeyS']) { console.log("[DEBUG InputLogic] S Detected"); moveDirectionX -= forward.x; moveDirectionZ -= forward.z; } // DEBUG
+    if (Input.keys['KeyA']) { console.log("[DEBUG InputLogic] A Detected"); moveDirectionX -= right.x; moveDirectionZ -= right.z; } // DEBUG
+    if (Input.keys['KeyD']) { console.log("[DEBUG InputLogic] D Detected"); moveDirectionX += right.x; moveDirectionZ += right.z; } // DEBUG
+
 
     const inputLengthSq = moveDirectionX * moveDirectionX + moveDirectionZ * moveDirectionZ;
     if (inputLengthSq > 1.0) { // Normalize if magnitude > 1 (diagonal movement)
@@ -93,6 +95,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
 
     // --- Handle Jump ---
     if (Input.keys['Space'] && isGrounded) {
+        console.log("[DEBUG InputLogic] Jump Detected & Grounded"); // DEBUG
         currentVel.y = JUMP_VELOCITY;
         window.playerIsGrounded[localPlayerId] = false; // Update global directly
         Input.keys['Space'] = false; // Consume the jump input immediately
@@ -101,6 +104,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
     // --- Handle Dash ---
     // Dash is requested via Input.requestingDash flag, set by input.js
     if (Input.requestingDash) {
+        console.log("[DEBUG InputLogic] Dash Consumed"); // DEBUG
         const dashDir = Input.dashDirection; // Get direction calculated by input.js
         currentVel.x += dashDir.x * DASH_VELOCITY;
         currentVel.z += dashDir.z * DASH_VELOCITY;
@@ -113,6 +117,7 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
     // --- Handle Shooting ---
     const now = Date.now();
     if (Input.mouseButtons[0] && now > (window.lastShootTime || 0) + SHOOT_COOLDOWN_MS) {
+        console.log("[DEBUG InputLogic] Shoot Detected (Button 0)"); // DEBUG
         window.lastShootTime = now;
         performShoot(camera); // Handles raycasting, network messages, effects, rocket jump
         // Input.mouseButtons[0] = false; // Optional: Consume click immediately (or allow holding)
@@ -126,8 +131,9 @@ function updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
 /**
  * Performs collision detection and response for the local player.
  * Updates the player's position directly.
+ * ATTACHED TO WINDOW object to make it globally accessible from game.js
  */
-function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
+window.checkPlayerCollisionAndMove = function(playerMesh, playerVelocity, deltaTime) { // <--- Added window.
     // console.log("Entered checkPlayerCollisionAndMove"); // Keep commented unless needed
 
     /** Helper for Wall Collision Check */
@@ -141,6 +147,7 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
             tempRaycaster.set(checkOrigin, direction); tempRaycaster.far = checkDistance;
             const intersects = tempRaycaster.intersectObjects(collisionObjects, true);
             if (intersects.length > 0 && intersects[0].distance <= checkDistance + 0.01) { // Check slightly beyond target distance
+                // console.log(`[DEBUG Collision] Wall hit! Dir: ${direction.x.toFixed(1)},${direction.z.toFixed(1)} Dist: ${intersects[0].distance.toFixed(2)} CheckDist: ${checkDistance.toFixed(2)}`); // DEBUG
                 return true; // Collision detected
             }
         }
@@ -152,6 +159,9 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
         const checkOrigin = currentPosFeet.clone().add(new THREE.Vector3(0, offset, 0));
         tempRaycaster.set(checkOrigin, direction); tempRaycaster.far = distance + 0.05; // Check slightly beyond target distance
         const intersects = tempRaycaster.intersectObjects(collisionObjects, true);
+        if(intersects.length > 0) {
+             // console.log(`[DEBUG Collision] Vert hit! Up:${movingUp} Dist: ${intersects[0].distance.toFixed(2)} CheckDist: ${(distance + 0.05).toFixed(2)}`); // DEBUG
+        }
         return intersects.length > 0; // Collision detected if any intersects
     }
 
@@ -284,13 +294,14 @@ function checkPlayerCollisionAndMove(playerMesh, playerVelocity, deltaTime) {
     // Return the final grounded state
     // console.log(`Collision Check Result: Grounded=${isGrounded}, Final Pos Y=${finalPosition.y.toFixed(2)}, Vel Y=${playerVelocity.y.toFixed(2)}`);
     return isGrounded;
-}
+} // End of checkPlayerCollisionAndMove
 
 
 /**
  * Performs shooting logic: Raycast, send hit, trigger effects/rocket jump.
+ * ATTACHED TO WINDOW object to make it globally accessible (called by InputLogic)
  */
-function performShoot(camera) {
+window.performShoot = function(camera) { // <--- Added window.
     // console.log("Entered performShoot"); // Keep commented unless needed
     if (!camera || !Network || !scene) {
         console.warn("[Shoot] Missing camera, Network, or scene reference.");
@@ -299,11 +310,14 @@ function performShoot(camera) {
 
     // Play sound effect locally immediately
     if (window.gunSoundBuffer) { Effects.playSound(window.gunSoundBuffer, null, false, 0.4); }
+    console.log("[DEBUG ShootLogic] Gun sound played (attempted)."); // DEBUG
 
     const raycaster = new THREE.Raycaster();
     const origin = new THREE.Vector3(); const direction = new THREE.Vector3();
     camera.getWorldPosition(origin); // Get camera's world position
     camera.getWorldDirection(direction); // Get camera's world direction
+    console.log(`[DEBUG ShootLogic] Raycast from (${origin.x.toFixed(1)},${origin.y.toFixed(1)},${origin.z.toFixed(1)}) dir (${direction.x.toFixed(1)},${direction.y.toFixed(1)},${direction.z.toFixed(1)})`); // DEBUG
+
 
     raycaster.set(origin, direction);
     raycaster.far = BULLET_MAX_RANGE;
@@ -317,7 +331,7 @@ function performShoot(camera) {
         }
     }
     // Add the map mesh for environment hits (optional, if bullets should stop on walls)
-    // if (window.mapMesh) { potentialTargets.push(window.mapMesh); }
+    if (window.mapMesh) { potentialTargets.push(window.mapMesh); } // ADDED MAP MESH TO TARGETS
 
     const intersects = raycaster.intersectObjects(potentialTargets, true); // Check recursively
 
@@ -345,50 +359,47 @@ function performShoot(camera) {
 
         // Ensure hitPlayerId is set AND it's not the local player
         if (hitPlayerId && hitPlayerId !== window.localPlayerId && window.players[hitPlayerId]?.health > 0) {
-             console.log(`Hit player ${hitPlayerId} (${window.players[hitPlayerId]?.name || '??'}) at distance ${nearestHit.distance.toFixed(2)}`);
+             console.log(`[DEBUG ShootLogic] Hit player ${hitPlayerId} (${window.players[hitPlayerId]?.name || '??'}) at distance ${nearestHit.distance.toFixed(2)}`); // DEBUG
              Network.sendPlayerHit({ targetId: hitPlayerId, damage: BULLET_DMG });
              // Optional: Show hit marker effect here
         } else {
              // Hit the environment or self, no damage dealt to others
-             // console.log(`[Shoot] Hit environment or self at distance ${nearestHit.distance.toFixed(2)}`);
+             console.log(`[DEBUG ShootLogic] Hit environment/self/dead player at distance ${nearestHit.distance.toFixed(2)}`); // DEBUG
              // Optional: Create bullet hole decal or spark effect at nearestHit.point
         }
     } else {
          // Shot hit nothing within range
-         // console.log("[Shoot] Shot missed.");
+         console.log("[DEBUG ShootLogic] Shot missed."); // DEBUG
     }
 
     // --- Rocket Jump Check ---
     // Check if 'E' key is held down ('KeyE' for code)
     if (Input.keys['KeyE']) {
-        // console.log("[Shoot] Checking Rocket Jump (E key held)");
+        console.log("[DEBUG ShootLogic] Checking Rocket Jump (E key held)"); // DEBUG
         const worldDown = new THREE.Vector3(0, -1, 0);
-        // Calculate dot product between camera direction and world down
-        // If camera looks down significantly, dot product will be positive (closer to 1)
-        // We use a threshold for looking mostly down, not straight down.
-        // Your original threshold ROCKET_JUMP_THRESH = -0.7 is for looking UPWARDS.
-        // Let's reverse the logic: We need to look DOWN. Dot product > threshold.
-        // A positive threshold (e.g., 0.5) means looking significantly downwards.
-        const downwardLookThreshold = 0.5; // Adjust as needed (0 = horizontal, 1 = straight down)
+        const downwardLookThreshold = 0.5; // Look significantly down (0 = horizontal, 1 = straight down)
         const dotProd = direction.dot(worldDown);
-        // console.log("Rocket Jump Dot Product:", dotProd.toFixed(2));
+        console.log("[DEBUG ShootLogic] Rocket Jump Dot Product (CamDir . WorldDown):", dotProd.toFixed(2)); // DEBUG
 
         if (dotProd > downwardLookThreshold) { // Check if looking sufficiently downward
             const localPlayerVelocity = window.playerVelocities[localPlayerId];
             if (localPlayerVelocity) {
-                console.log("[Shoot] Applying Rocket Jump Velocity!");
+                console.log("[DEBUG ShootLogic] Applying Rocket Jump Velocity!"); // DEBUG
                 localPlayerVelocity.y += ROCKET_JUMP_VEL; // Apply upward velocity boost
                 if(window.playerIsGrounded) window.playerIsGrounded[localPlayerId] = false; // Ensure player becomes airborne
             }
+        } else {
+            console.log("[DEBUG ShootLogic] Rocket Jump condition not met (not looking down enough)."); // DEBUG
         }
     }
-}
+} // End of performShoot
 
 
 /**
  * Applies velocity change to nearby players on death.
+ * ATTACHED TO WINDOW object to make it globally accessible (called by Network)
  */
-function applyShockwave(originPosition, deadPlayerId) {
+window.applyShockwave = function(originPosition, deadPlayerId) { // <--- Added window.
      if (!window.players || !playerVelocities) { console.warn("[Shockwave] Missing players or velocities map."); return; }
     const origin = originPosition; // Assumed to be center of explosion
 
@@ -422,16 +433,18 @@ function applyShockwave(originPosition, deadPlayerId) {
 
                 // Make sure target becomes airborne if they were grounded
                 if (playerIsGrounded[targetId]) { playerIsGrounded[targetId] = false; }
+                 console.log(`[DEBUG Shockwave] Applied force to ${targetId}. Dist: ${distance.toFixed(1)}, Mag: ${velocityMagnitude.toFixed(1)}`); // DEBUG
             }
         } catch (e) { console.error(`Error calculating shockwave for player ${targetId}:`, e); }
     }
-}
+} // End of applyShockwave
 
 
 /**
  * Checks if the local player has moved/rotated enough and sends an update.
+ * ATTACHED TO WINDOW object to make it globally accessible (called by game.js)
  */
-function sendLocalPlayerUpdateIfNeeded(localPlayerMesh, camera) {
+window.sendLocalPlayerUpdateIfNeeded = function(localPlayerMesh, camera) { // <--- Added window.
       if (!localPlayerId || !window.players[localPlayerId]) return;
      const localPlayer = window.players[localPlayerId];
      if (!localPlayer || !localPlayerMesh || !camera || localPlayer.health <= 0) return;
@@ -473,10 +486,11 @@ function sendLocalPlayerUpdateIfNeeded(localPlayerMesh, camera) {
 
              // Send the update via Network module
              Network?.sendPlayerUpdate({ x: feetPos.x, y: feetPos.y, z: feetPos.z, rotationY: currentRotationY });
+             // console.log(`[DEBUG NetworkSend] Sent Update. PosChanged: ${positionChanged}, RotChanged: ${rotationChanged}`); // DEBUG
          }
      } catch(e) { console.error("!!! Error calculating/sending network update:", e); }
-}
+} // End of sendLocalPlayerUpdateIfNeeded
 
 
-console.log("gameLogic.js loaded (Manual Raycasting v6 - Simplified Collision - FIXED)");
+console.log("gameLogic.js loaded (Manual Raycasting v6 - Simplified Collision - FIXED SCOPE)");
 // --- END OF FULL gameLogic.js FILE ---
