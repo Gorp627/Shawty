@@ -1,9 +1,9 @@
-// --- START OF FULL gameLogic.js FILE (CLASS-BASED REFACTOR v1 - DETAILED INTERNAL LOGS) ---
+// --- START OF FULL gameLogic.js FILE (CLASS-BASED REFACTOR v1 - DIRECT VELOCITY SET DEBUG) ---
 // docs/gameLogic.js - Encapsulates game simulation logic
 
 // Accesses globals: CONFIG, THREE, Network, Input, UIManager, stateMachine, Effects, scene, mapMesh, players, localPlayerId, playerVelocities, playerIsGrounded
 
-console.log("gameLogic.js loading (CLASS-BASED REFACTOR v1 - DETAILED INTERNAL LOGS)...");
+console.log("gameLogic.js loading (CLASS-BASED REFACTOR v1 - DIRECT VELOCITY SET DEBUG)...");
 
 class GameLogic {
     constructor(gameInstance) {
@@ -35,8 +35,10 @@ class GameLogic {
         console.log("[GameLogic] Instance created.");
     }
 
+    // Method inside the GameLogic class
     /**
      * Updates the local player's velocity based on input.
+     * !!! MODIFIED FOR DEBUGGING: DIRECT VELOCITY SET !!!
      */
     updateLocalPlayerInput(deltaTime, camera, localPlayerMesh) {
         // Use this.GRAVITY etc. instead of global constants
@@ -48,101 +50,100 @@ class GameLogic {
         const isGrounded = window.playerIsGrounded.hasOwnProperty(localPlayerId) ? window.playerIsGrounded[localPlayerId] : false;
         const currentVel = window.playerVelocities[localPlayerId];
 
-        console.log(`[DEBUG InputLogic Start] Vel In:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)}), Grounded: ${isGrounded}`); // DEBUG
+        // Preserve current Y velocity unless jumping or dashing modifies it
+        const previousVelY = currentVel.y;
+
+        // Reset horizontal velocity each frame before applying input directly
+        currentVel.x = 0;
+        currentVel.z = 0;
+        // Keep vertical velocity for gravity/jump/dash continuity, unless grounded
+        if (isGrounded && previousVelY < 0) {
+             currentVel.y = 0; // Reset Y velocity if landing
+        } else {
+             currentVel.y = previousVelY; // Keep previous Y velocity if airborne or moving up
+        }
+
+
+        console.log(`[DEBUG InputLogic Start (Direct Set)] Vel In:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)}), Grounded: ${isGrounded}`); // DEBUG
 
         const isPlaying = stateMachine?.is('playing');
         const isLocked = window.controls?.isLocked;
-        if (!isPlaying || !isLocked || localPlayer.health <= 0) {
-            // Apply damping when not actively playing/locked/alive
-            currentVel.x *= 0.9; currentVel.z *= 0.9;
-            if (Math.abs(currentVel.x) < 0.1) currentVel.x = 0;
-            if (Math.abs(currentVel.z) < 0.1) currentVel.z = 0;
-            if (!isGrounded) currentVel.y -= this.GRAVITY * deltaTime; // Still apply gravity if airborne
-            // console.log(`[DEBUG InputLogic Skip] Paused/Dead. Vel Out:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // DEBUG
-            return;
-        }
 
-        // --- Horizontal Movement ---
-        const moveSpeed = Input.keys['ShiftLeft'] ? (CONFIG?.MOVEMENT_SPEED_SPRINTING ?? 10.5) : (CONFIG?.MOVEMENT_SPEED ?? 7.0);
-        const forward = this.tempVec.set(0, 0, -1).applyQuaternion(camera.quaternion); forward.y = 0; forward.normalize();
-        const right = this.tempVec2.set(1, 0, 0).applyQuaternion(camera.quaternion); right.y = 0; right.normalize();
-        let moveDirectionX = 0;
-        let moveDirectionZ = 0;
+        // Only process input if playing, locked, and alive
+        if (isPlaying && isLocked && localPlayer.health > 0) {
 
-        if (Input.keys['KeyW']) { /*console.log("[DEBUG InputLogic] W");*/ moveDirectionX += forward.x; moveDirectionZ += forward.z; }
-        if (Input.keys['KeyS']) { /*console.log("[DEBUG InputLogic] S");*/ moveDirectionX -= forward.x; moveDirectionZ -= forward.z; }
-        if (Input.keys['KeyA']) { /*console.log("[DEBUG InputLogic] A");*/ moveDirectionX -= right.x; moveDirectionZ -= right.z; }
-        if (Input.keys['KeyD']) { /*console.log("[DEBUG InputLogic] D");*/ moveDirectionX += right.x; moveDirectionZ += right.z; }
+            // --- Horizontal Movement (Direct Set) ---
+            const moveSpeed = Input.keys['ShiftLeft'] ? (CONFIG?.MOVEMENT_SPEED_SPRINTING ?? 10.5) : (CONFIG?.MOVEMENT_SPEED ?? 7.0);
+            const forward = this.tempVec.set(0, 0, -1).applyQuaternion(camera.quaternion); forward.y = 0; forward.normalize();
+            const right = this.tempVec2.set(1, 0, 0).applyQuaternion(camera.quaternion); right.y = 0; right.normalize();
+            let moveDirectionX = 0;
+            let moveDirectionZ = 0;
+            let inputDetected = false; // DEBUG Flag
 
-        const inputLengthSq = moveDirectionX * moveDirectionX + moveDirectionZ * moveDirectionZ;
-         let targetVelocityX = 0, targetVelocityZ = 0;
-        if (inputLengthSq > 0.001) { // Only calculate target velocity if there's input
-             if (inputLengthSq > 1.0) { // Normalize if magnitude > 1 (diagonal movement)
-                const inputLength = Math.sqrt(inputLengthSq);
-                moveDirectionX /= inputLength; moveDirectionZ /= inputLength;
+            if (Input.keys['KeyW']) { moveDirectionX += forward.x; moveDirectionZ += forward.z; inputDetected = true; }
+            if (Input.keys['KeyS']) { moveDirectionX -= forward.x; moveDirectionZ -= forward.z; inputDetected = true; }
+            if (Input.keys['KeyA']) { moveDirectionX -= right.x; moveDirectionZ -= right.z; inputDetected = true; }
+            if (Input.keys['KeyD']) { moveDirectionX += right.x; moveDirectionZ += right.z; inputDetected = true; }
+
+            if(inputDetected) { // Only apply velocity if WASD is pressed
+                const inputLengthSq = moveDirectionX * moveDirectionX + moveDirectionZ * moveDirectionZ;
+                if (inputLengthSq > 0.001) { // Normalize if necessary
+                    if (inputLengthSq > 1.0) {
+                        const inputLength = Math.sqrt(inputLengthSq);
+                        moveDirectionX /= inputLength; moveDirectionZ /= inputLength;
+                    }
+                    // *** DIRECTLY SET VELOCITY ***
+                    currentVel.x = moveDirectionX * moveSpeed;
+                    currentVel.z = moveDirectionZ * moveSpeed;
+                    console.log(`[DEBUG InputLogic Move (Direct Set)] Applied Vel: (${currentVel.x.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // DEBUG
+                }
+            } else {
+                 // console.log(`[DEBUG InputLogic Move (Direct Set)] No WASD detected.`); // DEBUG
+            }
+
+            // --- Handle Jump ---
+            if (Input.keys['Space'] && isGrounded) {
+                console.log("[DEBUG InputLogic Jump (Direct Set)] Applying Jump Velocity!"); // DEBUG
+                currentVel.y = this.JUMP_VELOCITY;
+                window.playerIsGrounded[localPlayerId] = false;
+                Input.keys['Space'] = false;
+            }
+
+             // --- Handle Dash ---
+             if (Input.requestingDash) {
+                 console.log("[DEBUG InputLogic Dash (Direct Set)] Consuming Dash Request!"); // DEBUG
+                 const dashDir = Input.dashDirection;
+                 // Apply dash velocity additively
+                 currentVel.x += dashDir.x * this.DASH_VELOCITY;
+                 currentVel.z += dashDir.z * this.DASH_VELOCITY;
+                 currentVel.y = Math.max(currentVel.y + this.DASH_VELOCITY * this.DASH_UP_FACTOR, currentVel.y * 0.5 + this.DASH_VELOCITY * this.DASH_UP_FACTOR * 0.5);
+                 window.playerIsGrounded[localPlayerId] = false;
+                 Input.requestingDash = false;
              }
-             targetVelocityX = moveDirectionX * moveSpeed;
-             targetVelocityZ = moveDirectionZ * moveSpeed;
-             // console.log(`[DEBUG InputLogic Move] Input Vec: (${moveDirectionX.toFixed(2)}, ${moveDirectionZ.toFixed(2)}), Speed: ${moveSpeed.toFixed(1)}, TargetVel: (${targetVelocityX.toFixed(2)}, ${targetVelocityZ.toFixed(2)})`); // DEBUG
-        } else {
-            // No input, target velocity is zero for damping
-            targetVelocityX = 0;
-            targetVelocityZ = 0;
-            // console.log(`[DEBUG InputLogic Move] No WASD input.`); // DEBUG
-        }
+
+             // --- Handle Shooting ---
+             const now = Date.now();
+             const shootReadyTime = (window.lastShootTime || 0) + this.SHOOT_COOLDOWN_MS;
+             if (Input.mouseButtons[0] && now > shootReadyTime) {
+                 console.log("[DEBUG InputLogic Shoot (Direct Set)] Shoot Triggered!"); // DEBUG
+                 window.lastShootTime = now;
+                 this.performShoot(camera);
+             }
+
+        } // End if (isPlaying && isLocked && localPlayer.health > 0)
 
 
-        // Apply movement velocity (using lerp for smoother acceleration/deceleration towards target)
-        const accelFactor = isGrounded ? 0.2 : 0.08; // Faster acceleration on ground
-        currentVel.x = THREE.MathUtils.lerp(currentVel.x, targetVelocityX, accelFactor);
-        currentVel.z = THREE.MathUtils.lerp(currentVel.z, targetVelocityZ, accelFactor);
-        // console.log(`[DEBUG InputLogic Move] Vel after Lerp: (${currentVel.x.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // DEBUG
+        // --- Apply Gravity (Always applies if not grounded) ---
+         const velYBeforeGravity = currentVel.y; // DEBUG
+         if (!isGrounded) {
+             currentVel.y -= this.GRAVITY * deltaTime;
+         }
+         // if (currentVel.y !== velYBeforeGravity) console.log(`[DEBUG InputLogic Gravity (Direct Set)] Applied. VelY: ${currentVel.y.toFixed(2)} (was ${velYBeforeGravity.toFixed(2)}), Grounded: ${isGrounded}`); // DEBUG
 
-        // --- Apply Gravity ---
-        const velYBeforeGravity = currentVel.y; // DEBUG
-        if (!isGrounded) {
-            currentVel.y -= this.GRAVITY * deltaTime;
-        } else {
-             // Prevent positive Y velocity when grounded (can happen from step-up)
-             if (currentVel.y > 0) currentVel.y = 0;
-             // Apply slight downward force if grounded to help stick on slopes, limited by gravity itself
-             currentVel.y = Math.max(currentVel.y, -this.GRAVITY * deltaTime * 2);
-        }
-        // if (currentVel.y !== velYBeforeGravity) console.log(`[DEBUG InputLogic Gravity] Applied. VelY: ${currentVel.y.toFixed(2)} (was ${velYBeforeGravity.toFixed(2)}), Grounded: ${isGrounded}`); // DEBUG
 
-        // --- Handle Jump ---
-        if (Input.keys['Space'] && isGrounded) {
-            console.log("[DEBUG InputLogic Jump] Applying Jump Velocity!"); // DEBUG
-            currentVel.y = this.JUMP_VELOCITY;
-            window.playerIsGrounded[localPlayerId] = false; // Update global directly
-            Input.keys['Space'] = false; // Consume the jump input immediately
-        }
+         console.log(`[DEBUG InputLogic End (Direct Set)] Vel Out:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // DEBUG
+    } // End of updateLocalPlayerInput method (Direct Set Version)
 
-        // --- Handle Dash ---
-        // Dash is requested via Input.requestingDash flag, set by input.js
-        if (Input.requestingDash) {
-            console.log("[DEBUG InputLogic Dash] Consuming Dash Request!"); // DEBUG
-            const dashDir = Input.dashDirection; // Get direction calculated by input.js
-            currentVel.x += dashDir.x * this.DASH_VELOCITY;
-            currentVel.z += dashDir.z * this.DASH_VELOCITY;
-            // Add upward component, ensuring it doesn't cancel existing upward velocity completely
-            currentVel.y = Math.max(currentVel.y + this.DASH_VELOCITY * this.DASH_UP_FACTOR, currentVel.y * 0.5 + this.DASH_VELOCITY * this.DASH_UP_FACTOR * 0.5);
-            window.playerIsGrounded[localPlayerId] = false; // Dashing makes you airborne
-            Input.requestingDash = false; // Consume the dash request
-        }
-
-        // --- Handle Shooting ---
-        const now = Date.now();
-        const shootReadyTime = (window.lastShootTime || 0) + this.SHOOT_COOLDOWN_MS;
-        if (Input.mouseButtons[0] && now > shootReadyTime) {
-            console.log("[DEBUG InputLogic Shoot] Shoot Triggered!"); // DEBUG
-            window.lastShootTime = now;
-            this.performShoot(camera); // Handles raycasting, network messages, effects, rocket jump
-            // Input.mouseButtons[0] = false; // Optional: Consume click immediately (or allow holding)
-        } //else if (Input.mouseButtons[0]) { console.log(`[DEBUG InputLogic Shoot] Cooldown active. Now: ${now}, Ready: ${shootReadyTime}`); } // DEBUG
-
-         console.log(`[DEBUG InputLogic End] Vel Out:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // DEBUG
-    } // End of updateLocalPlayerInput method
 
     /**
      * Performs collision detection and response for the local player.
@@ -470,6 +471,6 @@ class GameLogic {
 
 } // End GameLogic Class
 
-console.log("gameLogic.js loaded successfully (CLASS-BASED REFACTOR v1 - DETAILED INTERNAL LOGS).");
+console.log("gameLogic.js loaded successfully (CLASS-BASED REFACTOR v1 - DIRECT VELOCITY SET DEBUG).");
 
 // --- END OF FULL gameLogic.js FILE ---
