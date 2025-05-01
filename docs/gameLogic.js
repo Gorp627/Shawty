@@ -1,9 +1,9 @@
-// --- START OF FULL gameLogic.js FILE (CLASS-BASED REFACTOR v1 - ACCEPTS INPUT STATE - CORRECTED & COMPLETE) ---
+// --- START OF FULL gameLogic.js FILE (CLASS-BASED REFACTOR v1 - ACCEPTS INPUT STATE - WASD CHECK LOGS) ---
 // docs/gameLogic.js - Encapsulates game simulation logic
 
 // Accesses globals: CONFIG, THREE, Network, UIManager, stateMachine, Effects, scene, mapMesh, players, localPlayerId, playerVelocities, playerIsGrounded
 
-console.log("gameLogic.js loading (CLASS-BASED REFACTOR v1 - ACCEPTS INPUT STATE - CORRECTED)...");
+console.log("gameLogic.js loading (CLASS-BASED REFACTOR v1 - ACCEPTS INPUT STATE - WASD CHECK LOGS)...");
 
 class GameLogic {
     constructor(gameInstance) {
@@ -38,7 +38,7 @@ class GameLogic {
     // Method inside the GameLogic class
     /**
      * Updates the local player's velocity based on input state passed as an argument.
-     * !!! USES inputState argument !!!
+     * !!! ADDED LOGS INSIDE WASD CHECKS !!!
      */
     updateLocalPlayerInput(deltaTime, camera, localPlayerMesh, inputState) { // <-- Added inputState argument
         // Use this.GRAVITY etc. instead of global constants
@@ -70,7 +70,7 @@ class GameLogic {
         const dashDirection = inputState.dashDirection;
         const isLocked = inputState.isLocked; // Get lock state from passed object
 
-        console.log(`[DEBUG InputLogic Start (State Passed)] Vel In:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)}), Grounded: ${isGrounded}, Locked: ${isLocked}`); // DEBUG
+        // console.log(`[DEBUG InputLogic Start (State Passed)] Vel In:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)}), Grounded: ${isGrounded}, Locked: ${isLocked}`); // Reduced logging frequency
 
         const isPlaying = stateMachine?.is('playing');
 
@@ -85,10 +85,24 @@ class GameLogic {
             let moveDirectionZ = 0;
             let inputDetected = false; // DEBUG Flag
 
-            if (keys['KeyW']) { moveDirectionX += forward.x; moveDirectionZ += forward.z; inputDetected = true; } // Use local keys
-            if (keys['KeyS']) { moveDirectionX -= forward.x; moveDirectionZ -= forward.z; inputDetected = true; } // Use local keys
-            if (keys['KeyA']) { moveDirectionX -= right.x; moveDirectionZ -= right.z; inputDetected = true; } // Use local keys
-            if (keys['KeyD']) { moveDirectionX += right.x; moveDirectionZ += right.z; inputDetected = true; } // Use local keys
+            // ***** ADDED DETAILED LOGS *****
+            if (keys['KeyW']) {
+                console.log("[[[[[ DEBUG InputLogic KeyCheck: W is TRUE ]]]]]"); // DETAILED LOG
+                moveDirectionX += forward.x; moveDirectionZ += forward.z; inputDetected = true;
+            }
+            if (keys['KeyS']) {
+                 console.log("[[[[[ DEBUG InputLogic KeyCheck: S is TRUE ]]]]]"); // DETAILED LOG
+                 moveDirectionX -= forward.x; moveDirectionZ -= forward.z; inputDetected = true;
+            }
+            if (keys['KeyA']) {
+                 console.log("[[[[[ DEBUG InputLogic KeyCheck: A is TRUE ]]]]]"); // DETAILED LOG
+                 moveDirectionX -= right.x; moveDirectionZ -= right.z; inputDetected = true;
+            }
+            if (keys['KeyD']) {
+                 console.log("[[[[[ DEBUG InputLogic KeyCheck: D is TRUE ]]]]]"); // DETAILED LOG
+                 moveDirectionX += right.x; moveDirectionZ += right.z; inputDetected = true;
+            }
+            // ******************************
 
             if(inputDetected) { // Only apply velocity if WASD is pressed
                 const inputLengthSq = moveDirectionX * moveDirectionX + moveDirectionZ * moveDirectionZ;
@@ -103,7 +117,7 @@ class GameLogic {
                     console.log(`[DEBUG InputLogic Move (State Passed)] Applied Vel: (${currentVel.x.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // DEBUG
                 }
             } else {
-                 // console.log(`[DEBUG InputLogic Move (State Passed)] No WASD detected.`); // DEBUG
+                 // console.log(`[DEBUG InputLogic Move (State Passed)] No WASD detected this frame.`); // DEBUG
             }
 
             // --- Handle Jump ---
@@ -111,7 +125,6 @@ class GameLogic {
                 console.log("[DEBUG InputLogic Jump (State Passed)] Applying Jump Velocity!"); // DEBUG
                 currentVel.y = this.JUMP_VELOCITY;
                 window.playerIsGrounded[localPlayerId] = false;
-                // Consumption of Space key should happen in input.js or game.js now
                  if(window.Input) window.Input.keys['Space'] = false; // Consume globally after processing locally
             }
 
@@ -119,13 +132,11 @@ class GameLogic {
              if (requestingDash) { // Use local requestingDash
                  console.log("[DEBUG InputLogic Dash (State Passed)] Consuming Dash Request!"); // DEBUG
                  const dashDir = dashDirection; // Use local dashDirection
-                 // Apply dash velocity additively
                  currentVel.x += dashDir.x * this.DASH_VELOCITY;
                  currentVel.z += dashDir.z * this.DASH_VELOCITY;
                  currentVel.y = Math.max(currentVel.y + this.DASH_VELOCITY * this.DASH_UP_FACTOR, currentVel.y * 0.5 + this.DASH_VELOCITY * this.DASH_UP_FACTOR * 0.5);
                  window.playerIsGrounded[localPlayerId] = false;
-                 // Consume dash request globally AFTER processing it here
-                 if(window.Input) window.Input.requestingDash = false;
+                 if(window.Input) window.Input.requestingDash = false; // Consume globally
              }
 
              // --- Handle Shooting ---
@@ -148,7 +159,7 @@ class GameLogic {
          // if (currentVel.y !== velYBeforeGravity) console.log(`[DEBUG InputLogic Gravity (State Passed)] Applied. VelY: ${currentVel.y.toFixed(2)} (was ${velYBeforeGravity.toFixed(2)}), Grounded: ${isGrounded}`); // DEBUG
 
 
-         console.log(`[DEBUG InputLogic End (State Passed)] Vel Out:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // DEBUG
+         // console.log(`[DEBUG InputLogic End (State Passed)] Vel Out:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // Reduced logging
     } // End of updateLocalPlayerInput method
 
 
@@ -194,8 +205,8 @@ class GameLogic {
 
         const currentPosition = playerMesh.position; // Feet position
         const movementVector = this.tempVec.copy(playerVelocity).multiplyScalar(deltaTime); // How much player *wants* to move this frame
-        console.log(`[DEBUG Collision Check Start] PosIn: (${currentPosition.x.toFixed(2)}, ${currentPosition.y.toFixed(2)}, ${currentPosition.z.toFixed(2)}), VelIn: (${playerVelocity.x.toFixed(2)}, ${playerVelocity.y.toFixed(2)}, ${playerVelocity.z.toFixed(2)}), Delta: ${deltaTime.toFixed(4)}`); // DEBUG
-        console.log(`[DEBUG Collision Check Start] Desired MoveVec: (${movementVector.x.toFixed(3)}, ${movementVector.y.toFixed(3)}, ${movementVector.z.toFixed(3)})`); // DEBUG
+        // console.log(`[DEBUG Collision Check Start] PosIn: (${currentPosition.x.toFixed(2)}, ${currentPosition.y.toFixed(2)}, ${currentPosition.z.toFixed(2)}), VelIn: (${playerVelocity.x.toFixed(2)}, ${playerVelocity.y.toFixed(2)}, ${playerVelocity.z.toFixed(2)}), Delta: ${deltaTime.toFixed(4)}`); // Reduced logging
+        // console.log(`[DEBUG Collision Check Start] Desired MoveVec: (${movementVector.x.toFixed(3)}, ${movementVector.y.toFixed(3)}, ${movementVector.z.toFixed(3)})`); // Reduced logging
 
 
         const collisionObjects = [window.mapMesh]; // Objects to collide with
@@ -221,7 +232,7 @@ class GameLogic {
         // Move X
         if (Math.abs(moveX) > 0.001) {
             if (checkWallCollision(currentIterPosition, new THREE.Vector3(Math.sign(moveX), 0, 0), Math.abs(moveX), collisionObjects)) {
-                console.log(`[DEBUG Collision Check] X-Collision detected! Halting X move.`); // DEBUG
+                // console.log(`[DEBUG Collision Check] X-Collision detected! Halting X move.`); // DEBUG
                 moveX = 0; // Collision, cancel X movement
                 playerVelocity.x = 0; // Stop X velocity
             }
@@ -231,7 +242,7 @@ class GameLogic {
         // Move Z (Start check from position potentially updated by X move)
         if (Math.abs(moveZ) > 0.001) {
             if (checkWallCollision(currentIterPosition, new THREE.Vector3(0, 0, Math.sign(moveZ)), Math.abs(moveZ), collisionObjects)) {
-                console.log(`[DEBUG Collision Check] Z-Collision detected! Halting Z move.`); // DEBUG
+                // console.log(`[DEBUG Collision Check] Z-Collision detected! Halting Z move.`); // DEBUG
                 moveZ = 0; // Collision, cancel Z movement
                 playerVelocity.z = 0; // Stop Z velocity
             }
@@ -243,7 +254,7 @@ class GameLogic {
             const movingUp = moveY > 0;
             const yDir = movingUp ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, -1, 0);
             if (checkCeilingFloorCollision(currentIterPosition, yDir, Math.abs(moveY), movingUp, collisionObjects)) {
-                console.log(`[DEBUG Collision Check] Y-Collision detected! (${movingUp?'Ceiling':'Floor'}) Halting Y move.`); // DEBUG
+                // console.log(`[DEBUG Collision Check] Y-Collision detected! (${movingUp?'Ceiling':'Floor'}) Halting Y move.`); // DEBUG
                 moveY = 0; // Collision, cancel Y movement
                 playerVelocity.y = 0; // Stop Y velocity
             }
@@ -285,7 +296,7 @@ class GameLogic {
                 this.tempRaycaster.set(stepUpOrigin, groundRayDirection); // Raycast down from above step
                 this.tempRaycaster.far = this.PLAYER_HEIGHT - 0.2; // Check most of the player height is clear
                  if (this.tempRaycaster.intersectObjects(collisionObjects, true).length === 0) { // If no hit, space is clear
-                    console.log(`[DEBUG Collision Check] StepUp Allowed!`); // DEBUG
+                    // console.log(`[DEBUG Collision Check] StepUp Allowed!`); // DEBUG
                     isGrounded = true; // Considered grounded after stepping up
                     finalPosition.y = hitPoint.y; // Snap feet to step height
                     if (playerVelocity.y < 0) playerVelocity.y = 0; // Stop downward velocity
@@ -331,11 +342,12 @@ class GameLogic {
     performShoot(camera) {
         if (!camera || !Network || !scene) { return; }
         if (window.gunSoundBuffer) { Effects.playSound(window.gunSoundBuffer, null, false, 0.4); }
+        // console.log("[DEBUG ShootLogic] Gun sound played (attempted)."); // DEBUG
 
         const raycaster = new THREE.Raycaster();
         const origin = new THREE.Vector3(); const direction = new THREE.Vector3();
         camera.getWorldPosition(origin); camera.getWorldDirection(direction);
-        console.log(`[DEBUG ShootLogic] Raycast from (${origin.x.toFixed(1)},${origin.y.toFixed(1)},${origin.z.toFixed(1)}) dir (${direction.x.toFixed(1)},${direction.y.toFixed(1)},${direction.z.toFixed(1)})`);
+        // console.log(`[DEBUG ShootLogic] Raycast from (${origin.x.toFixed(1)},${origin.y.toFixed(1)},${origin.z.toFixed(1)}) dir (${direction.x.toFixed(1)},${direction.y.toFixed(1)},${direction.z.toFixed(1)})`); // DEBUG
 
         raycaster.set(origin, direction);
         raycaster.far = this.BULLET_MAX_RANGE;
@@ -349,7 +361,7 @@ class GameLogic {
         if (window.mapMesh) { potentialTargets.push(window.mapMesh); }
 
         const intersects = raycaster.intersectObjects(potentialTargets, true);
-        console.log(`[DEBUG ShootLogic] Raycast hit ${intersects.length} objects.`);
+        // console.log(`[DEBUG ShootLogic] Raycast hit ${intersects.length} objects.`); // DEBUG
 
         if (intersects.length > 0) {
             intersects.sort((a, b) => a.distance - b.distance);
@@ -370,7 +382,7 @@ class GameLogic {
             console.log("[DEBUG ShootLogic] Shot missed.");
         }
 
-        if (Input.keys['KeyE']) { // Still check global Input here, or pass full inputState to performShoot? Let's keep it simple for now.
+        if (Input.keys['KeyE']) { // Still check global Input here for simplicity
             console.log("[DEBUG ShootLogic] Checking Rocket Jump (E key held)");
             const worldDown = new THREE.Vector3(0, -1, 0);
             const downwardLookThreshold = 0.5;
@@ -447,6 +459,6 @@ class GameLogic {
 
 } // End GameLogic Class
 
-console.log("gameLogic.js loaded successfully (CLASS-BASED REFACTOR v1 - ACCEPTS INPUT STATE - CORRECTED).");
+console.log("gameLogic.js loaded successfully (CLASS-BASED REFACTOR v1 - ACCEPTS INPUT STATE - WASD CHECK LOGS).");
 
 // --- END OF FULL gameLogic.js FILE ---
