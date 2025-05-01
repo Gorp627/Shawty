@@ -1,151 +1,212 @@
-// docs/input.js (Rapier Version - Uses Global THREE/Scope - REGEN v3 Corrected)
+// Docs/input.js
+// Using Global THREE/Scope - v3 Corrected (with DEBUG logging)
 
-const Input = {
-    keys: {}, // Stores currently pressed keys (e.g., { 'KeyW': true, 'Space': false })
-    mouseButtons: {}, // Stores currently pressed mouse buttons (e.g., { 0: true })
-    controls: null, // Reference to PointerLockControls
-    lastDashTime: 0,
-    requestingDash: false, // Flag set true when dash key pressed, consumed by gameLogic
-    dashDirection: null, // Calculated direction vector (will be THREE.Vector3)
+console.log('input.js loaded (Using Global THREE/Scope - v3 Corrected)');
 
-    // Initialize input listeners
-    init: function(controlsRef) {
-        // Use global THREE
-        if (typeof THREE === 'undefined') {
-            console.error("[Input] THREE is not defined globally! Cannot initialize Input.");
-            return false;
-        }
-        this.dashDirection = new THREE.Vector3(); // Initialize Vector3 using global THREE
+class InputManager {
+    constructor(canvasElement) {
+        console.log('[DEBUG] InputManager constructor called.');
+        this.keysPressed = {};
+        this.mouseButtonsPressed = {}; // 0: left, 1: middle, 2: right
+        this.mousePosition = { x: 0, y: 0 };
+        this.mouseDelta = { x: 0, y: 0 };
+        this.canvas = canvasElement || window; // Attach to canvas if provided, otherwise window
+        this._isPointerLocked = false;
 
-        // Use global THREE.PointerLockControls constructor for type checking
-        if (!controlsRef || typeof THREE === 'undefined' || typeof THREE.PointerLockControls === 'undefined' || !(controlsRef instanceof THREE.PointerLockControls)) {
-            console.error("[Input] PointerLockControls reference missing, invalid, or THREE/Controls not loaded!");
-            return false; // Indicate failure
-        }
-        this.controls = controlsRef; // Store the reference
-        document.addEventListener('keydown', this.handleKeyDown.bind(this));
-        document.addEventListener('keyup', this.handleKeyUp.bind(this));
-        document.addEventListener('mousedown', this.handleMouseDown.bind(this));
-        document.addEventListener('mouseup', this.handleMouseUp.bind(this));
-        this.requestingDash = false; // Ensure flag starts false
-        console.log("[Input] Initialized (Using Global THREE).");
-        return true; // Indicate success
-    },
+        // Bind methods to ensure 'this' context is correct
+        this._onKeyDown = this._onKeyDown.bind(this);
+        this._onKeyUp = this._onKeyUp.bind(this);
+        this._onMouseDown = this._onMouseDown.bind(this);
+        this._onMouseUp = this._onMouseUp.bind(this);
+        this._onMouseMove = this._onMouseMove.bind(this);
+        this._onPointerLockChange = this._onPointerLockChange.bind(this);
+        this._onPointerLockError = this._onPointerLockError.bind(this);
 
-    // Handle key press down
-    handleKeyDown: function(event) {
-        // Ignore input if typing in an input field
-        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
-            return;
-        }
-
-        this.keys[event.code] = true;
-        // console.log(`Key Down: ${event.code}`); // DEBUG
-
-        // --- Handle Dash Request (ShiftLeft) ---
-        if (event.code === 'ShiftLeft' && !event.repeat && !this.requestingDash) {
-            const now = Date.now();
-            // Access global CONFIG safely
-            const cooldown = (typeof CONFIG !== 'undefined' ? (CONFIG.DASH_COOLDOWN || 0.8) : 0.8) * 1000;
-            // Access global stateMachine safely
-            const isPlaying = (typeof stateMachine !== 'undefined' && stateMachine.is('playing'));
-            // Access global lastDashTime safely (assuming lastDashTime is global)
-            const canDash = (now - (window.lastDashTime || 0)) > cooldown;
-
-            if (canDash && isPlaying) {
-                // Attempt to calculate direction - checks for controls/camera internally
-                if (this.calculateDashDirection()) { // Check if calculation succeeded
-                    this.requestingDash = true; // Set flag for gameLogic to process
-                    window.lastDashTime = now; // Update global cooldown timer
-                    // console.log("Dash Requested. Direction:", this.dashDirection); // DEBUG
-                } else {
-                    // Warning already logged by calculateDashDirection
-                }
-                 // No timeout needed here, gameLogic consumes the flag once
-            }
-        }
-
-        // --- Handle Jump (Space) ---
-        if (event.code === 'Space') {
-            // gameLogic checks Input.keys['Space'] && isGrounded to apply velocity change
-             if (stateMachine?.is('playing')) { // Prevent space scrolling only when playing
-                event.preventDefault();
-             }
-        }
-
-        // --- Allow Controls Lock Toggle (Escape) ---
-        // PointerLockControls handles Escape key automatically to unlock.
-        // Locking is handled on mouse down.
-    },
-
-    // Handle key release
-    handleKeyUp: function(event) {
-        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
-            return;
-        }
-        this.keys[event.code] = false;
-        // console.log(`Key Up: ${event.code}`); // DEBUG
-    },
-
-    // Handle mouse button press down
-    handleMouseDown: function(event) {
-        // Ignore clicks on UI elements if needed (e.g., buttons)
-        // if (event.target !== document.getElementById('gameCanvas')) return; // Example: only lock if clicking canvas
-
-        this.mouseButtons[event.button] = true;
-        // console.log(`Mouse Down: ${event.button}`); // DEBUG
-
-        // Lock pointer if in playing state and not already locked
-        // Access global stateMachine safely
-        if (typeof stateMachine !== 'undefined' && stateMachine.is('playing') && this.controls && !this.controls.isLocked) {
-             this.controls.lock();
-        }
-        // Firing logic checks Input.mouseButtons[0] in gameLogic.js update loop
-    },
-
-    // Handle mouse button release
-    handleMouseUp: function(event) {
-        this.mouseButtons[event.button] = false;
-        // console.log(`Mouse Up: ${event.button}`); // DEBUG
-    },
-
-    // Calculate dash direction based on current movement keys and camera orientation
-    // Returns true if successful, false otherwise
-    calculateDashDirection: function() {
-         // Use global THREE, controls, camera safely
-         if (!this.controls || typeof window === 'undefined' || !window.camera || typeof THREE === 'undefined') {
-             console.warn(`[Input] Cannot calculate dash direction: Controls, Camera, or THREE missing.`);
-             if (this.dashDirection) this.dashDirection.set(0, 0, -1); // Default forward as fallback if vector exists
-             return false; // Indicate failure
-         }
-
-         let inputDir = new THREE.Vector3(); // Use global THREE
-         if(this.keys['KeyW']){ inputDir.z = -1; }
-         if(this.keys['KeyS']){ inputDir.z = 1; }
-         if(this.keys['KeyA']){ inputDir.x = -1; } // Corrected A/D relative to camera
-         if(this.keys['KeyD']){ inputDir.x = 1; } // Corrected A/D relative to camera
-
-         // Get camera's world quaternion (PointerLockControls rotates the camera object directly)
-         const cameraQuaternion = window.camera.quaternion;
-
-         if(inputDir.lengthSq() === 0){ // If no movement keys pressed, dash forward relative to camera
-             this.dashDirection.set(0, 0, -1); // Forward in camera space is -Z
-             this.dashDirection.applyQuaternion(cameraQuaternion); // Rotate to world space
-         } else { // Dash in the direction of movement input keys, relative to camera
-             inputDir.normalize(); // Normalize the input direction
-             this.dashDirection.copy(inputDir); // Copy normalized input direction
-             this.dashDirection.applyQuaternion(cameraQuaternion); // Rotate based on camera's orientation
-         }
-
-         this.dashDirection.y = 0; // Ensure dash is horizontal (gameLogic adds vertical component if needed)
-         this.dashDirection.normalize(); // Normalize the final world direction vector
-
-         return true; // Indicate success
+        console.log('[DEBUG] InputManager instance created.');
     }
-};
 
-// Export globally if not using modules
-if (typeof window !== 'undefined') {
-    window.Input = Input;
+    bindEventListeners() {
+        console.log('[DEBUG] InputManager: Binding event listeners...');
+        window.addEventListener('keydown', this._onKeyDown, false);
+        window.addEventListener('keyup', this._onKeyUp, false);
+
+        // Attach mouse events to the canvas for better focus handling & pointer lock
+        if (this.canvas && this.canvas.addEventListener) {
+             console.log('[DEBUG] InputManager: Attaching mouse listeners to canvas:', this.canvas);
+            this.canvas.addEventListener('mousedown', this._onMouseDown, false);
+             // We still might want mouseup/mousemove on window if pointer isn't locked
+            window.addEventListener('mouseup', this._onMouseUp, false);
+            window.addEventListener('mousemove', this._onMouseMove, false);
+
+            // Pointer Lock API listeners
+            document.addEventListener('pointerlockchange', this._onPointerLockChange, false);
+            document.addEventListener('pointerlockerror', this._onPointerLockError, false);
+
+            // Request pointer lock on canvas click
+            // Only add this if you WANT pointer lock on click
+            // this.canvas.addEventListener('click', () => {
+            //     if (!this._isPointerLocked) {
+            //         console.log('[DEBUG] InputManager: Requesting pointer lock...');
+            //         this.canvas.requestPointerLock();
+            //     }
+            // });
+
+        } else {
+             console.warn('[DEBUG] InputManager: Canvas element not found or invalid, attaching mouse listeners to window.');
+             window.addEventListener('mousedown', this._onMouseDown, false);
+             window.addEventListener('mouseup', this._onMouseUp, false);
+             window.addEventListener('mousemove', this._onMouseMove, false);
+        }
+        console.log('[DEBUG] InputManager: Event listeners bound.');
+    }
+
+    unbindEventListeners() {
+        console.log('[DEBUG] InputManager: Unbinding event listeners...');
+        window.removeEventListener('keydown', this._onKeyDown, false);
+        window.removeEventListener('keyup', this._onKeyUp, false);
+
+         if (this.canvas && this.canvas.removeEventListener) {
+            this.canvas.removeEventListener('mousedown', this._onMouseDown, false);
+         }
+         window.removeEventListener('mouseup', this._onMouseUp, false);
+         window.removeEventListener('mousemove', this._onMouseMove, false);
+
+         document.removeEventListener('pointerlockchange', this._onPointerLockChange, false);
+         document.removeEventListener('pointerlockerror', this._onPointerLockError, false);
+
+        console.log('[DEBUG] InputManager: Event listeners unbound.');
+    }
+
+    // --- Event Handlers ---
+
+    _onKeyDown(event) {
+        const key = event.key.toLowerCase();
+        console.log(`[DEBUG] KeyDown: ${key} (Code: ${event.code})`);
+        this.keysPressed[key] = true;
+        // Special handling for keys that might act differently
+        this.keysPressed[event.code] = true; // Store by code as well if needed
+    }
+
+    _onKeyUp(event) {
+        const key = event.key.toLowerCase();
+        console.log(`[DEBUG] KeyUp: ${key} (Code: ${event.code})`);
+        this.keysPressed[key] = false;
+        this.keysPressed[event.code] = false; // Store by code as well if needed
+    }
+
+    _onMouseDown(event) {
+        console.log(`[DEBUG] MouseDown: Button ${event.button}`);
+        this.mouseButtonsPressed[event.button] = true;
+
+        // Optional: Attempt pointer lock on click if not already locked
+        if (!this._isPointerLocked && this.canvas && this.canvas.requestPointerLock) {
+            console.log('[DEBUG] InputManager: Requesting pointer lock on mousedown...');
+            this.canvas.requestPointerLock();
+        }
+    }
+
+    _onMouseUp(event) {
+        console.log(`[DEBUG] MouseUp: Button ${event.button}`);
+        this.mouseButtonsPressed[event.button] = false;
+    }
+
+    _onMouseMove(event) {
+        // Calculate raw mouse position
+        const rect = this.canvas instanceof HTMLCanvasElement ? this.canvas.getBoundingClientRect() : { top: 0, left: 0 };
+        this.mousePosition.x = event.clientX - rect.left;
+        this.mousePosition.y = event.clientY - rect.top;
+
+        // Calculate mouse delta (movement)
+        if (this._isPointerLocked) {
+            this.mouseDelta.x = event.movementX || 0;
+            this.mouseDelta.y = event.movementY || 0;
+            // console.log(`[DEBUG] MouseMove (Locked): dX=${this.mouseDelta.x}, dY=${this.mouseDelta.y}`);
+        } else {
+            // Simple delta calculation when not locked (less useful for FPS controls)
+            // This requires storing the previous position, which we aren't doing robustly here.
+            // For non-locked scenarios, using raw mousePosition is often better.
+            this.mouseDelta.x = 0; // Reset or implement previous position tracking
+            this.mouseDelta.y = 0;
+            // console.log(`[DEBUG] MouseMove (Unlocked): X=${this.mousePosition.x}, Y=${this.mousePosition.y}`);
+        }
+    }
+
+     _onPointerLockChange() {
+        if (document.pointerLockElement === this.canvas) {
+            console.log('[DEBUG] Pointer Locked');
+            this._isPointerLocked = true;
+        } else {
+            console.log('[DEBUG] Pointer Unlocked');
+            this._isPointerLocked = false;
+            // Optionally reset keys/mouse buttons when focus is lost
+            // this.resetState();
+        }
+    }
+
+    _onPointerLockError() {
+        console.error('[DEBUG] Pointer Lock Error');
+        this._isPointerLocked = false;
+    }
+
+
+    // --- State Accessors ---
+
+    isKeyDown(key) {
+        const lowerKey = key.toLowerCase();
+        // Check both 'w' and 'KeyW' for robustness
+        return !!this.keysPressed[lowerKey] || !!this.keysPressed[key];
+    }
+
+    isMouseButtonDown(button) {
+        // button: 0 = left, 1 = middle, 2 = right
+        return !!this.mouseButtonsPressed[button];
+    }
+
+    getMousePosition() {
+        return { ...this.mousePosition }; // Return a copy
+    }
+
+    getMouseDelta() {
+        // IMPORTANT: Reset delta after reading it if it represents movement *since last frame*
+        const delta = { ...this.mouseDelta };
+        // If delta is meant to be frame-by-frame, reset it here:
+        // this.mouseDelta.x = 0;
+        // this.mouseDelta.y = 0;
+        return delta;
+    }
+
+     isPointerLocked() {
+         return this._isPointerLocked;
+     }
+
+    // --- Utility ---
+    resetFrameState() {
+        // Reset states that should only last one frame, like mouse delta
+        this.mouseDelta.x = 0;
+        this.mouseDelta.y = 0;
+        // DO NOT reset keysPressed or mouseButtonsPressed here,
+        // they persist until the key/button is released.
+        // console.log('[DEBUG] Input frame state reset (delta)');
+    }
+
+    resetAllState() {
+        console.log('[DEBUG] Resetting all input state.');
+        this.keysPressed = {};
+        this.mouseButtonsPressed = {};
+        this.mousePosition = { x: 0, y: 0 };
+        this.mouseDelta = { x: 0, y: 0 };
+    }
 }
-console.log("input.js loaded (Using Global THREE/Scope - v3 Corrected)");
+
+// Make it available globally or manage through modules
+window.InputManager = InputManager;
+
+// Example Initialization (usually done in game.js)
+// Assuming a canvas with id="gameCanvas" exists
+// const canvas = document.getElementById('gameCanvas');
+// const inputManager = new InputManager(canvas);
+// inputManager.bindEventListeners();
+
+// --- Add this line at the end for initial load confirmation ---
+console.log('[Input] Initialized (Using Global THREE). Ready for binding.');
+// --- End of Added Line ---
