@@ -1,4 +1,4 @@
-// --- START OF FULL game.js FILE (Manual Raycasting v9 - Delta Time Log - WITH DEBUG LOGS) ---
+// --- START OF FULL game.js FILE (Manual Raycasting v9 - Delta Time Log - WITH DEBUG LOGS & GLOBAL CHECK) ---
 // docs/game.js - Main Game Orchestrator (Manual Raycasting v9 - Delta Time Log)
 
 var currentGameInstance = null; // Holds the single Game instance
@@ -286,8 +286,10 @@ class Game {
                  .map(([btn]) => `Btn${btn}`)
                  .join(',');
 
-             if (activeKeys || activeMouse) { // Only log if something is active
+             // Only log if something is active OR if pointer lock state changes
+             if (activeKeys || activeMouse || (window.Input._lastLoggedLockState !== this.controls?.isLocked) ) {
                  console.log(`[DEBUG Input State @ GameLoop] Keys: [${activeKeys}] | Mouse: [${activeMouse}] | Locked: ${this.controls?.isLocked}`);
+                 window.Input._lastLoggedLockState = this.controls?.isLocked; // Track last logged lock state
              }
          }
          // --- End Debug Log ---
@@ -313,25 +315,45 @@ class Game {
 
             // --- 1. Update Local Player Input & Intent ---
             if (canUpdateInput) {
-                // console.log('[DEBUG Update] Calling updateLocalPlayerInput...'); // DEBUG
-                updateLocalPlayerInput(clampedDeltaTime, this.camera, this.localPlayerMesh);
+                // ***** ADDED CHECK for function existence *****
+                if (typeof window.updateLocalPlayerInput === 'function') {
+                    // console.log('[DEBUG Update] Calling updateLocalPlayerInput...'); // DEBUG
+                    window.updateLocalPlayerInput(clampedDeltaTime, this.camera, this.localPlayerMesh); // Explicitly call window.
+                } else {
+                    // Log the error ONLY ONCE to avoid spamming console
+                    if (!this._loggedUpdateInputError) {
+                        console.error('[DEBUG Update] CRITICAL: window.updateLocalPlayerInput is NOT a function!');
+                        this._loggedUpdateInputError = true; // Set flag after logging once
+                    }
+                }
+                 // ***** END ADDED CHECK *****
             }
 
             // --- 2. Apply Physics & Collision (Local Player) ---
             if (canCheckCollision) {
-                 // console.log('[DEBUG Update] Calling checkPlayerCollisionAndMove...'); // DEBUG
-                const groundedResult = checkPlayerCollisionAndMove(
-                    this.localPlayerMesh,
-                    window.playerVelocities[window.localPlayerId],
-                    clampedDeltaTime
-                );
-                if (groundedResult !== undefined) {
-                    // Only update if the function returned a valid boolean
-                    if (window.playerIsGrounded[window.localPlayerId] !== groundedResult) {
-                        // console.log(`[DEBUG] Grounded state changed to: ${groundedResult}`); // DEBUG
+                 // ***** ADDED CHECK for function existence *****
+                 if (typeof window.checkPlayerCollisionAndMove === 'function') {
+                    // console.log('[DEBUG Update] Calling checkPlayerCollisionAndMove...'); // DEBUG
+                    const groundedResult = window.checkPlayerCollisionAndMove( // Explicitly call window.
+                        this.localPlayerMesh,
+                        window.playerVelocities[window.localPlayerId],
+                        clampedDeltaTime
+                    );
+                    if (groundedResult !== undefined) {
+                        // Only update if the function returned a valid boolean
+                        if (window.playerIsGrounded[window.localPlayerId] !== groundedResult) {
+                            // console.log(`[DEBUG] Grounded state changed to: ${groundedResult}`); // DEBUG
+                        }
+                        window.playerIsGrounded[window.localPlayerId] = groundedResult;
                     }
-                    window.playerIsGrounded[window.localPlayerId] = groundedResult;
-                }
+                 } else {
+                     // Log the error ONLY ONCE
+                     if (!this._loggedCollisionError) {
+                        console.error('[DEBUG Update] CRITICAL: window.checkPlayerCollisionAndMove is NOT a function!');
+                        this._loggedCollisionError = true;
+                     }
+                 }
+                 // ***** END ADDED CHECK *****
              }
 
             // --- 3. Update Remote Players (Interpolation) ---
@@ -374,8 +396,18 @@ class Game {
 
 
             // --- 5. Send Network Update ---
-            // console.log('[DEBUG Update] Calling sendLocalPlayerUpdateIfNeeded...'); // DEBUG
-            sendLocalPlayerUpdateIfNeeded(this.localPlayerMesh, this.camera);
+            // ***** ADDED CHECK for function existence *****
+            if(typeof window.sendLocalPlayerUpdateIfNeeded === 'function') {
+                // console.log('[DEBUG Update] Calling sendLocalPlayerUpdateIfNeeded...'); // DEBUG
+                window.sendLocalPlayerUpdateIfNeeded(this.localPlayerMesh, this.camera); // Explicitly call window.
+            } else {
+                 if (!this._loggedNetworkUpdateError) {
+                     console.error('[DEBUG Update] CRITICAL: window.sendLocalPlayerUpdateIfNeeded is NOT a function!');
+                     this._loggedNetworkUpdateError = true;
+                 }
+            }
+            // ***** END ADDED CHECK *****
+
 
             // --- 6. Update Effects ---
             // console.log('[DEBUG Update] Calling Effects.update...'); // DEBUG
@@ -399,6 +431,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const startGameInit = () => {
          console.log("[DEBUG] DOMContentLoaded fired. Starting Game Initialization..."); // DEBUG
          const game = new Game();
+         // Initialize flags for logging errors only once per category
+         game._loggedUpdateInputError = false;
+         game._loggedCollisionError = false;
+         game._loggedNetworkUpdateError = false;
+
          game.init().catch(error => {
              console.error("[DEBUG] Unhandled error during Game Initialization:", error); // DEBUG
               if(typeof UIManager !== 'undefined') { UIManager.showLoading(`Initialization Error:<br/>${error.message}`, true); }
@@ -407,5 +444,5 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     startGameInit();
 });
-console.log("game.js loaded (Manual Raycasting v9 - Delta Time Log - WITH DEBUG LOGS)");
-// --- END OF FULL game.js FILE (Manual Raycasting v9 - Delta Time Log - WITH DEBUG LOGS) ---
+console.log("game.js loaded (Manual Raycasting v9 - Delta Time Log - WITH DEBUG LOGS & GLOBAL CHECK)");
+// --- END OF FULL game.js FILE (Manual Raycasting v9 - Delta Time Log - WITH DEBUG LOGS & GLOBAL CHECK) ---
