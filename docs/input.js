@@ -1,4 +1,4 @@
-// docs/input.js (Rapier Version - Uses Global THREE/Scope - REGEN v3 Corrected - WITH DEBUG LOGS)
+// docs/input.js (Rapier Version - Uses Global THREE/Scope - REGEN v3 Corrected - Key Handler Logging)
 
 const Input = {
     keys: {}, // Stores currently pressed keys (e.g., { 'KeyW': true, 'Space': false })
@@ -7,178 +7,179 @@ const Input = {
     lastDashTime: 0,
     requestingDash: false, // Flag set true when dash key pressed, consumed by gameLogic
     dashDirection: null, // Calculated direction vector (will be THREE.Vector3)
+    _lastLoggedLockState: undefined, // Internal state for logging changes
 
     // Initialize input listeners
     init: function(controlsRef) {
-        console.log('[DEBUG Input] init called.'); // DEBUG
-        // Use global THREE
+        console.log('[DEBUG Input] init called.');
         if (typeof THREE === 'undefined') {
             console.error("[Input] THREE is not defined globally! Cannot initialize Input.");
             return false;
         }
-        this.dashDirection = new THREE.Vector3(); // Initialize Vector3 using global THREE
-        console.log('[DEBUG Input] THREE found, dashDirection vector created.'); // DEBUG
+        this.dashDirection = new THREE.Vector3();
+        console.log('[DEBUG Input] THREE found, dashDirection vector created.');
 
-        // Use global THREE.PointerLockControls constructor for type checking
         if (!controlsRef || typeof THREE === 'undefined' || typeof THREE.PointerLockControls === 'undefined' || !(controlsRef instanceof THREE.PointerLockControls)) {
             console.error("[Input] PointerLockControls reference missing, invalid, or THREE/Controls not loaded!");
-            return false; // Indicate failure
+            return false;
         }
-        this.controls = controlsRef; // Store the reference
-        console.log('[DEBUG Input] PointerLockControls reference stored.'); // DEBUG
+        this.controls = controlsRef;
+        console.log('[DEBUG Input] PointerLockControls reference stored.');
 
         // --- Bind Event Listeners ---
-        console.log('[DEBUG Input] Binding event listeners...'); // DEBUG
-        document.addEventListener('keydown', this.handleKeyDown.bind(this), false);
-        document.addEventListener('keyup', this.handleKeyUp.bind(this), false);
-        document.addEventListener('mousedown', this.handleMouseDown.bind(this), false);
-        document.addEventListener('mouseup', this.handleMouseUp.bind(this), false);
-        console.log('[DEBUG Input] Listeners bound.'); // DEBUG
+        console.log('[DEBUG Input] Binding event listeners...');
+        // Ensure we don't add listeners multiple times if init is called again
+        document.removeEventListener('keydown', this._boundHandleKeyDown, false);
+        document.removeEventListener('keyup', this._boundHandleKeyUp, false);
+        document.removeEventListener('mousedown', this._boundHandleMouseDown, false);
+        document.removeEventListener('mouseup', this._boundHandleMouseUp, false);
 
-        this.requestingDash = false; // Ensure flag starts false
+        // Bind functions FIRST, then add listener using the bound reference
+        this._boundHandleKeyDown = this.handleKeyDown.bind(this);
+        this._boundHandleKeyUp = this.handleKeyUp.bind(this);
+        this._boundHandleMouseDown = this.handleMouseDown.bind(this);
+        this._boundHandleMouseUp = this.handleMouseUp.bind(this);
+
+        document.addEventListener('keydown', this._boundHandleKeyDown, false);
+        document.addEventListener('keyup', this._boundHandleKeyUp, false);
+        document.addEventListener('mousedown', this._boundHandleMouseDown, false);
+        document.addEventListener('mouseup', this._boundHandleMouseUp, false);
+        console.log('[DEBUG Input] Listeners bound.');
+
+        this.requestingDash = false;
+        this.keys = {}; // Reset keys on init
+        this.mouseButtons = {}; // Reset mouse buttons on init
         console.log("[Input] Initialized (Using Global THREE).");
-        return true; // Indicate success
+        return true;
     },
 
     // Handle key press down
     handleKeyDown: function(event) {
+        console.log(`--- Input handleKeyDown --- Code: ${event.code}, Repeat: ${event.repeat}`); // LOG ENTRY
         // Ignore input if typing in an input field
         if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
-             console.log(`[DEBUG Input] KeyDown ignored (typing in input): ${event.code}`); // DEBUG
+             console.log(`[DEBUG Input KeyDown] Ignored (typing in input): ${event.code}`);
             return;
         }
 
-        // Only log if state changes to prevent console spam on key hold
-        if (!this.keys[event.code]) {
-            console.log(`[DEBUG Input] KeyDown registered: ${event.code}`); // DEBUG
-        }
-        this.keys[event.code] = true; // Store the key state
+        // Log current state BEFORE modification
+        const keyToSet = event.code; // Use event.code (e.g., 'KeyW', 'Space')
+        console.log(`[DEBUG Input KeyDown] Key: ${keyToSet}, current value in this.keys:`, this.keys[keyToSet]);
+
+        // Set the state
+        this.keys[keyToSet] = true;
+
+        // Log state AFTER modification
+        console.log(`[DEBUG Input KeyDown] Set this.keys['${keyToSet}'] = true. New value:`, this.keys[keyToSet]);
+        console.log(`[DEBUG Input KeyDown] Current this.keys object:`, { ...this.keys }); // Log shallow copy
+
 
         // --- Handle Dash Request (ShiftLeft) ---
-        if (event.code === 'ShiftLeft' && !event.repeat && !this.requestingDash) {
-            console.log(`[DEBUG Input] ShiftLeft pressed (down). Checking dash conditions...`); // DEBUG
+        if (keyToSet === 'ShiftLeft' && !event.repeat && !this.requestingDash) {
+            console.log(`[DEBUG Input KeyDown] ShiftLeft pressed (down). Checking dash conditions...`);
             const now = Date.now();
             const cooldown = (typeof CONFIG !== 'undefined' ? (CONFIG.DASH_COOLDOWN || 0.8) : 0.8) * 1000;
             const isPlaying = (typeof stateMachine !== 'undefined' && stateMachine.is('playing'));
             const canDash = (now - (window.lastDashTime || 0)) > cooldown;
-            console.log(`[DEBUG Input] Dash Check: isPlaying=${isPlaying}, canDash=${canDash} (Now: ${now}, Last: ${window.lastDashTime || 0}, CD: ${cooldown})`); // DEBUG
+            console.log(`[DEBUG Input KeyDown] Dash Check: isPlaying=${isPlaying}, canDash=${canDash} (Now: ${now}, Last: ${window.lastDashTime || 0}, CD: ${cooldown})`);
 
             if (canDash && isPlaying) {
-                 console.log(`[DEBUG Input] Attempting to calculate dash direction...`); // DEBUG
-                if (this.calculateDashDirection()) { // Check if calculation succeeded
-                    this.requestingDash = true; // Set flag for gameLogic to process
-                    window.lastDashTime = now; // Update global cooldown timer
-                    console.log("[DEBUG Input] Dash Requested. Direction:", this.dashDirection.toArray().map(n=>n.toFixed(2))); // DEBUG
+                 console.log(`[DEBUG Input KeyDown] Attempting to calculate dash direction...`);
+                if (this.calculateDashDirection()) {
+                    this.requestingDash = true;
+                    window.lastDashTime = now;
+                    console.log("[DEBUG Input KeyDown] Dash Requested. Direction:", this.dashDirection.toArray().map(n=>n.toFixed(2)));
                 } else {
-                    console.warn("[DEBUG Input] Dash direction calculation failed."); // DEBUG calculation logs warning too
+                    console.warn("[DEBUG Input KeyDown] Dash direction calculation failed.");
                 }
             }
         }
 
         // --- Handle Jump (Space) ---
-        if (event.code === 'Space') {
-             // Logic in gameLogic checks this key state along with grounded status
-             console.log(`[DEBUG Input] Space key pressed (down).`); // DEBUG
+        if (keyToSet === 'Space') {
              if (stateMachine?.is('playing')) { // Prevent space scrolling only when playing
                 event.preventDefault();
              }
         }
 
-        // --- Handle Rocket Jump Modifier Key (E) ---
-         if (event.code === 'KeyE') {
-             console.log(`[DEBUG Input] E key pressed (down).`); // DEBUG
-             // Logic in performShoot checks this key state when mouse is clicked
-         }
-
-        // --- Allow Controls Lock Toggle (Escape) ---
-        // PointerLockControls handles Escape key automatically to unlock.
-        // Locking is handled on mouse down.
+        console.log(`--- Input handleKeyDown End --- Code: ${event.code}`); // LOG EXIT
     },
 
     // Handle key release
     handleKeyUp: function(event) {
+         console.log(`--- Input handleKeyUp --- Code: ${event.code}`); // LOG ENTRY
         if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
-            console.log(`[DEBUG Input] KeyUp ignored (typing in input): ${event.code}`); // DEBUG
+            console.log(`[DEBUG Input KeyUp] Ignored (typing in input): ${event.code}`);
             return;
         }
-         // Only log if state changes
-         if (this.keys[event.code]) {
-            console.log(`[DEBUG Input] KeyUp registered: ${event.code}`); // DEBUG
-         }
-        this.keys[event.code] = false;
+
+        const keyToSet = event.code;
+        console.log(`[DEBUG Input KeyUp] Key: ${keyToSet}, current value in this.keys:`, this.keys[keyToSet]);
+
+        // Set the state
+        this.keys[keyToSet] = false;
+
+        // Log state AFTER modification
+        console.log(`[DEBUG Input KeyUp] Set this.keys['${keyToSet}'] = false. New value:`, this.keys[keyToSet]);
+        console.log(`[DEBUG Input KeyUp] Current this.keys object:`, { ...this.keys }); // Log shallow copy
+        console.log(`--- Input handleKeyUp End --- Code: ${event.code}`); // LOG EXIT
     },
 
     // Handle mouse button press down
     handleMouseDown: function(event) {
-        // Ignore clicks on UI elements if needed (e.g., buttons on overlay)
-        // Example: Check if click target is inside a UI container
+        console.log(`--- Input handleMouseDown --- Button: ${event.button}`); // LOG ENTRY
         const uiScreens = document.querySelectorAll('.screen');
         let clickedOnUI = false;
-        uiScreens.forEach(screen => {
-             if (screen.classList.contains('visible') && screen.contains(event.target)) {
-                 clickedOnUI = true;
-             }
-        });
-        if (clickedOnUI && event.target.tagName !== 'CANVAS') { // Allow clicking canvas even if UI visible
-             console.log(`[DEBUG Input] MouseDown ignored (clicked on UI element: ${event.target.tagName}#${event.target.id})`); // DEBUG
-             return;
-        }
+        uiScreens.forEach(screen => { if (screen.classList.contains('visible') && screen.contains(event.target)) { clickedOnUI = true; } });
+        if (clickedOnUI && event.target.tagName !== 'CANVAS') { console.log(`[DEBUG Input MouseDown] Ignored (clicked on UI element: ${event.target.tagName}#${event.target.id})`); return; }
 
-
-        console.log(`[DEBUG Input] MouseDown registered: Button ${event.button}`); // DEBUG
+        console.log(`[DEBUG Input MouseDown] Setting button ${event.button} to true.`);
         this.mouseButtons[event.button] = true;
+        console.log(`[DEBUG Input MouseDown] Current this.mouseButtons object:`, { ...this.mouseButtons });
 
-        // Lock pointer if in playing state and not already locked
         if (typeof stateMachine !== 'undefined' && stateMachine.is('playing') && this.controls && !this.controls.isLocked) {
-             console.log(`[DEBUG Input] Requesting pointer lock on MouseDown.`); // DEBUG
+             console.log(`[DEBUG Input MouseDown] Requesting pointer lock.`);
              this.controls.lock();
         }
-        // Firing logic checks Input.mouseButtons[0] in gameLogic.js update loop
+        console.log(`--- Input handleMouseDown End --- Button: ${event.button}`); // LOG EXIT
     },
 
     // Handle mouse button release
     handleMouseUp: function(event) {
-         // Only log if state changes
-         if (this.mouseButtons[event.button]) {
-            console.log(`[DEBUG Input] MouseUp registered: Button ${event.button}`); // DEBUG
-         }
+        console.log(`--- Input handleMouseUp --- Button: ${event.button}`); // LOG ENTRY
+        console.log(`[DEBUG Input MouseUp] Setting button ${event.button} to false.`);
         this.mouseButtons[event.button] = false;
+        console.log(`[DEBUG Input MouseUp] Current this.mouseButtons object:`, { ...this.mouseButtons });
+        console.log(`--- Input handleMouseUp End --- Button: ${event.button}`); // LOG EXIT
     },
 
     // Calculate dash direction based on current movement keys and camera orientation
-    // Returns true if successful, false otherwise
     calculateDashDirection: function() {
          if (!this.controls || typeof window === 'undefined' || !window.camera || typeof THREE === 'undefined') {
-             console.warn(`[DEBUG Input] Cannot calculate dash direction: Controls, Camera, or THREE missing.`); // DEBUG
-             if (this.dashDirection) this.dashDirection.set(0, 0, -1); // Default forward as fallback if vector exists
-             return false; // Indicate failure
+             console.warn(`[DEBUG Input DashCalc] Cannot calculate dash direction: Controls, Camera, or THREE missing.`);
+             if (this.dashDirection) this.dashDirection.set(0, 0, -1);
+             return false;
          }
-
-         let inputDir = new THREE.Vector3(); // Use global THREE
+         let inputDir = new THREE.Vector3();
          if(this.keys['KeyW']){ inputDir.z = -1; }
          if(this.keys['KeyS']){ inputDir.z = 1; }
-         if(this.keys['KeyA']){ inputDir.x = -1; } // Corrected A/D relative to camera
-         if(this.keys['KeyD']){ inputDir.x = 1; } // Corrected A/D relative to camera
-
-         // Get camera's world quaternion (PointerLockControls rotates the camera object directly)
+         if(this.keys['KeyA']){ inputDir.x = -1; }
+         if(this.keys['KeyD']){ inputDir.x = 1; }
          const cameraQuaternion = window.camera.quaternion;
-
-         if(inputDir.lengthSq() === 0){ // If no movement keys pressed, dash forward relative to camera
-             this.dashDirection.set(0, 0, -1); // Forward in camera space is -Z
-             this.dashDirection.applyQuaternion(cameraQuaternion); // Rotate to world space
-             console.log(`[DEBUG Input] Dash direction calculated based on camera forward.`); // DEBUG
-         } else { // Dash in the direction of movement input keys, relative to camera
-             inputDir.normalize(); // Normalize the input direction
-             this.dashDirection.copy(inputDir); // Copy normalized input direction
-             this.dashDirection.applyQuaternion(cameraQuaternion); // Rotate based on camera's orientation
-             console.log(`[DEBUG Input] Dash direction calculated based on input keys and camera.`); // DEBUG
+         if(inputDir.lengthSq() === 0){
+             this.dashDirection.set(0, 0, -1);
+             this.dashDirection.applyQuaternion(cameraQuaternion);
+             // console.log(`[DEBUG Input DashCalc] Dash direction calculated based on camera forward.`);
+         } else {
+             inputDir.normalize();
+             this.dashDirection.copy(inputDir);
+             this.dashDirection.applyQuaternion(cameraQuaternion);
+             // console.log(`[DEBUG Input DashCalc] Dash direction calculated based on input keys and camera.`);
          }
-
-         this.dashDirection.y = 0; // Ensure dash is horizontal (gameLogic adds vertical component if needed)
-         this.dashDirection.normalize(); // Normalize the final world direction vector
-
-         console.log(`[DEBUG Input] Final dash direction calculated: (${this.dashDirection.x.toFixed(2)}, ${this.dashDirection.y.toFixed(2)}, ${this.dashDirection.z.toFixed(2)})`); // DEBUG
-         return true; // Indicate success
+         this.dashDirection.y = 0;
+         this.dashDirection.normalize();
+         // console.log(`[DEBUG Input DashCalc] Final dash direction calculated: (${this.dashDirection.x.toFixed(2)}, ${this.dashDirection.y.toFixed(2)}, ${this.dashDirection.z.toFixed(2)})`);
+         return true;
     }
 };
 
@@ -186,4 +187,4 @@ const Input = {
 if (typeof window !== 'undefined') {
     window.Input = Input;
 }
-console.log("input.js loaded (Using Global THREE/Scope - v3 Corrected - WITH DEBUG LOGS)");
+console.log("input.js loaded (Using Global THREE/Scope - Key Handler Logging)");
