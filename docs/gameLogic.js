@@ -1,9 +1,9 @@
-// --- START OF FULL gameLogic.js FILE (CLASS-BASED REFACTOR v1 - ACCEPTS INPUT STATE - WASD CHECK LOGS) ---
+// --- START OF FULL gameLogic.js FILE (CLASS-BASED REFACTOR v1 - INSPECT PASSED INPUT OBJ) ---
 // docs/gameLogic.js - Encapsulates game simulation logic
 
 // Accesses globals: CONFIG, THREE, Network, UIManager, stateMachine, Effects, scene, mapMesh, players, localPlayerId, playerVelocities, playerIsGrounded
 
-console.log("gameLogic.js loading (CLASS-BASED REFACTOR v1 - ACCEPTS INPUT STATE - WASD CHECK LOGS)...");
+console.log("gameLogic.js loading (CLASS-BASED REFACTOR v1 - INSPECT PASSED INPUT OBJ)...");
 
 class GameLogic {
     constructor(gameInstance) {
@@ -16,7 +16,6 @@ class GameLogic {
         this.DASH_VELOCITY = CONFIG?.DASH_VELOCITY_MAGNITUDE ?? 15.0;
         this.DASH_UP_FACTOR = CONFIG?.DASH_UP_FACTOR ?? 0.15;
         this.GROUND_CHECK_DIST = CONFIG?.GROUND_CHECK_DISTANCE ?? 0.25;
-        // Use player height/radius directly from CONFIG where needed
         this.PLAYER_HEIGHT = CONFIG?.PLAYER_HEIGHT ?? 1.8;
         this.STEP_HEIGHT = CONFIG?.PLAYER_STEP_HEIGHT ?? 0.3;
         this.SHOOT_COOLDOWN_MS = CONFIG?.SHOOT_COOLDOWN ?? 150;
@@ -37,14 +36,33 @@ class GameLogic {
 
     // Method inside the GameLogic class
     /**
-     * Updates the local player's velocity based on input state passed as an argument.
-     * !!! ADDED LOGS INSIDE WASD CHECKS !!!
+     * Updates the local player's velocity based on the global Input object passed as an argument.
+     * !!! ADDED INSPECTION LOGS FOR inputObject !!!
      */
-    updateLocalPlayerInput(deltaTime, camera, localPlayerMesh, inputState) { // <-- Added inputState argument
+    updateLocalPlayerInput(deltaTime, camera, localPlayerMesh, inputObject) { // <-- Changed argument name for clarity
         // Use this.GRAVITY etc. instead of global constants
 
+        // --- DETAILED INSPECTION ---
+        console.log('--- InputLogic Update Start ---');
+        if (!inputObject) {
+            console.error('[!!!] InputLogic received invalid inputObject!');
+            return;
+        }
+        console.log('[InputLogic Inspect] Received inputObject:', inputObject); // Log the whole object
+        console.log('[InputLogic Inspect] inputObject.keys property:', inputObject.keys); // Log just the keys property
+        // Explicitly check the specific key we expect based on other logs
+        console.log(`[InputLogic Inspect] Value of inputObject.keys['KeyW']:`, inputObject.keys ? inputObject.keys['KeyW'] : 'keys property missing');
+        console.log(`[InputLogic Inspect] Value of inputObject.keys['KeyA']:`, inputObject.keys ? inputObject.keys['KeyA'] : 'keys property missing');
+        console.log(`[InputLogic Inspect] Value of inputObject.keys['KeyS']:`, inputObject.keys ? inputObject.keys['KeyS'] : 'keys property missing');
+        console.log(`[InputLogic Inspect] Value of inputObject.keys['KeyD']:`, inputObject.keys ? inputObject.keys['KeyD'] : 'keys property missing');
+        console.log(`[InputLogic Inspect] Value of inputObject.keys['ShiftLeft']:`, inputObject.keys ? inputObject.keys['ShiftLeft'] : 'keys property missing');
+        console.log(`[InputLogic Inspect] Value of inputObject.keys['Space']:`, inputObject.keys ? inputObject.keys['Space'] : 'keys property missing');
+        console.log(`[InputLogic Inspect] Value of inputObject.mouseButtons[0]:`, inputObject.mouseButtons ? inputObject.mouseButtons[0] : 'mouseButtons property missing');
+        console.log(`[InputLogic Inspect] Value of inputObject.requestingDash:`, inputObject.requestingDash);
+        // --- END INSPECTION ---
+
         // Use guards - ensure player/velocity/grounded maps exist from global scope
-        if (!localPlayerId || !window.players || !window.playerVelocities || !window.playerIsGrounded || !inputState) return; // Check inputState exists
+        if (!localPlayerId || !window.players || !window.playerVelocities || !window.playerIsGrounded ) return; // Removed inputObject check, done above
         const localPlayer = window.players[localPlayerId];
         if (!localPlayer || !localPlayerMesh || !window.playerVelocities[localPlayerId]) return;
         const isGrounded = window.playerIsGrounded.hasOwnProperty(localPlayerId) ? window.playerIsGrounded[localPlayerId] : false;
@@ -63,14 +81,10 @@ class GameLogic {
              currentVel.y = previousVelY; // Keep previous Y velocity if airborne or moving up
         }
 
-        // Use inputState argument instead of global Input
-        const keys = inputState.keys;
-        const mouseButtons = inputState.mouseButtons;
-        const requestingDash = inputState.requestingDash;
-        const dashDirection = inputState.dashDirection;
-        const isLocked = inputState.isLocked; // Get lock state from passed object
+        // Use inputObject argument DIRECTLY instead of extracting local variables
+        const isLocked = inputObject.controls?.isLocked ?? false; // Check lock state via controls ref on Input obj
 
-        // console.log(`[DEBUG InputLogic Start (State Passed)] Vel In:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)}), Grounded: ${isGrounded}, Locked: ${isLocked}`); // Reduced logging frequency
+        // console.log(`[DEBUG InputLogic Start (Direct Input Obj)] Vel In:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)}), Grounded: ${isGrounded}, Locked: ${isLocked}`); // DEBUG
 
         const isPlaying = stateMachine?.is('playing');
 
@@ -78,31 +92,31 @@ class GameLogic {
         if (isPlaying && isLocked && localPlayer.health > 0) {
 
             // --- Horizontal Movement (Direct Set) ---
-            const moveSpeed = keys['ShiftLeft'] ? (CONFIG?.MOVEMENT_SPEED_SPRINTING ?? 10.5) : (CONFIG?.MOVEMENT_SPEED ?? 7.0); // Use local keys
+            const moveSpeed = inputObject.keys['ShiftLeft'] ? (CONFIG?.MOVEMENT_SPEED_SPRINTING ?? 10.5) : (CONFIG?.MOVEMENT_SPEED ?? 7.0); // Use inputObject.keys
             const forward = this.tempVec.set(0, 0, -1).applyQuaternion(camera.quaternion); forward.y = 0; forward.normalize();
             const right = this.tempVec2.set(1, 0, 0).applyQuaternion(camera.quaternion); right.y = 0; right.normalize();
             let moveDirectionX = 0;
             let moveDirectionZ = 0;
             let inputDetected = false; // DEBUG Flag
 
-            // ***** ADDED DETAILED LOGS *****
-            if (keys['KeyW']) {
-                console.log("[[[[[ DEBUG InputLogic KeyCheck: W is TRUE ]]]]]"); // DETAILED LOG
+            // ***** Check inputObject.keys directly *****
+            if (inputObject.keys && inputObject.keys['KeyW']) { // Added safety check for keys property
+                 console.log("[[[[[ DEBUG InputLogic KeyCheck (Direct): W is TRUE ]]]]]"); // DETAILED LOG
                 moveDirectionX += forward.x; moveDirectionZ += forward.z; inputDetected = true;
             }
-            if (keys['KeyS']) {
-                 console.log("[[[[[ DEBUG InputLogic KeyCheck: S is TRUE ]]]]]"); // DETAILED LOG
+            if (inputObject.keys && inputObject.keys['KeyS']) {
+                  console.log("[[[[[ DEBUG InputLogic KeyCheck (Direct): S is TRUE ]]]]]"); // DETAILED LOG
                  moveDirectionX -= forward.x; moveDirectionZ -= forward.z; inputDetected = true;
             }
-            if (keys['KeyA']) {
-                 console.log("[[[[[ DEBUG InputLogic KeyCheck: A is TRUE ]]]]]"); // DETAILED LOG
+            if (inputObject.keys && inputObject.keys['KeyA']) {
+                  console.log("[[[[[ DEBUG InputLogic KeyCheck (Direct): A is TRUE ]]]]]"); // DETAILED LOG
                  moveDirectionX -= right.x; moveDirectionZ -= right.z; inputDetected = true;
             }
-            if (keys['KeyD']) {
-                 console.log("[[[[[ DEBUG InputLogic KeyCheck: D is TRUE ]]]]]"); // DETAILED LOG
+            if (inputObject.keys && inputObject.keys['KeyD']) {
+                  console.log("[[[[[ DEBUG InputLogic KeyCheck (Direct): D is TRUE ]]]]]"); // DETAILED LOG
                  moveDirectionX += right.x; moveDirectionZ += right.z; inputDetected = true;
             }
-            // ******************************
+            // *****************************************
 
             if(inputDetected) { // Only apply velocity if WASD is pressed
                 const inputLengthSq = moveDirectionX * moveDirectionX + moveDirectionZ * moveDirectionZ;
@@ -114,38 +128,38 @@ class GameLogic {
                     // *** DIRECTLY SET VELOCITY ***
                     currentVel.x = moveDirectionX * moveSpeed;
                     currentVel.z = moveDirectionZ * moveSpeed;
-                    console.log(`[DEBUG InputLogic Move (State Passed)] Applied Vel: (${currentVel.x.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // DEBUG
+                    // console.log(`[DEBUG InputLogic Move (Direct Input Obj)] Applied Vel: (${currentVel.x.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // DEBUG
                 }
             } else {
-                 // console.log(`[DEBUG InputLogic Move (State Passed)] No WASD detected this frame.`); // DEBUG
+                 // console.log(`[DEBUG InputLogic Move (Direct Input Obj)] No WASD detected this frame.`); // DEBUG
             }
 
             // --- Handle Jump ---
-            if (keys['Space'] && isGrounded) { // Use local keys
-                console.log("[DEBUG InputLogic Jump (State Passed)] Applying Jump Velocity!"); // DEBUG
+            if (inputObject.keys && inputObject.keys['Space'] && isGrounded) { // Use inputObject.keys
+                console.log("[DEBUG InputLogic Jump (Direct Input Obj)] Applying Jump Velocity!"); // DEBUG
                 currentVel.y = this.JUMP_VELOCITY;
                 window.playerIsGrounded[localPlayerId] = false;
-                 if(window.Input) window.Input.keys['Space'] = false; // Consume globally after processing locally
+                inputObject.keys['Space'] = false; // Consume DIRECTLY on the passed object
             }
 
              // --- Handle Dash ---
-             if (requestingDash) { // Use local requestingDash
-                 console.log("[DEBUG InputLogic Dash (State Passed)] Consuming Dash Request!"); // DEBUG
-                 const dashDir = dashDirection; // Use local dashDirection
+             if (inputObject.requestingDash) { // Use inputObject.requestingDash
+                 console.log("[DEBUG InputLogic Dash (Direct Input Obj)] Consuming Dash Request!"); // DEBUG
+                 const dashDir = inputObject.dashDirection; // Use inputObject.dashDirection
                  currentVel.x += dashDir.x * this.DASH_VELOCITY;
                  currentVel.z += dashDir.z * this.DASH_VELOCITY;
                  currentVel.y = Math.max(currentVel.y + this.DASH_VELOCITY * this.DASH_UP_FACTOR, currentVel.y * 0.5 + this.DASH_VELOCITY * this.DASH_UP_FACTOR * 0.5);
                  window.playerIsGrounded[localPlayerId] = false;
-                 if(window.Input) window.Input.requestingDash = false; // Consume globally
+                 inputObject.requestingDash = false; // Consume DIRECTLY on the passed object
              }
 
              // --- Handle Shooting ---
              const now = Date.now();
              const shootReadyTime = (window.lastShootTime || 0) + this.SHOOT_COOLDOWN_MS;
-             if (mouseButtons[0] && now > shootReadyTime) { // Use local mouseButtons
-                 console.log("[DEBUG InputLogic Shoot (State Passed)] Shoot Triggered!"); // DEBUG
+             if (inputObject.mouseButtons && inputObject.mouseButtons[0] && now > shootReadyTime) { // Use inputObject.mouseButtons
+                 console.log("[DEBUG InputLogic Shoot (Direct Input Obj)] Shoot Triggered!"); // DEBUG
                  window.lastShootTime = now;
-                 this.performShoot(camera);
+                 this.performShoot(camera); // performShoot still uses global Input.keys['KeyE'] for now
              }
 
         } // End if (isPlaying && isLocked && localPlayer.health > 0)
@@ -156,12 +170,12 @@ class GameLogic {
          if (!isGrounded) {
              currentVel.y -= this.GRAVITY * deltaTime;
          }
-         // if (currentVel.y !== velYBeforeGravity) console.log(`[DEBUG InputLogic Gravity (State Passed)] Applied. VelY: ${currentVel.y.toFixed(2)} (was ${velYBeforeGravity.toFixed(2)}), Grounded: ${isGrounded}`); // DEBUG
+         // if (currentVel.y !== velYBeforeGravity) console.log(`[DEBUG InputLogic Gravity (Direct Input Obj)] Applied. VelY: ${currentVel.y.toFixed(2)} (was ${velYBeforeGravity.toFixed(2)}), Grounded: ${isGrounded}`); // DEBUG
 
 
-         // console.log(`[DEBUG InputLogic End (State Passed)] Vel Out:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // Reduced logging
+         // console.log(`[DEBUG InputLogic End (Direct Input Obj)] Vel Out:(${currentVel.x.toFixed(2)}, ${currentVel.y.toFixed(2)}, ${currentVel.z.toFixed(2)})`); // Reduced logging
+        console.log('--- InputLogic Update End ---'); // DEBUG
     } // End of updateLocalPlayerInput method
-
 
     /**
      * Performs collision detection and response for the local player.
@@ -459,6 +473,6 @@ class GameLogic {
 
 } // End GameLogic Class
 
-console.log("gameLogic.js loaded successfully (CLASS-BASED REFACTOR v1 - ACCEPTS INPUT STATE - WASD CHECK LOGS).");
+console.log("gameLogic.js loaded successfully (CLASS-BASED REFACTOR v1 - INSPECT PASSED INPUT OBJ).");
 
 // --- END OF FULL gameLogic.js FILE ---
