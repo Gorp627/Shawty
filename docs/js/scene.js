@@ -70,21 +70,24 @@ function loadAssets() {
     assetLoadManager.onError = (url) => {
         console.error('There was an error loading ' + url);
     };
-    assetLoadManager.onProgress = (url, itemsLoaded, itemsTotal) => {
+
+    // *** ADD async HERE ***
+    assetLoadManager.onProgress = async (url, itemsLoaded, itemsTotal) => {
         console.log('Loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.');
          // Update loading progress UI using the imported function
-         // Note: Ensure ui.js is imported if you uncomment this
          try {
+            // Now await is allowed because the function is async
             const { updateLoadingProgress } = await import('./ui.js');
             updateLoadingProgress(itemsLoaded / itemsTotal);
          } catch(e) { console.error("Failed to import or call updateLoadingProgress", e); }
     };
+    // *** END CHANGE ***
 
     const gltfLoaderManaged = new GLTFLoader(assetLoadManager);
     const audioLoaderManaged = new THREE.AudioLoader(assetLoadManager);
 
-    // Load Map (RENAME "the first map!.glb" to "map1.glb" or similar!)
-    gltfLoaderManaged.load('assets/maps/map1.glb', (gltf) => { // *** USE RENAMED FILE ***
+    // Load Map (Make sure your map file is named map1.glb)
+    gltfLoaderManaged.load('assets/maps/map1.glb', (gltf) => {
         environmentMesh = gltf.scene;
         environmentMesh.traverse((node) => {
             if (node.isMesh) {
@@ -106,21 +109,19 @@ function loadAssets() {
 export function addPlayer(playerData) {
     if (playerMeshes[playerData.id]) {
          console.warn(`Player mesh already exists for ${playerData.id}. Skipping add.`);
-         // Optionally update position/rotation here if needed
          updatePlayerPosition(playerData.id, playerData.position, playerData.rotation);
          return;
     }
 
     console.log(`Adding player ${playerData.name} (${playerData.id}) to scene`);
-    // Load the specific character model
     gltfLoader.load(`assets/maps/${playerData.model || 'Shawty1'}.glb`, (gltf) => {
         const playerMesh = gltf.scene;
-        playerMesh.scale.set(0.5, 0.5, 0.5); // Adjust scale as needed
+        playerMesh.scale.set(0.5, 0.5, 0.5);
         playerMesh.position.set(playerData.position.x, playerData.position.y, playerData.position.z);
-        playerMesh.rotation.y = playerData.rotation?.y || 0; // Set initial Y rotation
+        playerMesh.rotation.y = playerData.rotation?.y || 0;
         playerMesh.castShadow = true;
         playerMesh.receiveShadow = true;
-        playerMesh.userData.id = playerData.id; // Store ID for reference
+        playerMesh.userData.id = playerData.id;
 
         playerMesh.traverse((node) => {
             if (node.isMesh) {
@@ -128,15 +129,12 @@ export function addPlayer(playerData) {
             }
         });
 
-        // Attach gun model (placeholder - more complex logic needed)
-        loadAndAttachGun(playerMesh);
-
+        loadAndAttachGun(playerMesh); // Attach gun
         playerMeshes[playerData.id] = playerMesh;
         scene.add(playerMesh);
         console.log(`Mesh added for ${playerData.id}`);
     }, undefined, (error) => {
         console.error(`Error loading model for player ${playerData.id}:`, error);
-        // Fallback to a simple cube if loading fails
         const geometry = new THREE.BoxGeometry(1, PLAYER_HEIGHT, 1);
         const material = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff });
         const cube = new THREE.Mesh(geometry, material);
@@ -151,28 +149,22 @@ export function addPlayer(playerData) {
 function loadAndAttachGun(playerMesh) {
     gltfLoader.load('assets/maps/gun2.glb', (gltf) => {
         const gunMesh = gltf.scene;
-        gunMesh.scale.set(0.2, 0.2, 0.2); // Adjust scale
-        gunMesh.position.set(0.3, PLAYER_HEIGHT * 0.4, 0.5); // Adjust position relative to player center
-        gunMesh.rotation.y = -Math.PI / 2; // Point forward
+        gunMesh.scale.set(0.2, 0.2, 0.2);
+        gunMesh.position.set(0.3, PLAYER_HEIGHT * 0.4, 0.5);
+        gunMesh.rotation.y = -Math.PI / 2;
         gunMesh.castShadow = true;
-
-        gunMesh.traverse((node) => {
-            if (node.isMesh) node.castShadow = true;
-        });
-
+        gunMesh.traverse((node) => { if (node.isMesh) node.castShadow = true; });
         playerMesh.add(gunMesh);
         playerMesh.userData.gun = gunMesh;
         console.log(`Gun attached to player ${playerMesh.userData.id}`);
-
     }, undefined, (error) => console.error("Error loading gun model:", error));
 }
-
 
 export function removePlayer(playerId) {
     const mesh = playerMeshes[playerId];
     if (mesh) {
         scene.remove(mesh);
-        // TODO: Properly dispose of geometry/material/textures
+        // TODO: Proper disposal
         delete playerMeshes[playerId];
         console.log(`Removed mesh for player ${playerId}`);
     }
@@ -182,170 +174,97 @@ export function updatePlayerPosition(playerId, position, rotation) {
     const mesh = playerMeshes[playerId];
     if (mesh) {
         mesh.position.set(position.x, position.y, position.z);
-        mesh.rotation.y = rotation.y; // Only apply Y rotation from server data
+        mesh.rotation.y = rotation.y;
     } else {
-        // If mesh doesn't exist, maybe the player joined before this client loaded?
-        // Request full state or handle appropriately
         console.warn(`Tried to update non-existent mesh for player ${playerId}`);
-        // Consider adding the player here if data is sufficient
-        // addPlayer({id: playerId, position, rotation, name: `Player_${playerId.substring(0,4)}`, model: 'Shawty1'});
     }
 }
 
-export function getPlayerMesh(playerId) {
-    return playerMeshes[playerId];
-}
-
-export function getCamera() {
-    return camera;
-}
-
-export function getScene() {
-    return scene;
-}
-
-export function getEnvironmentMeshes() {
-    return environmentMesh ? [environmentMesh] : [];
-}
+export function getPlayerMesh(playerId) { return playerMeshes[playerId]; }
+export function getCamera() { return camera; }
+export function getScene() { return scene; }
+export function getEnvironmentMeshes() { return environmentMesh ? [environmentMesh] : []; }
 
 export function playGunshotSound(position) {
     if (!gunshotSoundBuffer || !listener) return;
-
     const sound = new THREE.PositionalAudio(listener);
     sound.setBuffer(gunshotSoundBuffer);
     sound.setRefDistance(20);
     sound.setRolloffFactor(1);
     sound.setVolume(0.5);
-
-    // Use a temporary object for sound positioning
     const soundObject = new THREE.Object3D();
     soundObject.position.copy(position);
     scene.add(soundObject);
     soundObject.add(sound);
     sound.play();
-
     sound.onEnded = () => {
         sound.isPlaying = false;
-        // Ensure cleanup happens correctly
-        if(soundObject.parent) {
-             soundObject.remove(sound);
-             scene.remove(soundObject);
-        }
+        if(soundObject.parent) { soundObject.remove(sound); scene.remove(soundObject); }
     };
 }
 
 export function createDeathExplosion(position) {
     const particleCount = 100;
     const particles = new THREE.BufferGeometry();
-    const pMaterial = new THREE.PointsMaterial({
-        color: 0xFF4500,
-        size: 0.5,
-        blending: THREE.AdditiveBlending,
-        transparent: true,
-        depthWrite: false,
-    });
-
-    const pVertices = [];
-    const velocities = [];
-
+    const pMaterial = new THREE.PointsMaterial({ color: 0xFF4500, size: 0.5, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false });
+    const pVertices = []; const velocities = [];
     for (let i = 0; i < particleCount; i++) {
         pVertices.push(position.x, position.y + PLAYER_HEIGHT / 2, position.z);
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos(2 * Math.random() - 1);
-        const speed = 5 + Math.random() * 10;
-        velocities.push(
-            speed * Math.sin(phi) * Math.cos(theta),
-            speed * Math.cos(phi) + 3,
-            speed * Math.sin(phi) * Math.sin(theta)
-        );
+        const theta = Math.random() * Math.PI * 2; const phi = Math.acos(2 * Math.random() - 1); const speed = 5 + Math.random() * 10;
+        velocities.push( speed * Math.sin(phi) * Math.cos(theta), speed * Math.cos(phi) + 3, speed * Math.sin(phi) * Math.sin(theta) );
     }
-
     particles.setAttribute('position', new THREE.Float32BufferAttribute(pVertices, 3));
     const particleSystem = new THREE.Points(particles, pMaterial);
-    particleSystem.userData.velocities = velocities;
-    particleSystem.userData.life = 1.0;
-    // Add custom update and dispose methods for cleanup
-    particleSystem.userData.update = (delta) => updateParticleSystem(particleSystem, delta);
-    particleSystem.userData.dispose = () => disposeEffect(particleSystem);
+    particleSystem.userData.velocities = velocities; particleSystem.userData.life = 1.0;
+    particleSystem.userData.update = (delta) => updateParticleSystem(particleSystem, delta); particleSystem.userData.dispose = () => disposeEffect(particleSystem);
     scene.add(particleSystem);
 
-
     const shockwaveGeometry = new THREE.RingGeometry(0.1, 1, 64);
-    const shockwaveMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+    const shockwaveMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
     const shockwave = new THREE.Mesh(shockwaveGeometry, shockwaveMaterial);
-    shockwave.position.copy(position);
-    shockwave.position.y += 0.1;
-    shockwave.rotation.x = -Math.PI / 2;
-    shockwave.userData.life = 0.5;
-    shockwave.userData.maxRadius = 25;
-    // Add custom update and dispose methods for cleanup
-    shockwave.userData.update = (delta) => updateShockwave(shockwave, delta);
-    shockwave.userData.dispose = () => disposeEffect(shockwave);
+    shockwave.position.copy(position); shockwave.position.y += 0.1; shockwave.rotation.x = -Math.PI / 2;
+    shockwave.userData.life = 0.5; shockwave.userData.maxRadius = 25;
+    shockwave.userData.update = (delta) => updateShockwave(shockwave, delta); shockwave.userData.dispose = () => disposeEffect(shockwave);
     scene.add(shockwave);
 
-    return [particleSystem, shockwave]; // Return objects with update methods
+    return [particleSystem, shockwave];
 }
 
 function updateParticleSystem(system, deltaTime) {
     system.userData.life -= deltaTime;
-    if (system.userData.life <= 0) return false; // Indicate removal
-
-    const positions = system.geometry.attributes.position.array;
-    const velocities = system.userData.velocities;
-    const gravity = -9.8 * 2;
-
+    if (system.userData.life <= 0) return false;
+    const positions = system.geometry.attributes.position.array; const velocities = system.userData.velocities; const gravity = -9.8 * 2;
     for (let i = 0; i < positions.length / 3; i++) {
-        velocities[i * 3 + 1] += gravity * deltaTime; // Apply gravity to Y velocity
-        positions[i * 3] += velocities[i * 3] * deltaTime;
-        positions[i * 3 + 1] += velocities[i * 3 + 1] * deltaTime;
-        positions[i * 3 + 2] += velocities[i * 3 + 2] * deltaTime;
+        velocities[i * 3 + 1] += gravity * deltaTime;
+        positions[i * 3] += velocities[i * 3] * deltaTime; positions[i * 3 + 1] += velocities[i * 3 + 1] * deltaTime; positions[i * 3 + 2] += velocities[i * 3 + 2] * deltaTime;
     }
-    system.material.opacity = Math.max(0, system.userData.life); // Fade out
-    system.geometry.attributes.position.needsUpdate = true;
-    return true; // Indicate still active
+    system.material.opacity = Math.max(0, system.userData.life); system.geometry.attributes.position.needsUpdate = true;
+    return true;
 }
 
 function updateShockwave(wave, deltaTime) {
     wave.userData.life -= deltaTime;
-    if (wave.userData.life <= 0) return false; // Indicate removal
-
-    const progress = 1 - (wave.userData.life / 0.5);
-    const currentRadius = progress * wave.userData.maxRadius;
-    const innerRadius = Math.max(0.1, currentRadius - 2);
-
-    // Recreate geometry (less efficient, but simple)
-    wave.geometry.dispose(); // Dispose old geometry
-    wave.geometry = new THREE.RingGeometry(innerRadius, currentRadius, 64);
-    wave.material.opacity = Math.max(0, 1 - progress); // Fade out
-    return true; // Indicate still active
+    if (wave.userData.life <= 0) return false;
+    const progress = 1 - (wave.userData.life / 0.5); const currentRadius = progress * wave.userData.maxRadius; const innerRadius = Math.max(0.1, currentRadius - 2);
+    wave.geometry.dispose(); wave.geometry = new THREE.RingGeometry(innerRadius, currentRadius, 64); wave.material.opacity = Math.max(0, 1 - progress);
+    return true;
 }
 
 function disposeEffect(effect) {
-     if (effect.parent) {
-        effect.parent.remove(effect);
-     }
+     if (effect.parent) { effect.parent.remove(effect); }
      if (effect.geometry) effect.geometry.dispose();
-     if (effect.material) {
-         if (effect.material.map) effect.material.map.dispose(); // Dispose textures if any
-         effect.material.dispose();
-     }
-     console.log("Disposed effect");
+     if (effect.material) { if (effect.material.map) effect.material.map.dispose(); effect.material.dispose(); }
+     // console.log("Disposed effect"); // Optional log
 }
-
 
 export function updateEffect(effect, deltaTime) {
-    // Effects now have their own update methods stored in userData
     if (effect.userData && typeof effect.userData.update === 'function') {
         const isActive = effect.userData.update(deltaTime);
-        if (!isActive && typeof effect.userData.dispose === 'function') {
-             effect.userData.dispose(); // Call dispose method if update returns false
-        }
+        if (!isActive && typeof effect.userData.dispose === 'function') { effect.userData.dispose(); }
         return isActive;
     }
-    return false; // Cannot update if method doesn't exist
+    return false;
 }
-
 
 function onWindowResize() {
     if (camera && renderer) {
@@ -355,4 +274,4 @@ function onWindowResize() {
     }
 }
 
-export { FALL_DEATH_Y, PLAYER_HEIGHT }; // Export constants
+export { FALL_DEATH_Y, PLAYER_HEIGHT };
