@@ -1,5 +1,5 @@
 // docs/js/main.js
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js'; // Using CDN URL
 import * as Scene from './scene.js';
 import * as Network from './network.js';
 import * as PlayerController from './playerController.js';
@@ -9,29 +9,26 @@ let renderer, camera, scene;
 let localPlayerId = null;
 let gameStarted = false;
 let players = {}; // Store data for all players { id: data }
-let activeSceneEffects = []; // Effects like explosions
+let activeSceneEffects = []; // Effects like explosions needing animation
+const clock = new THREE.Clock(); // Moved clock here for animate loop
 
 const SERVER_URL = 'https://gametest-psxl.onrender.com'; // Your Render server URL
 
 function init() {
     UI.showLoadingScreen();
-
-    // 1. Initialize Scene
     const canvas = document.getElementById('gameCanvas');
-    const sceneData = Scene.initScene(canvas, onAssetsLoaded); // Pass callback
+    // Pass onAssetsLoaded callback to initScene
+    const sceneData = Scene.initScene(canvas, onAssetsLoaded);
     renderer = sceneData.renderer;
     camera = sceneData.camera;
     scene = sceneData.scene;
-
-    // Asset loading is handled by scene.js, wait for callback 'onAssetsLoaded'
+    // Asset loading is async, wait for the callback
 }
 
 function onAssetsLoaded() {
     console.log("Assets loaded, showing menu.");
-    UI.updateLoadingProgress(1); // Ensure progress shows 100%
+    UI.updateLoadingProgress(1);
     UI.showMenuScreen();
-
-    // Setup play button listener
     UI.onPlayButtonClick(() => {
         const playerName = UI.getPlayerName();
         console.log("Play button clicked, joining game as:", playerName);
@@ -40,40 +37,37 @@ function onAssetsLoaded() {
 }
 
 function startGame(playerName) {
-    UI.showGameScreen(); // Switch UI to game view
+    UI.showGameScreen();
 
-    // 2. Connect to Network
     Network.connectToServer(SERVER_URL, playerName, {
-        onConnect: () => {
-            console.log("Network connected successfully.");
-            // Waiting for assignId before initializing player controller
-        },
+        onConnect: () => console.log("Network connected successfully."),
         onDisconnect: () => {
             console.log("Network disconnected.");
             alert("Disconnected from server!");
             gameStarted = false;
-            // Show menu or error screen
             UI.showMenuScreen();
-            // Clean up players?
             Object.keys(players).forEach(id => Scene.removePlayer(id));
             players = {};
             localPlayerId = null;
+            // Maybe stop animation loop here? cancelAnimationFrame?
         },
         onAssignId: (id) => {
             console.log("Received player ID:", id);
             localPlayerId = id;
-            // 3. Initialize Player Controller *after* getting ID
+            // Init controller AFTER getting ID and AFTER assets are loaded (implicitly true by now)
             PlayerController.initPlayerController(camera, renderer.domElement, localPlayerId);
             gameStarted = true;
-            // Start the game loop
-            animate();
+            animate(); // Start the game loop
         },
         onStateUpdate: (state, isPartialUpdate) => {
-            // Handle full state or partial updates (like single player move)
-            // console.log("Received state update:", state);
+            if (!gameStarted && !isPartialUpdate) { // Avoid processing before game start unless it's the initial state
+                 console.log("Received initial state:", state);
+            } else if (!gameStarted && isPartialUpdate){
+                console.warn("Received partial update before game started, ignoring.");
+                return;
+            }
+
              if (!isPartialUpdate) {
-                 // Full state update (e.g., on join)
-                 // Remove players that are no longer in the state
                  Object.keys(players).forEach(existingId => {
                      if (!state[existingId] && existingId !== localPlayerId) {
                          Scene.removePlayer(existingId);
@@ -82,163 +76,146 @@ function startGame(playerName) {
                  });
              }
 
-            // Add or update players based on received state
             for (const id in state) {
-                if (id === localPlayerId) {
-                    // Maybe sync server position if needed (handle prediction errors)
-                    // For now, client is mostly authoritative over its own position
-                    continue;
-                }
+                if (id === localPlayerId) continue; // Ignore updates for self for now
 
-                if (!players[id]) { // New player joined
+                if (!players[id]) { // New player
                     console.log("Adding new player from state:", id);
-                    players[id] = state[id]; // Store initial data
+                    players[id] = state[id];
                     Scene.addPlayer(state[id]);
-                } else { // Update existing player
-                     players[id] = { ...players[id], ...state[id] }; // Merge updates
+                } else { // Update existing
+                     players[id] = { ...players[id], ...state[id] }; // Merge new data
                     Scene.updatePlayerPosition(id, state[id].position, state[id].rotation);
-                     // Update health or other visual cues if needed
-                     // const mesh = Scene.getPlayerMesh(id);
-                     // if (mesh && state[id].health !== undefined) { /* Update health bar? */ }
+                    // TODO: Update other state if needed (health bars etc.)
                 }
             }
         },
         onPlayerJoined: (playerData) => {
-            console.log("Handling player joined event:", playerData.id);
-            if (playerData.id === localPlayerId) return; // Ignore self join event
+            if (playerData.id === localPlayerId || !gameStarted) return;
+             console.log("Handling player joined event:", playerData.id);
              if (!players[playerData.id]) {
                 players[playerData.id] = playerData;
                 Scene.addPlayer(playerData);
              } else {
-                // Player might already exist from initial state, update data just in case
                  players[playerData.id] = { ...players[playerData.id], ...playerData };
                  Scene.updatePlayerPosition(playerData.id, playerData.position, playerData.rotation);
              }
         },
         onPlayerLeft: (playerId) => {
+            if (playerId === localPlayerId || !gameStarted) return;
              console.log("Handling player left event:", playerId);
-            if (playerId === localPlayerId) return; // Should not happen if disconnect handles it
             if (players[playerId]) {
                 Scene.removePlayer(playerId);
                 delete players[playerId];
             }
         },
         onPlayerShot: (data) => {
-            // Play sound effect at shooter's position
-            const shooter = players[data.shooterId] || (data.shooterId === localPlayerId ? PlayerController.getPlayerState() : null);
-            if (shooter) {
-                 // Get gun position for sound origin (needs refinement)
-                 const mesh = Scene.getPlayerMesh(data.shooterId);
-                 let soundPos = shooter.position; // Default to player pos
+            if (!gameStarted) return;
+            const shooterId = data.shooterId;
+            const shooterData = players[shooterId] || (shooterId === localPlayerId ? PlayerController.getPlayerState() : null);
+            if (shooterData) {
+                 const mesh = Scene.getPlayerMesh(shooterId);
+                 let soundPos = shooterData.position; // Default to player pos
                  if(mesh && mesh.userData.gun) {
-                    // Get world position of the gun
                      soundPos = mesh.userData.gun.getWorldPosition(new THREE.Vector3());
-                 } else if (data.shooterId === localPlayerId) {
-                     // Local player shot, position sound near camera/gun model
+                 } else if (shooterId === localPlayerId) {
                      const camDir = new THREE.Vector3();
                      camera.getWorldDirection(camDir);
-                     soundPos = camera.position.clone().add(camDir.multiplyScalar(0.5)); // Approx gun position
+                     soundPos = camera.position.clone().add(camDir.multiplyScalar(0.5));
                  }
                  Scene.playGunshotSound(soundPos);
+                 // TODO: Add muzzle flash/tracer
             }
-
-             // TODO: Add visual effect (muzzle flash, tracer)
         },
          onPlayerDied: (data) => {
+            if (!gameStarted) return;
             console.log("Main handling playerDied:", data);
              const { deadPlayerId, position, affectedPlayers } = data;
 
-             // Trigger explosion/shockwave visual at death position
+             // Visual/Audio effect for death
              const effects = Scene.createDeathExplosion(new THREE.Vector3(position.x, position.y, position.z));
-             activeSceneEffects.push(...effects); // Add effects to update list
+             activeSceneEffects.push(...effects);
 
-             // Apply knockback to local player if affected
+             // Apply knockback if local player is affected
              const localAffected = affectedPlayers.find(p => p.id === localPlayerId);
              if (localAffected) {
                  PlayerController.applyKnockback(localAffected.knockback);
              }
 
-             // Handle visual changes for the dead player model (if not local player)
+             // Hide remote player mesh (will reappear on respawn)
              if (deadPlayerId !== localPlayerId && players[deadPlayerId]) {
-                 // Make player model disappear? Turn grey? Play death animation?
-                 // For now, just remove the mesh after a short delay maybe?
-                 // Or server handles respawn visibility via state updates.
-                 console.log(`Player ${players[deadPlayerId].name} died visually.`);
-                 // Scene.removePlayer(deadPlayerId); // Remove immediately? Or wait for respawn state?
-                 // Let's keep the mesh until respawn for now, maybe make it transparent/disabled
                  const mesh = Scene.getPlayerMesh(deadPlayerId);
-                 if (mesh) {
-                    mesh.visible = false; // Hide mesh on death
-                 }
-
+                 if (mesh) mesh.visible = false;
+                 // We don't delete from `players` here, just hide visually
+                 console.log(`Player ${players[deadPlayerId].name} died visually.`);
              }
+             // Local player death is handled in playerController via handleDeath()
         },
-         onRespawn: (data) => {
-            // Handle local player respawn
-             if (localPlayerId) { // Ensure controller is initialized
-                 PlayerController.handleRespawn(data);
-             }
+         onRespawn: (data) => { // For local player respawn
+            if (!gameStarted) return;
+            if (localPlayerId && typeof PlayerController.handleRespawn === 'function') {
+                PlayerController.handleRespawn(data);
+            }
         },
-         onPlayerRespawned: (data) => { // Handle other players respawning
-             if (data.id !== localPlayerId && players[data.id]) {
+         onPlayerRespawned: (data) => { // For remote players respawning
+             if (!gameStarted || data.id === localPlayerId) return;
+             if (players[data.id]) {
                  console.log(`Player ${players[data.id].name} respawned visually.`);
                  players[data.id].position = data.position;
-                 players[data.id].health = data.health; // Update health state
+                 players[data.id].health = data.health;
                  const mesh = Scene.getPlayerMesh(data.id);
                  if (mesh) {
                      mesh.position.set(data.position.x, data.position.y, data.position.z);
                      mesh.visible = true; // Make visible again
                  } else {
-                     // Player mesh didn't exist? Add them back.
+                     // Player mesh might have been removed somehow, re-add
                      Scene.addPlayer(players[data.id]);
                  }
-                 // Update health bar if applicable
              }
          },
           onApplyPropulsion: (data) => {
-            // This is received if the server explicitly tells the client to apply propulsion
-            // Might be redundant if client predicts it, see playerController.js
-            PlayerController.handleServerPropulsion(data);
+            if (!gameStarted) return;
+            PlayerController.handleServerPropulsion(data); // Pass to controller
         },
-
-
     });
 }
 
-
 // Game Loop
 function animate() {
-    if (!gameStarted) return; // Stop loop if disconnected or not started
+    if (!gameStarted) return; // Stop loop if disconnected
 
-    requestAnimationFrame(animate);
+    const animationFrameId = requestAnimationFrame(animate); // Store ID for potential cancellation
 
-    const deltaTime = Math.min(0.05, clock.getDelta()); // Clamp delta to prevent large jumps
+    const deltaTime = clock.getDelta();
 
-    // Update local player movement and camera
-    PlayerController.updatePlayer(deltaTime);
+    // Update local player FIRST
+    if (localPlayerId) {
+        PlayerController.updatePlayer(deltaTime);
+    }
 
-    // Update scene effects (explosions, etc.)
-    activeSceneEffects = activeSceneEffects.filter(effect => {
-        return Scene.updateEffect(effect, deltaTime); // Update and filter out finished effects
-    });
+    // Update scene effects
+    activeSceneEffects = activeSceneEffects.filter(effect => Scene.updateEffect(effect, deltaTime));
 
+    // Interpolate other players (optional but smoother)
+     for (const id in players) {
+         if (id !== localPlayerId) {
+             const mesh = Scene.getPlayerMesh(id);
+             const serverState = players[id];
+             if (mesh && serverState?.position && serverState?.rotation) {
+                  // Position interpolation
+                  mesh.position.lerp(new THREE.Vector3(serverState.position.x, serverState.position.y, serverState.position.z), 0.2); // Adjust lerp factor (0.1 to 0.3 typical)
 
-    // Lerp other player positions for smoothness (optional but recommended)
-    // for (const id in players) {
-    //     if (id !== localPlayerId) {
-    //         const mesh = Scene.getPlayerMesh(id);
-    //         const serverPos = players[id].position;
-    //         if (mesh && serverPos) {
-    //             mesh.position.lerp(new THREE.Vector3(serverPos.x, serverPos.y, serverPos.z), 0.15); // Adjust lerp factor
-    //             // Lerp rotation too? Quaternion lerp (slerp) is better for rotations.
-    //              const targetQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, serverPos.rotation.y, 0, 'YXZ')); // Only Y rotation usually
-    //              mesh.quaternion.slerp(targetQuat, 0.15);
-    //         }
-    //     }
-    // }
+                  // Rotation interpolation (using quaternions is better)
+                  const targetQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, serverState.rotation.y, 0, 'YXZ')); // Only Y rotation
+                  mesh.quaternion.slerp(targetQuat, 0.2);
+             }
+         }
+     }
 
-    // Render the scene
-    renderer.render(scene, camera);
+    // Render
+    if(renderer && scene && camera) {
+        renderer.render(scene, camera);
+    }
 }
 
 // --- Start Initialization ---
