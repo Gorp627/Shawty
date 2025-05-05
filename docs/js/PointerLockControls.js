@@ -1,8 +1,14 @@
+// docs/js/PointerLockControls.js
+
+// --- MODIFIED IMPORT ---
+// Changed 'three' to the full CDN URL
 import {
-	Controls,
+	EventDispatcher as Controls, // Renamed EventDispatcher to Controls to match usage below
 	Euler,
 	Vector3
-} from 'three';
+} from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
+// --- END MODIFIED IMPORT ---
+
 
 const _euler = new Euler( 0, 0, 0, 'YXZ' );
 const _vector = new Vector3();
@@ -55,10 +61,10 @@ const _PI_2 = Math.PI / 2;
  * } );
  * ```
  *
- * @augments Controls
+ * @augments EventDispatcher (originally Controls in newer versions, aliased above)
  * @three_import import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
  */
-class PointerLockControls extends Controls {
+class PointerLockControls extends Controls { // Uses the alias 'Controls' which now points to EventDispatcher
 
 	/**
 	 * Constructs a new controls instance.
@@ -68,7 +74,9 @@ class PointerLockControls extends Controls {
 	 */
 	constructor( camera, domElement = null ) {
 
-		super( camera, domElement );
+		super( camera, domElement ); // Call EventDispatcher constructor (might not need args depending on version)
+        this.object = camera; // Manually assign camera if base class doesn't handle it
+        this.domElement = domElement; // Manually assign domElement
 
 		/**
 		 * Whether the controls are locked or not.
@@ -103,6 +111,13 @@ class PointerLockControls extends Controls {
 		 */
 		this.pointerSpeed = 1.0;
 
+        /**
+         * Enable/disable controls
+         * @type {boolean}
+         * @default true
+         */
+        this.enabled = true;
+
 		// event listeners
 
 		this._onMouseMove = onMouseMove.bind( this );
@@ -113,13 +128,21 @@ class PointerLockControls extends Controls {
 
 			this.connect( this.domElement );
 
-		}
+		} else {
+             console.warn( 'THREE.PointerLockControls: domElement not provided in constructor. Call connect() manually.' );
+        }
 
 	}
 
-	connect( element ) {
+	connect( element = this.domElement ) {
 
-		super.connect( element );
+		// super.connect( element ); // EventDispatcher doesn't have connect
+
+        if (!element) {
+            console.error( 'THREE.PointerLockControls: No domElement specified to connect to.' );
+            return;
+        }
+        this.domElement = element; // Ensure it's set if passed here
 
 		this.domElement.ownerDocument.addEventListener( 'mousemove', this._onMouseMove );
 		this.domElement.ownerDocument.addEventListener( 'pointerlockchange', this._onPointerlockChange );
@@ -128,6 +151,7 @@ class PointerLockControls extends Controls {
 	}
 
 	disconnect() {
+        if (!this.domElement) return; // Avoid errors if not connected
 
 		this.domElement.ownerDocument.removeEventListener( 'mousemove', this._onMouseMove );
 		this.domElement.ownerDocument.removeEventListener( 'pointerlockchange', this._onPointerlockChange );
@@ -143,9 +167,8 @@ class PointerLockControls extends Controls {
 
 	getObject() {
 
-		console.warn( 'THREE.PointerLockControls: getObject() has been deprecated. Use controls.object instead.' ); // @deprecated r169
-
-		return this.object;
+		// console.warn( 'THREE.PointerLockControls: getObject() has been deprecated. Use controls.object instead.' ); // @deprecated r169
+		return this.object; // Return the camera object
 
 	}
 
@@ -207,7 +230,10 @@ class PointerLockControls extends Controls {
 	 * Setting it to true will disable mouse acceleration.
 	 */
 	lock( unadjustedMovement = false ) {
-
+        if (!this.domElement) {
+             console.error( 'THREE.PointerLockControls: Cannot lock without a domElement.' );
+             return;
+        }
 		this.domElement.requestPointerLock( {
 			unadjustedMovement
 		} );
@@ -218,14 +244,14 @@ class PointerLockControls extends Controls {
 	 * Exits the pointer lock.
 	 */
 	unlock() {
-
+         if (!this.domElement) return; // Avoid errors
 		this.domElement.ownerDocument.exitPointerLock();
 
 	}
 
 }
 
-// event listeners
+// --- Event listener functions (kept outside class) ---
 
 function onMouseMove( event ) {
 
@@ -246,6 +272,7 @@ function onMouseMove( event ) {
 }
 
 function onPointerlockChange() {
+    if (!this.domElement) return; // Avoid errors
 
 	if ( this.domElement.ownerDocument.pointerLockElement === this.domElement ) {
 
