@@ -1,0 +1,82 @@
+body {
+    margin: 0;
+    overflow: hidden; /* Prevent scrollbars */
+    font-family: sans-serif;
+    background-color: #222;
+    color: white;
+    display: flex; /* Use flexbox for centering */
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+#loading-screen, #menu-screen, #death-screen {
+    position: fixed; /* Use fixed to overlay */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9); /* Semi-transparent black */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    z-index: 100; /* Ensure it's on top */
+}
+
+#menu-screen {
+    /* Initially hidden */
+    /* display: none; */ /* Controlled by JS */
+}
+
+#game-container {
+    position: relative; /* Needed for absolute positioning of HUD */
+    width: 100%;
+    height: 100vh;
+    display: none; /* Initially hidden */
+}
+
+#gameCanvas {
+    display: block; /* Remove extra space below canvas */
+    width: 100%;
+    height: 100%;
+}
+
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    color: white;
+    pointer-events: none; /* Allow clicks to pass through */
+    z-index: 10; /* Above canvas, below menu */
+}
+
+#hud {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background-color: rgba(0,0,0,0.5);
+    padding: 5px 10px;
+    border-radius: 5px;
+    z-index: 10;
+}
+
+#death-screen {
+    /* display: none; */ /* Controlled by JS */
+     color: red;
+}
+
+/* Basic button styling */
+button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+input[type="text"] {
+    padding: 8px;
+    font-size: 16px;
+}
