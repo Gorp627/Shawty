@@ -1,0 +1,17 @@
+{
+  "name": "shawty-server",
+  "version": "1.0.0",
+  "description": "Multiplayer server for Shawty game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2", // Or latest
+    "socket.io": "^4.7.2" // Or latest
+  }
+}
