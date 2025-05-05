@@ -1,390 +1,53 @@
-// docs/js/scene.js
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js'; // Using CDN URL
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js'; // Using CDN URL
+// docs/js/playerController.js
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js'; // Using jsdelivr URL
+import { PointerLockControls } from './PointerLockControls.js';
+import { sendPlayerUpdate, sendShootEvent, sendPlayerDiedEvent } from './network.js';
+import { getEnvironmentMeshes, getCamera, PLAYER_HEIGHT, FALL_DEATH_Y } from './scene.js';
+import { showDeathScreen, hideDeathScreen, updateHealth } from './ui.js';
 
-let scene, camera, renderer, listener; // Removed soundListener - not used
-let playerMeshes = {}; // Store meshes for all players { id: mesh }
-let environmentMesh; // For map collision
-let assetLoadManager;
-let onAssetsLoadedCallback;
+let controls = null;
+let camera = null;
+let isPointerLocked = false;
+let localPlayerId = null;
+let localPlayerState = {
+    position: new THREE.Vector3(0, PLAYER_HEIGHT + 80, 0),
+    velocity: new THREE.Vector3(),
+    rotation: new THREE.Euler(0, 0, 0, 'YXZ'),
+    onGround: false, isDead: false, health: 100, lastUpdateTime: 0,
+    canDash: true, canShoot: true, isPropulsionShot: false, canJump: true
+};
+const moveState = { forward: 0, right: 0, jumping: false, dashing: false };
+let collisionRaycaster = null;
+let groundCheckRaycaster = null;
 
-const gltfLoader = new GLTFLoader();
-const audioLoader = new THREE.AudioLoader();
-let gunshotSoundBuffer;
+const MOVE_SPEED = 5.0; const DASH_SPEED_MULTIPLIER = 3.0; const DASH_DURATION = 0.15;
+const DASH_COOLDOWN = 1.0; const JUMP_VELOCITY = 6.0; const PROPULSION_FORCE = 25.0;
+const SHOOT_COOLDOWN = 0.2; const GRAVITY = -15.0; const NETWORK_UPDATE_INTERVAL = 100;
 
-const PLAYER_HEIGHT = 1.8;
-const FALL_DEATH_Y = -50;
-
-export function initScene(canvas, onAssetsLoaded) {
-    onAssetsLoadedCallback = onAssetsLoaded;
-
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 50, 500); // Adjusted fog start
-
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.y = PLAYER_HEIGHT;
-
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
-
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(50, 100, 75); // Adjusted light position
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 300; // Adjusted shadow camera range
-    directionalLight.shadow.camera.left = -150;
-    directionalLight.shadow.camera.right = 150;
-    directionalLight.shadow.camera.top = 150;
-    directionalLight.shadow.camera.bottom = -150;
-    scene.add(directionalLight);
-    // const shadowHelper = new THREE.CameraHelper( directionalLight.shadow.camera ); scene.add(shadowHelper); // Debug
-
-    // Audio Listener
-    listener = new THREE.AudioListener();
-    camera.add(listener);
-
-    loadAssets(); // Start loading assets
-
-    window.addEventListener('resize', onWindowResize, false);
-
-    console.log("Three.js scene, camera, renderer, lights initialized.");
-    return { scene, camera, renderer };
+export function initPlayerController(cam, canvas, playerId) {
+    if (!cam || !canvas || !playerId) { console.error("initPlayerController called with invalid arguments"); return; }
+    console.log("Initializing PlayerController for ID:", playerId);
+    camera = cam; localPlayerId = playerId;
+    collisionRaycaster = new THREE.Raycaster();
+    groundCheckRaycaster = new THREE.Raycaster( new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, PLAYER_HEIGHT * 0.6 + 0.1 );
+    try { controls = new PointerLockControls(camera, canvas); console.log("PointerLockControls instantiated."); }
+    catch (e) { console.error("!!! Failed to instantiate PointerLockControls:", e); alert("Error initializing controls. Check console."); return; }
+    canvas.addEventListener('click', () => { if (!localPlayerState.isDead && controls && !isPointerLocked) { console.log("Canvas clicked, requesting pointer lock."); controls.lock(); } });
+    controls.addEventListener('lock', () => { isPointerLocked = true; console.log("Pointer Locked"); });
+    controls.addEventListener('unlock', () => { isPointerLocked = false; console.log("Pointer Unlocked"); });
+    document.addEventListener('keydown', onKeyDown); document.addEventListener('keyup', onKeyUp); canvas.addEventListener('mousedown', onMouseDown);
+    updateHealth(localPlayerState.health); console.log("PlayerController initialization complete.");
 }
-
-function loadAssets() {
-    console.log("Starting asset loading...");
-    assetLoadManager = new THREE.LoadingManager();
-    assetLoadManager.onLoad = () => {
-        console.log('LoadingManager: All assets loaded successfully!');
-        if (onAssetsLoadedCallback) {
-             console.log("Calling onAssetsLoaded callback.");
-             onAssetsLoadedCallback();
-        } else {
-            console.warn("onAssetsLoadedCallback not defined when assets finished loading.");
-        }
-    };
-    assetLoadManager.onError = (url) => {
-        console.error('LoadingManager: There was an error loading ' + url);
-    };
-
-    let uiModuleLoaded = false; // Track if ui.js has been loaded
-    let updateLoadingProgressFunc = null;
-
-    // Define async function separately to load ui.js once
-    const tryLoadAndUpdateProgress = async (itemsLoaded, itemsTotal) => {
-        if (!uiModuleLoaded) {
-            try {
-                const uiModule = await import('./ui.js');
-                updateLoadingProgressFunc = uiModule.updateLoadingProgress;
-                uiModuleLoaded = true;
-                console.log("ui.js module loaded for progress updates.");
-            } catch(e) {
-                console.error("Failed to import ui.js:", e);
-                uiModuleLoaded = true; // Prevent further attempts even on error
-            }
-        }
-        if (updateLoadingProgressFunc) {
-            updateLoadingProgressFunc(itemsLoaded / itemsTotal);
-        }
-    };
-
-    assetLoadManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-        console.log(`LoadingManager: Progress - ${url} (${itemsLoaded}/${itemsTotal})`);
-        // Call the async loader/updater function without awaiting it here
-        tryLoadAndUpdateProgress(itemsLoaded, itemsTotal);
-    };
-
-    const gltfLoaderManaged = new GLTFLoader(assetLoadManager);
-    const audioLoaderManaged = new THREE.AudioLoader(assetLoadManager);
-
-    // --- Load Map ---
-    // *** IMPORTANT: Make sure your map file is ACTUALLY named 'map1.glb' ***
-    const mapPath = 'assets/maps/map1.glb';
-    console.log(`Attempting to load map: ${mapPath}`);
-    gltfLoaderManaged.load(mapPath, (gltf) => {
-        environmentMesh = gltf.scene;
-        environmentMesh.traverse((node) => {
-            if (node.isMesh) {
-                node.castShadow = true;
-                node.receiveShadow = true;
-            }
-        });
-        scene.add(environmentMesh);
-        console.log("Map loaded successfully.");
-    }, undefined, (error) => {
-         console.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
-         console.error(`!!! ERROR LOADING MAP: ${mapPath} !!!`, error);
-         console.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
-         // Maybe display an error to the user that the map failed?
-    });
-
-    // --- Load Gunshot Sound ---
-    const soundPath = 'assets/maps/gunshot.wav';
-    console.log(`Attempting to load sound: ${soundPath}`);
-    audioLoaderManaged.load(soundPath, (buffer) => {
-        gunshotSoundBuffer = buffer;
-        console.log("Gunshot sound loaded successfully.");
-    }, undefined, (error) => {
-        console.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
-        console.error(`!!! ERROR LOADING SOUND: ${soundPath} !!!`, error);
-        console.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
-    });
-
-    // NOTE: Character and Gun models are loaded dynamically in addPlayer / loadAndAttachGun
-    console.log("Asset loading requests initiated.");
-}
-
-
-export function addPlayer(playerData) {
-    // Defensive check for existing mesh
-    if (playerMeshes[playerData.id]) {
-         console.warn(`Player mesh already exists for ${playerData.id}. Updating position instead.`);
-         updatePlayerPosition(playerData.id, playerData.position, playerData.rotation);
-         return;
-    }
-    // Defensive check for necessary data
-    if (!playerData || !playerData.id || !playerData.position || !playerData.rotation) {
-        console.error("addPlayer called with invalid playerData:", playerData);
-        return;
-    }
-
-    const modelName = playerData.model || 'Shawty1';
-    const modelPath = `assets/maps/${modelName}.glb`;
-    console.log(`Adding player ${playerData.name || 'N/A'} (${playerData.id}). Loading model: ${modelPath}`);
-
-    gltfLoader.load(modelPath, (gltf) => {
-        console.log(`Model ${modelPath} loaded for player ${playerData.id}.`);
-        const playerMesh = gltf.scene;
-        playerMesh.scale.set(0.5, 0.5, 0.5);
-        playerMesh.position.set(playerData.position.x, playerData.position.y, playerData.position.z);
-        playerMesh.rotation.y = playerData.rotation.y || 0; // Ensure rotation Y is set
-        playerMesh.castShadow = true;
-        playerMesh.receiveShadow = false; // Characters usually don't receive shadows well
-        playerMesh.userData.id = playerData.id;
-
-        playerMesh.traverse((node) => {
-            if (node.isMesh) {
-                node.castShadow = true;
-            }
-        });
-
-        loadAndAttachGun(playerMesh); // Attach gun
-
-        playerMeshes[playerData.id] = playerMesh;
-        scene.add(playerMesh);
-        console.log(`Mesh added to scene for ${playerData.id}`);
-
-    }, undefined, (error) => {
-        console.error(`!!! Error loading model ${modelPath} for player ${playerData.id}:`, error);
-        // Fallback Cube Creation
-        const geometry = new THREE.BoxGeometry(1, PLAYER_HEIGHT, 1);
-        const material = new THREE.MeshStandardMaterial({ color: 0xff0000 }); // Red cube for error
-        const cube = new THREE.Mesh(geometry, material);
-        cube.position.set(playerData.position.x, playerData.position.y, playerData.position.z);
-        cube.castShadow = true;
-        cube.userData.id = playerData.id;
-        playerMeshes[playerData.id] = cube; // Store the fallback
-        scene.add(cube);
-        console.log(`Added fallback cube for player ${playerData.id}`);
-    });
-}
-
-function loadAndAttachGun(playerMesh) {
-    const gunPath = 'assets/maps/gun2.glb';
-    gltfLoader.load(gunPath, (gltf) => {
-        const gunMesh = gltf.scene;
-        gunMesh.scale.set(0.2, 0.2, 0.2);
-        // Fine-tune position relative to player origin (0,0,0)
-        gunMesh.position.set(0.3, PLAYER_HEIGHT * 0.4, 0.4); // Slightly adjusted Z
-        gunMesh.rotation.y = -Math.PI / 2; // Point forward
-        gunMesh.castShadow = true;
-        gunMesh.traverse((node) => { if (node.isMesh) node.castShadow = true; });
-
-        playerMesh.add(gunMesh); // Add gun as child of player mesh
-        playerMesh.userData.gun = gunMesh; // Store reference
-        // console.log(`Gun attached to player ${playerMesh.userData.id}`); // Less verbose log
-
-    }, undefined, (error) => {
-        console.error(`!!! Error loading gun model ${gunPath}:`, error);
-    });
-}
-
-export function removePlayer(playerId) {
-    const mesh = playerMeshes[playerId];
-    if (mesh) {
-        console.log(`Removing mesh for player ${playerId}`);
-        // Remove children (like the gun) first
-        while(mesh.children.length > 0){
-            const child = mesh.children[0];
-            // Optionally dispose child resources here if needed
-            mesh.remove(child);
-        }
-        scene.remove(mesh); // Remove player mesh itself
-        // TODO: Proper disposal of geometries/materials of the player mesh itself
-        delete playerMeshes[playerId];
-    } else {
-        console.warn(`Tried to remove non-existent player mesh: ${playerId}`);
-    }
-}
-
-export function updatePlayerPosition(playerId, position, rotation) {
-    const mesh = playerMeshes[playerId];
-    if (mesh && position && rotation) { // Add checks for valid data
-        mesh.position.set(position.x, position.y, position.z);
-        mesh.rotation.y = rotation.y;
-    } else if (!mesh) {
-        // Don't warn every frame, maybe only once?
-        // console.warn(`Tried to update non-existent mesh for player ${playerId}`);
-    } else if (!position || !rotation) {
-         console.warn(`Invalid position/rotation data for player ${playerId}`, position, rotation);
-    }
-}
-
-export function getPlayerMesh(playerId) { return playerMeshes[playerId]; }
-export function getCamera() { return camera; }
-export function getScene() { return scene; }
-export function getEnvironmentMeshes() { return environmentMesh ? [environmentMesh] : []; }
-
-export function playGunshotSound(position) {
-    if (!gunshotSoundBuffer || !listener || !position) {
-         console.warn("Cannot play gunshot sound: buffer, listener or position missing.");
-         return;
-    }
-    // Ensure listener is attached to the camera for correct 3D audio
-    if (!camera.children.includes(listener)) {
-        camera.add(listener);
-    }
-
-    const sound = new THREE.PositionalAudio(listener);
-    sound.setBuffer(gunshotSoundBuffer);
-    sound.setRefDistance(20);
-    sound.setRolloffFactor(1);
-    sound.setVolume(0.5); // Adjust volume as needed
-
-    // Add sound directly to the scene at the position
-    // Using a temporary object can sometimes cause cleanup issues
-    scene.add(sound);
-    sound.position.copy(position); // Set position *after* adding to scene
-    sound.play();
-
-    // Auto-remove sound when finished playing
-    sound.onEnded = () => {
-        sound.isPlaying = false;
-        if (sound.parent) {
-            sound.parent.remove(sound);
-        }
-        // console.log("Gunshot sound finished and removed."); // Less verbose
-    };
-}
-
-
-export function createDeathExplosion(position) {
-    if (!position) {
-        console.error("createDeathExplosion called without position");
-        return [];
-    }
-    console.log("Creating death explosion at:", position);
-    const particleCount = 100;
-    const particles = new THREE.BufferGeometry();
-    const pMaterial = new THREE.PointsMaterial({ color: 0xFF4500, size: 0.5, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false });
-    const pVertices = []; const velocities = [];
-    for (let i = 0; i < particleCount; i++) {
-        pVertices.push(position.x, position.y + PLAYER_HEIGHT / 2, position.z); // Start near center
-        const theta = Math.random() * Math.PI * 2; const phi = Math.acos(2 * Math.random() - 1); const speed = 5 + Math.random() * 10;
-        velocities.push( speed * Math.sin(phi) * Math.cos(theta), speed * Math.cos(phi) + 3, speed * Math.sin(phi) * Math.sin(theta) );
-    }
-    particles.setAttribute('position', new THREE.Float32BufferAttribute(pVertices, 3));
-    const particleSystem = new THREE.Points(particles, pMaterial);
-    particleSystem.userData.velocities = velocities; particleSystem.userData.life = 1.0;
-    particleSystem.userData.update = (delta) => updateParticleSystem(particleSystem, delta); particleSystem.userData.dispose = () => disposeEffect(particleSystem);
-    scene.add(particleSystem);
-
-    const shockwaveGeometry = new THREE.RingGeometry(0.1, 1, 64);
-    const shockwaveMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
-    const shockwave = new THREE.Mesh(shockwaveGeometry, shockwaveMaterial);
-    shockwave.position.copy(position); shockwave.position.y += 0.1; shockwave.rotation.x = -Math.PI / 2;
-    shockwave.userData.life = 0.5; shockwave.userData.maxRadius = 25;
-    shockwave.userData.update = (delta) => updateShockwave(shockwave, delta); shockwave.userData.dispose = () => disposeEffect(shockwave);
-    scene.add(shockwave);
-
-    return [particleSystem, shockwave];
-}
-
-function updateParticleSystem(system, deltaTime) {
-    if (!system?.userData || !system.geometry?.attributes?.position) return false; // Safety checks
-    system.userData.life -= deltaTime;
-    if (system.userData.life <= 0) return false; // Signal for removal
-    const positions = system.geometry.attributes.position.array; const velocities = system.userData.velocities; const gravity = -9.8 * 2;
-    for (let i = 0; i < positions.length / 3; i++) {
-        velocities[i * 3 + 1] += gravity * deltaTime;
-        positions[i * 3] += velocities[i * 3] * deltaTime; positions[i * 3 + 1] += velocities[i * 3 + 1] * deltaTime; positions[i * 3 + 2] += velocities[i * 3 + 2] * deltaTime;
-    }
-    if(system.material) system.material.opacity = Math.max(0, system.userData.life); // Check material exists
-    system.geometry.attributes.position.needsUpdate = true;
-    return true; // Still active
-}
-
-function updateShockwave(wave, deltaTime) {
-    if (!wave?.userData || !wave.geometry || !wave.material) return false; // Safety checks
-    wave.userData.life -= deltaTime;
-    if (wave.userData.life <= 0) return false; // Signal for removal
-    const progress = 1 - (wave.userData.life / 0.5); const currentRadius = progress * wave.userData.maxRadius; const innerRadius = Math.max(0.1, currentRadius - 2);
-    // Avoid recreating geometry if possible, but this is simpler for now
-    wave.geometry.dispose();
-    wave.geometry = new THREE.RingGeometry(innerRadius, currentRadius, 64);
-    wave.material.opacity = Math.max(0, 1 - progress);
-    return true; // Still active
-}
-
-function disposeEffect(effect) {
-     if (!effect) return;
-     try {
-        if (effect.parent) { effect.parent.remove(effect); }
-        if (effect.geometry) effect.geometry.dispose();
-        if (effect.material) {
-            if (Array.isArray(effect.material)) {
-                effect.material.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
-            } else {
-                 if (effect.material.map) effect.material.map.dispose();
-                 effect.material.dispose();
-            }
-        }
-        // console.log("Disposed effect");
-     } catch (e) {
-         console.error("Error during effect disposal:", e, effect);
-     }
-}
-
-export function updateEffect(effect, deltaTime) {
-    if (effect?.userData && typeof effect.userData.update === 'function') {
-        const isActive = effect.userData.update(deltaTime);
-        // Only dispose if update function signals it's done (returns false)
-        if (!isActive && typeof effect.userData.dispose === 'function') {
-             effect.userData.dispose();
-        }
-        return isActive; // Return status from update function
-    }
-    console.warn("Attempted to update effect without update function:", effect);
-    return false; // Cannot update, treat as inactive
-}
-
-
-function onWindowResize() {
-    if (camera && renderer) {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        console.log("Window resized."); // Log resize
-    }
-}
-
-export { FALL_DEATH_Y, PLAYER_HEIGHT };
+function onKeyDown(event) { if (!isPointerLocked || localPlayerState.isDead) return; switch (event.code) { case 'KeyW': case 'ArrowUp': moveState.forward = 1; break; case 'KeyS': case 'ArrowDown': moveState.forward = -1; break; case 'KeyA': case 'ArrowLeft': moveState.right = -1; break; case 'KeyD': case 'ArrowRight': moveState.right = 1; break; case 'Space': if (localPlayerState.canJump && localPlayerState.onGround && !moveState.jumping) { localPlayerState.velocity.y = JUMP_VELOCITY; localPlayerState.onGround = false; moveState.jumping = true; localPlayerState.canJump = false; console.log("Jump initiated."); } break; case 'ShiftLeft': if (localPlayerState.canDash && !moveState.dashing) { moveState.dashing = true; localPlayerState.canDash = false; setTimeout(() => { moveState.dashing = false; console.log("Dash finished."); }, DASH_DURATION * 1000); setTimeout(() => { localPlayerState.canDash = true; console.log("Dash cooldown finished."); }, DASH_COOLDOWN * 1000); console.log("Dash initiated."); } break; case 'KeyE': localPlayerState.isPropulsionShot = true; break; } }
+function onKeyUp(event) { switch (event.code) { case 'KeyW': case 'ArrowUp': if (moveState.forward > 0) moveState.forward = 0; break; case 'KeyS': case 'ArrowDown': if (moveState.forward < 0) moveState.forward = 0; break; case 'KeyA': case 'ArrowLeft': if (moveState.right < 0) moveState.right = 0; break; case 'KeyD': case 'ArrowRight': if (moveState.right > 0) moveState.right = 0; break; case 'Space': moveState.jumping = false; localPlayerState.canJump = true; break; case 'KeyE': localPlayerState.isPropulsionShot = false; break; } }
+function onMouseDown(event) { if (!isPointerLocked || localPlayerState.isDead || !localPlayerState.canShoot) return; if (event.button === 0) { localPlayerState.canShoot = false; setTimeout(() => localPlayerState.canShoot = true, SHOOT_COOLDOWN * 1000); if (!camera) { console.error("Camera not available for shooting direction."); return; } const direction = new THREE.Vector3(); camera.getWorldDirection(direction); sendShootEvent({ propulsion: localPlayerState.isPropulsionShot, direction: {x: direction.x, y: direction.y, z: direction.z} }); if (localPlayerState.isPropulsionShot) { applyPropulsion(direction); } } }
+function applyPropulsion(shootDirection) { const propulsionVector = shootDirection.clone().negate().multiplyScalar(PROPULSION_FORCE); propulsionVector.y += PROPULSION_FORCE * 0.2; localPlayerState.velocity.add(propulsionVector); localPlayerState.onGround = false; console.log("Applied client-side propulsion force."); }
+export function handleServerPropulsion(data) { console.log("Received server confirmation for propulsion."); }
+export function applyKnockback(knockbackVector) { if (localPlayerState.isDead) return; if (!knockbackVector) { console.warn("applyKnockback called with invalid vector"); return; } const force = new THREE.Vector3(knockbackVector.x, knockbackVector.y, knockbackVector.z); localPlayerState.velocity.add(force); localPlayerState.onGround = false; console.log("Applied server knockback force:", force); }
+export function updatePlayer(deltaTime) { if (!controls || !camera || !collisionRaycaster || !groundCheckRaycaster || !localPlayerId) { return; } const delta = Math.min(deltaTime, 0.05); const time = performance.now(); if (localPlayerState.isDead) { localPlayerState.velocity.x = 0; localPlayerState.velocity.z = 0; localPlayerState.velocity.y += GRAVITY * delta * 0.5; localPlayerState.position.addScaledVector(localPlayerState.velocity, delta); camera.position.copy(localPlayerState.position); camera.position.y += PLAYER_HEIGHT * 0.8; return; } if (!localPlayerState.onGround) { localPlayerState.velocity.y += GRAVITY * delta; } else { localPlayerState.velocity.y = Math.max(0, localPlayerState.velocity.y); } const speed = moveState.dashing ? MOVE_SPEED * DASH_SPEED_MULTIPLIER : MOVE_SPEED; const moveDirection = new THREE.Vector3(moveState.right, 0, moveState.forward); moveDirection.normalize(); if (controls && controls.isLocked) { const cameraQuaternion = camera.quaternion; const yRotation = new THREE.Euler().setFromQuaternion(cameraQuaternion, 'YXZ').y; const rotationQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yRotation); moveDirection.applyQuaternion(rotationQuaternion); } localPlayerState.velocity.x = moveDirection.x * speed; localPlayerState.velocity.z = moveDirection.z * speed; const environment = getEnvironmentMeshes(); if (environment.length > 0) { handleCollisions(delta, environment); } else { localPlayerState.position.addScaledVector(localPlayerState.velocity, delta); localPlayerState.onGround = false; } if (localPlayerState.position.y < FALL_DEATH_Y) { console.log("Player fell below death threshold!"); handleDeath(); return; } camera.position.copy(localPlayerState.position); camera.position.y += PLAYER_HEIGHT * 0.8; if (time - localPlayerState.lastUpdateTime > NETWORK_UPDATE_INTERVAL) { if (controls) { localPlayerState.rotation.setFromQuaternion(camera.quaternion, 'YXZ'); } else { console.warn("Controls missing during network update, using last known rotation."); } sendPlayerUpdate({ position: { x: localPlayerState.position.x, y: localPlayerState.position.y, z: localPlayerState.position.z }, rotation: { x: localPlayerState.rotation.x, y: localPlayerState.rotation.y, z: localPlayerState.rotation.z }, }); localPlayerState.lastUpdateTime = time; } }
+function handleCollisions(deltaTime, environment) { const currentPos = localPlayerState.position; const velocity = localPlayerState.velocity; const capsuleRadius = 0.4; const capsuleHeight = PLAYER_HEIGHT; const stepDelta = deltaTime; groundCheckRaycaster.ray.origin.copy(currentPos).y += capsuleRadius; const groundIntersects = groundCheckRaycaster.intersectObjects(environment, true); let foundGround = false; if (groundIntersects.length > 0) { const groundDist = groundIntersects[0].distance; if (velocity.y <= 0) { currentPos.y -= (groundDist - capsuleRadius); velocity.y = 0; foundGround = true; } } localPlayerState.onGround = foundGround; if (foundGround && !moveState.jumping) { localPlayerState.canJump = true; } const tempPosition = currentPos.clone(); tempPosition.x += velocity.x * stepDelta; if (checkWallCollision(tempPosition, environment, capsuleRadius, capsuleHeight)) { tempPosition.x = currentPos.x; velocity.x = 0; } tempPosition.z += velocity.z * stepDelta; if (checkWallCollision(tempPosition, environment, capsuleRadius, capsuleHeight)) { tempPosition.z = currentPos.z; velocity.z = 0; } tempPosition.y += velocity.y * stepDelta; if (checkWallCollision(tempPosition, environment, capsuleRadius, capsuleHeight)) { if (velocity.y > 0) { tempPosition.y = currentPos.y; velocity.y = 0; } else { if (!localPlayerState.onGround) { tempPosition.y = currentPos.y; velocity.y = 0; localPlayerState.onGround = true; if (!moveState.jumping) localPlayerState.canJump = true; } } } currentPos.copy(tempPosition); if (localPlayerState.onGround && moveState.forward === 0 && moveState.right === 0) { const dampingFactor = Math.pow(0.1, deltaTime); velocity.x *= dampingFactor; velocity.z *= dampingFactor; if (Math.abs(velocity.x) < 0.01) velocity.x = 0; if (Math.abs(velocity.z) < 0.01) velocity.z = 0; } }
+function checkWallCollision(testPosition, environment, radius, height) { if (!collisionRaycaster) return false; const checkRadius = radius * 0.9; const halfHeight = height * 0.45; const checkPoints = [ testPosition.clone().add(new THREE.Vector3(0, halfHeight, 0)), testPosition.clone(), testPosition.clone().sub(new THREE.Vector3(0, halfHeight, 0)) ]; const directions = [ new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1) ]; for (const point of checkPoints) { for (const dir of directions) { collisionRaycaster.set(point, dir); collisionRaycaster.far = checkRadius; const intersects = collisionRaycaster.intersectObjects(environment, true); if (intersects.length > 0) { return true; } } } return false; }
+function handleDeath() { if (localPlayerState.isDead) return; console.log("Local player death sequence started."); localPlayerState.isDead = true; localPlayerState.health = 0; localPlayerState.velocity.set(0, 0, 0); updateHealth(localPlayerState.health); showDeathScreen(); if (isPointerLocked && controls) { console.log("Unlocking pointer due to death."); controls.unlock(); } console.log("Sending playerDied event to server."); sendPlayerDiedEvent({ position: {x: localPlayerState.position.x, y: localPlayerState.position.y, z: localPlayerState.position.z} }); }
+export function handleRespawn(data) { if (!data || !data.position) { console.error("handleRespawn called with invalid data:", data); return; } console.log("Local player respawning at:", data.position); localPlayerState.isDead = false; localPlayerState.health = 100; localPlayerState.position.set(data.position.x, data.position.y, data.position.z); localPlayerState.velocity.set(0, 0, 0); localPlayerState.onGround = false; updateHealth(localPlayerState.health); hideDeathScreen(); }
+export function takeDamage(amount) { if (localPlayerState.isDead) return; const damageAmount = Math.max(0, amount); localPlayerState.health -= damageAmount; localPlayerState.health = Math.max(0, localPlayerState.health); updateHealth(localPlayerState.health); console.log(`Local player took ${damageAmount} damage, health: ${localPlayerState.health}`); if (localPlayerState.health <= 0) { handleDeath(); } }
+export function getPlayerState() { return { ...localPlayerState, position: localPlayerState.position.clone(), velocity: localPlayerState.velocity.clone(), rotation: localPlayerState.rotation.clone(), }; } export function getControls() { return controls; } export function isLocked() { return isPointerLocked; }
