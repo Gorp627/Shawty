@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shawty</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Optional: Add favicon link here if you add the file -->
+    <!-- <link rel="icon" type="image/x-icon" href="/favicon.ico"> -->
 </head>
 <body>
     <div id="loading-screen">
@@ -25,7 +27,7 @@
 
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
-        <!-- HUD elements could go here (e.g., health, ammo) -->
+        <!-- HUD elements -->
          <div id="crosshair">+</div>
          <div id="hud">Health: <span id="health-value">100</span></div>
     </div>
@@ -37,14 +39,14 @@
 
 
     <!-- Libraries -->
-    <!-- Get THREE.js locally or use CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Get GLTFLoader -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- Get THREE.js (loaded via modules now) -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> --> <!-- No longer needed directly -->
+    <!-- Get GLTFLoader (loaded via modules now) -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script> --> <!-- No longer needed directly -->
     <!-- Get Socket.IO client -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-     <!-- Get PointerLockControls (Download and place in js/ folder) -->
-     <script src="js/PointerLockControls.js"></script>
+    <!-- PointerLockControls is loaded via import in playerController.js -->
+    <!-- REMOVED THIS LINE: <script src="js/PointerLockControls.js"></script> -->
 
 
     <!-- Game Scripts -->
