@@ -1,5 +1,5 @@
 // docs/js/network.js
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js'; // Use module import
+// Removed unnecessary import: import * as THREE from '...';
 
 let socket = null;
 let onConnectCallback = null;
@@ -11,7 +11,8 @@ let onAssignIdCallback = null;
 let onPlayerShotCallback = null;
 let onPlayerDiedCallback = null;
 let onRespawnCallback = null;
-let onApplyPropulsionCallback = null; // Callback for propulsion
+let onApplyPropulsionCallback = null;
+let onPlayerRespawnedCallback = null; // Added for completeness
 
 
 export function connectToServer(serverUrl, name, callbacks) {
@@ -25,21 +26,24 @@ export function connectToServer(serverUrl, name, callbacks) {
     onPlayerShotCallback = callbacks.onPlayerShot;
     onPlayerDiedCallback = callbacks.onPlayerDied;
     onRespawnCallback = callbacks.onRespawn;
-    onApplyPropulsionCallback = callbacks.onApplyPropulsion; // Store propulsion callback
+    onApplyPropulsionCallback = callbacks.onApplyPropulsion;
+    onPlayerRespawnedCallback = callbacks.onPlayerRespawned; // Store new callback
 
-    socket = io(serverUrl); // Connect using the provided URL
+    socket = io(serverUrl, {
+         transports: ['websocket'], // Force websockets if desired/needed
+         reconnectionAttempts: 5, // Example: Limit reconnection attempts
+    });
 
     socket.on('connect', () => {
         console.log('Connected to server!', socket.id);
-        // Send join game message with player name
         socket.emit('joinGame', { name: name });
         if (onConnectCallback) onConnectCallback();
     });
 
-    socket.on('disconnect', () => {
-        console.log('Disconnected from server.');
-        if (onDisconnectCallback) onDisconnectCallback();
-        socket = null; // Clear socket reference
+    socket.on('disconnect', (reason) => {
+        console.log('Disconnected from server. Reason:', reason);
+        if (onDisconnectCallback) onDisconnectCallback(reason);
+        socket = null;
     });
 
     socket.on('assignId', (id) => {
@@ -48,9 +52,8 @@ export function connectToServer(serverUrl, name, callbacks) {
     });
 
     socket.on('currentState', (state) => {
-        // Handle initial game state (all players)
         console.log('Received current state:', state);
-        if (onStateUpdateCallback) onStateUpdateCallback(state);
+        if (onStateUpdateCallback) onStateUpdateCallback(state, false); // Indicate full update
     });
 
     socket.on('playerJoined', (playerData) => {
@@ -64,15 +67,10 @@ export function connectToServer(serverUrl, name, callbacks) {
     });
 
     socket.on('playerMoved', (data) => {
-        // Handle updates for a single player's movement
         if (onStateUpdateCallback) {
-            // Adapt the callback to handle single player updates
             const singlePlayerState = {};
-            singlePlayerState[data.id] = data; // Create a state object with just this player
-             // Note: This assumes onStateUpdateCallback can handle partial updates.
-             // You might need a separate callback like onPlayerMovedCallback.
-             // For simplicity here, reusing onStateUpdateCallback.
-            onStateUpdateCallback(singlePlayerState, true); // Pass true to indicate partial update
+            singlePlayerState[data.id] = { position: data.position, rotation: data.rotation }; // Only include pos/rot
+            onStateUpdateCallback(singlePlayerState, true); // Indicate partial update
         }
     });
 
@@ -81,46 +79,62 @@ export function connectToServer(serverUrl, name, callbacks) {
     });
 
     socket.on('playerDied', (data) => {
-         console.log("Received playerDied event:", data);
+         console.log("Network received playerDied event:", data);
         if (onPlayerDiedCallback) onPlayerDiedCallback(data);
     });
 
-     socket.on('respawn', (data) => {
-        console.log("Received respawn event:", data);
+     socket.on('respawn', (data) => { // For local player
+        console.log("Network received respawn event:", data);
         if (onRespawnCallback) onRespawnCallback(data);
     });
 
-     // Listen for propulsion event
+     socket.on('playerRespawned', (data) => { // For remote players
+        console.log("Network received playerRespawned event:", data);
+        if (onPlayerRespawnedCallback) onPlayerRespawnedCallback(data);
+    });
+
+
     socket.on('applyPropulsion', (data) => {
-        console.log("Received applyPropulsion event:", data);
+        console.log("Network received applyPropulsion event:", data);
         if (onApplyPropulsionCallback) onApplyPropulsionCallback(data);
     });
 
 
     socket.on('connect_error', (err) => {
         console.error('Connection Error:', err.message);
-        // Optionally try to reconnect or show an error message to the user
+        // Show error to user? Attempt manual reconnect?
+    });
+
+     socket.on('disconnect', (reason) => {
+        console.error('Socket disconnected:', reason);
+         if (reason === 'io server disconnect') {
+             // the disconnection was initiated by the server, you need to reconnect manually
+             // socket.connect(); // Might not be wise without conditions
+             alert("Server disconnected you.");
+         }
+        // else the socket will automatically try to reconnect
+        if (onDisconnectCallback) onDisconnectCallback(reason);
     });
 }
 
 export function sendPlayerUpdate(data) {
-    if (socket && socket.connected) {
+    if (socket?.connected) { // Optional chaining and check connected status
         socket.emit('playerUpdate', data);
     }
 }
 
 export function sendShootEvent(data) {
-     if (socket && socket.connected) {
-        socket.emit('shoot', data); // Send propulsion flag and direction
+     if (socket?.connected) {
+        socket.emit('shoot', data);
     }
 }
 
 export function sendPlayerDiedEvent(data) {
-    if (socket && socket.connected) {
+    if (socket?.connected) {
         socket.emit('playerDied', data);
     }
 }
 
 export function isConnected() {
-    return socket && socket.connected;
+    return socket?.connected ?? false; // Return false if socket is null/undefined
 }
