@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shawty</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="loading-screen">
+        <h1>Loading Shawty...</h1>
+        <p id="loading-progress">0%</p>
+        <!-- Add cool visuals here -->
+    </div>
+
+    <div id="menu-screen" style="display: none;">
+        <h1>Shawty</h1>
+        <label for="playerName">Enter Your Name:</label>
+        <input type="text" id="playerName" value="ShawtyPlayer"><br><br>
+        <!-- Avatar Selector Placeholder -->
+        <p>Select Avatar:</p>
+        <div>(Only one available)</div> <br>
+        <button id="playButton">Play Game</button>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <!-- HUD elements could go here (e.g., health, ammo) -->
+         <div id="crosshair">+</div>
+         <div id="hud">Health: <span id="health-value">100</span></div>
+    </div>
+
+     <div id="death-screen" style="display: none;">
+        <h1>YOU DIED</h1>
+        <p>Respawning soon...</p>
+    </div>
+
+
+    <!-- Libraries -->
+    <!-- Get THREE.js locally or use CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Get GLTFLoader -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- Get Socket.IO client -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+     <!-- Get PointerLockControls (Download and place in js/ folder) -->
+     <script src="js/PointerLockControls.js"></script>
+
+
+    <!-- Game Scripts -->
+    <script type="module" src="js/main.js"></script> <!-- Use type="module" for imports -->
+</body>
+</html>
