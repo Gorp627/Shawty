@@ -1,6 +1,6 @@
 // docs/js/scene.js
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js'; // Ensure path is correct
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js'; // Using CDN URL
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js'; // Using CDN URL
 
 let scene, camera, renderer, listener, soundListener;
 let playerMeshes = {}; // Store meshes for all players { id: mesh }
@@ -47,9 +47,6 @@ export function initScene(canvas, onAssetsLoaded) {
     directionalLight.shadow.camera.top = 150;
     directionalLight.shadow.camera.bottom = -150;
     scene.add(directionalLight);
-    // const helper = new THREE.CameraHelper( directionalLight.shadow.camera ); // Debug shadows
-    // scene.add( helper );
-
 
     // Audio Listener
     listener = new THREE.AudioListener();
@@ -75,9 +72,12 @@ function loadAssets() {
     };
     assetLoadManager.onProgress = (url, itemsLoaded, itemsTotal) => {
         console.log('Loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.');
-        // Update loading progress UI here if needed
-        // import { updateLoadingProgress } from './ui.js'; // Example
-        // updateLoadingProgress(itemsLoaded / itemsTotal);
+         // Update loading progress UI using the imported function
+         // Note: Ensure ui.js is imported if you uncomment this
+         try {
+            const { updateLoadingProgress } = await import('./ui.js');
+            updateLoadingProgress(itemsLoaded / itemsTotal);
+         } catch(e) { console.error("Failed to import or call updateLoadingProgress", e); }
     };
 
     const gltfLoaderManaged = new GLTFLoader(assetLoadManager);
@@ -90,25 +90,11 @@ function loadAssets() {
             if (node.isMesh) {
                 node.castShadow = true;
                 node.receiveShadow = true;
-                // Optional: Optimize collision by only checking certain parts of the map
-                // node.userData.isCollidable = true;
             }
         });
         scene.add(environmentMesh);
         console.log("Map loaded.");
     }, undefined, (error) => console.error("Error loading map:", error));
-
-    // Pre-load character model (optional, or load on demand)
-    // gltfLoaderManaged.load('assets/maps/Shawty1.glb', (gltf) => {
-    //     // Store prototype for cloning later? Or just load when needed.
-    //     console.log("Character model pre-loaded (optional).");
-    // }, undefined, (error) => console.error("Error pre-loading character:", error));
-
-    // Pre-load gun model (optional)
-    // gltfLoaderManaged.load('assets/maps/gun2.glb', (gltf) => {
-    //     console.log("Gun model pre-loaded (optional).");
-    // }, undefined, (error) => console.error("Error pre-loading gun:", error));
-
 
     // Load Sounds
     audioLoaderManaged.load('assets/maps/gunshot.wav', (buffer) => {
@@ -118,7 +104,12 @@ function loadAssets() {
 }
 
 export function addPlayer(playerData) {
-    if (playerMeshes[playerData.id]) return; // Already exists
+    if (playerMeshes[playerData.id]) {
+         console.warn(`Player mesh already exists for ${playerData.id}. Skipping add.`);
+         // Optionally update position/rotation here if needed
+         updatePlayerPosition(playerData.id, playerData.position, playerData.rotation);
+         return;
+    }
 
     console.log(`Adding player ${playerData.name} (${playerData.id}) to scene`);
     // Load the specific character model
@@ -126,7 +117,7 @@ export function addPlayer(playerData) {
         const playerMesh = gltf.scene;
         playerMesh.scale.set(0.5, 0.5, 0.5); // Adjust scale as needed
         playerMesh.position.set(playerData.position.x, playerData.position.y, playerData.position.z);
-        // playerMesh.rotation.set(playerData.rotation.x, playerData.rotation.y, playerData.rotation.z); // Set initial rotation if needed
+        playerMesh.rotation.y = playerData.rotation?.y || 0; // Set initial Y rotation
         playerMesh.castShadow = true;
         playerMesh.receiveShadow = true;
         playerMesh.userData.id = playerData.id; // Store ID for reference
@@ -134,7 +125,6 @@ export function addPlayer(playerData) {
         playerMesh.traverse((node) => {
             if (node.isMesh) {
                 node.castShadow = true;
-                 // node.receiveShadow = true; // Characters usually don't receive shadows on themselves well unless complex setup
             }
         });
 
@@ -146,7 +136,7 @@ export function addPlayer(playerData) {
         console.log(`Mesh added for ${playerData.id}`);
     }, undefined, (error) => {
         console.error(`Error loading model for player ${playerData.id}:`, error);
-        // Fallback to a simple cube if loading fails?
+        // Fallback to a simple cube if loading fails
         const geometry = new THREE.BoxGeometry(1, PLAYER_HEIGHT, 1);
         const material = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff });
         const cube = new THREE.Mesh(geometry, material);
@@ -159,7 +149,6 @@ export function addPlayer(playerData) {
 }
 
 function loadAndAttachGun(playerMesh) {
-     // Basic gun attachment - Needs refinement for proper positioning/bone attachment
     gltfLoader.load('assets/maps/gun2.glb', (gltf) => {
         const gunMesh = gltf.scene;
         gunMesh.scale.set(0.2, 0.2, 0.2); // Adjust scale
@@ -171,10 +160,8 @@ function loadAndAttachGun(playerMesh) {
             if (node.isMesh) node.castShadow = true;
         });
 
-        // Attach gun to player mesh
-        // For simplicity, directly adding. For animation, attach to a specific bone.
         playerMesh.add(gunMesh);
-        playerMesh.userData.gun = gunMesh; // Store reference if needed
+        playerMesh.userData.gun = gunMesh;
         console.log(`Gun attached to player ${playerMesh.userData.id}`);
 
     }, undefined, (error) => console.error("Error loading gun model:", error));
@@ -185,8 +172,7 @@ export function removePlayer(playerId) {
     const mesh = playerMeshes[playerId];
     if (mesh) {
         scene.remove(mesh);
-        // Properly dispose of geometry and material to free memory if needed
-        // mesh.traverse(child => { ... dispose ... });
+        // TODO: Properly dispose of geometry/material/textures
         delete playerMeshes[playerId];
         console.log(`Removed mesh for player ${playerId}`);
     }
@@ -196,10 +182,13 @@ export function updatePlayerPosition(playerId, position, rotation) {
     const mesh = playerMeshes[playerId];
     if (mesh) {
         mesh.position.set(position.x, position.y, position.z);
-        // Only apply Y rotation to the main mesh (prevents weird tilting)
-        mesh.rotation.y = rotation.y;
-        // If you want head tilt based on camera pitch (rotation.x), apply it selectively
-        // to a 'head' bone or part of the model if rigged, or ignore for simplicity.
+        mesh.rotation.y = rotation.y; // Only apply Y rotation from server data
+    } else {
+        // If mesh doesn't exist, maybe the player joined before this client loaded?
+        // Request full state or handle appropriately
+        console.warn(`Tried to update non-existent mesh for player ${playerId}`);
+        // Consider adding the player here if data is sufficient
+        // addPlayer({id: playerId, position, rotation, name: `Player_${playerId.substring(0,4)}`, model: 'Shawty1'});
     }
 }
 
@@ -216,149 +205,145 @@ export function getScene() {
 }
 
 export function getEnvironmentMeshes() {
-    // Return array of meshes considered for collision
-    // Simple: just the loaded map
-    // Complex: specific collidable parts of the map
     return environmentMesh ? [environmentMesh] : [];
 }
 
 export function playGunshotSound(position) {
     if (!gunshotSoundBuffer || !listener) return;
 
-    // Use PositionalAudio for 3D sound
     const sound = new THREE.PositionalAudio(listener);
     sound.setBuffer(gunshotSoundBuffer);
-    sound.setRefDistance(20); // Distance at which volume starts decreasing
-    sound.setRolloffFactor(1); // How quickly volume decreases
-    sound.setVolume(0.5); // Adjust volume
+    sound.setRefDistance(20);
+    sound.setRolloffFactor(1);
+    sound.setVolume(0.5);
 
-    // Create a temporary object to position the sound
-    // Or attach to the gun mesh if available and correctly positioned
+    // Use a temporary object for sound positioning
     const soundObject = new THREE.Object3D();
     soundObject.position.copy(position);
-    scene.add(soundObject); // Add temporarily to the scene
-
-    soundObject.add(sound); // Add sound source to the object
+    scene.add(soundObject);
+    soundObject.add(sound);
     sound.play();
 
-    // Clean up the temporary object after the sound finishes
     sound.onEnded = () => {
-        sound.isPlaying = false; // Reset flag
-        soundObject.remove(sound); // Remove sound source
-        scene.remove(soundObject); // Remove temporary object
-        // console.log("Sound object removed");
+        sound.isPlaying = false;
+        // Ensure cleanup happens correctly
+        if(soundObject.parent) {
+             soundObject.remove(sound);
+             scene.remove(soundObject);
+        }
     };
 }
 
 export function createDeathExplosion(position) {
-    // Simple particle effect placeholder
     const particleCount = 100;
     const particles = new THREE.BufferGeometry();
     const pMaterial = new THREE.PointsMaterial({
-        color: 0xFF4500, // OrangeRed
+        color: 0xFF4500,
         size: 0.5,
         blending: THREE.AdditiveBlending,
         transparent: true,
-        depthWrite: false, // Prevent particles from occluding improperly
+        depthWrite: false,
     });
 
     const pVertices = [];
     const velocities = [];
 
     for (let i = 0; i < particleCount; i++) {
-        pVertices.push(position.x, position.y + PLAYER_HEIGHT / 2, position.z); // Start near center
-
+        pVertices.push(position.x, position.y + PLAYER_HEIGHT / 2, position.z);
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
         const speed = 5 + Math.random() * 10;
-
         velocities.push(
-            speed * Math.sin(phi) * Math.cos(theta), // x
-            speed * Math.cos(phi) + 3,                // y (add slight upward bias)
-            speed * Math.sin(phi) * Math.sin(theta) // z
+            speed * Math.sin(phi) * Math.cos(theta),
+            speed * Math.cos(phi) + 3,
+            speed * Math.sin(phi) * Math.sin(theta)
         );
     }
 
     particles.setAttribute('position', new THREE.Float32BufferAttribute(pVertices, 3));
     const particleSystem = new THREE.Points(particles, pMaterial);
-    particleSystem.userData.velocities = velocities; // Store velocities
-    particleSystem.userData.life = 1.0; // Lifetime in seconds
-
+    particleSystem.userData.velocities = velocities;
+    particleSystem.userData.life = 1.0;
+    // Add custom update and dispose methods for cleanup
+    particleSystem.userData.update = (delta) => updateParticleSystem(particleSystem, delta);
+    particleSystem.userData.dispose = () => disposeEffect(particleSystem);
     scene.add(particleSystem);
 
-     // Simple shockwave visual (expanding ring)
-    const shockwaveGeometry = new THREE.RingGeometry(0.1, 1, 64); // innerRadius, outerRadius, segments
+
+    const shockwaveGeometry = new THREE.RingGeometry(0.1, 1, 64);
     const shockwaveMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.8
-    });
+        color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
     const shockwave = new THREE.Mesh(shockwaveGeometry, shockwaveMaterial);
     shockwave.position.copy(position);
-    shockwave.position.y += 0.1; // Slightly above ground
-    shockwave.rotation.x = -Math.PI / 2; // Lay flat on XZ plane
-    shockwave.userData.life = 0.5; // Short lifespan
-    shockwave.userData.maxRadius = 25; // How far it expands
-
+    shockwave.position.y += 0.1;
+    shockwave.rotation.x = -Math.PI / 2;
+    shockwave.userData.life = 0.5;
+    shockwave.userData.maxRadius = 25;
+    // Add custom update and dispose methods for cleanup
+    shockwave.userData.update = (delta) => updateShockwave(shockwave, delta);
+    shockwave.userData.dispose = () => disposeEffect(shockwave);
     scene.add(shockwave);
 
-
-    // Return objects that need animation updates
-    return [particleSystem, shockwave];
+    return [particleSystem, shockwave]; // Return objects with update methods
 }
 
-export function updateEffect(effect, deltaTime) {
-     if (effect.isPoints) { // Particle system
-        effect.userData.life -= deltaTime;
-        if (effect.userData.life <= 0) {
-            scene.remove(effect);
-            // Dispose geometry/material if needed
-            effect.geometry.dispose();
-            effect.material.dispose();
-            return false; // Indicate removal
-        }
+function updateParticleSystem(system, deltaTime) {
+    system.userData.life -= deltaTime;
+    if (system.userData.life <= 0) return false; // Indicate removal
 
-        const positions = effect.geometry.attributes.position.array;
-        const velocities = effect.userData.velocities;
-        const gravity = -9.8 * 2; // Particle gravity
+    const positions = system.geometry.attributes.position.array;
+    const velocities = system.userData.velocities;
+    const gravity = -9.8 * 2;
 
-        for (let i = 0; i < positions.length / 3; i++) {
-            // Apply velocity
-            positions[i * 3] += velocities[i * 3] * deltaTime;
-            positions[i * 3 + 1] += velocities[i * 3 + 1] * deltaTime;
-            positions[i * 3 + 2] += velocities[i * 3 + 2] * deltaTime;
-
-            // Apply gravity
-            velocities[i * 3 + 1] += gravity * deltaTime;
-
-            // Fade out
-            effect.material.opacity = effect.userData.life; // Simple fade
-        }
-        effect.geometry.attributes.position.needsUpdate = true;
-
-    } else if (effect.isMesh && effect.geometry.type === 'RingGeometry') { // Shockwave
-         effect.userData.life -= deltaTime;
-         if (effect.userData.life <= 0) {
-            scene.remove(effect);
-            effect.geometry.dispose();
-            effect.material.dispose();
-            return false; // Indicate removal
-        }
-         const progress = 1 - (effect.userData.life / 0.5); // 0 to 1
-         const currentRadius = progress * effect.userData.maxRadius;
-         const innerRadius = Math.max(0.1, currentRadius - 2); // Keep a thickness
-
-         // Recreate geometry (inefficient but simple for demo)
-         // A shader would be much better for performance
-         effect.geometry.dispose();
-         effect.geometry = new THREE.RingGeometry(innerRadius, currentRadius, 64);
-         effect.material.opacity = 1 - progress; // Fade out
-
+    for (let i = 0; i < positions.length / 3; i++) {
+        velocities[i * 3 + 1] += gravity * deltaTime; // Apply gravity to Y velocity
+        positions[i * 3] += velocities[i * 3] * deltaTime;
+        positions[i * 3 + 1] += velocities[i * 3 + 1] * deltaTime;
+        positions[i * 3 + 2] += velocities[i * 3 + 2] * deltaTime;
     }
-
-
+    system.material.opacity = Math.max(0, system.userData.life); // Fade out
+    system.geometry.attributes.position.needsUpdate = true;
     return true; // Indicate still active
+}
+
+function updateShockwave(wave, deltaTime) {
+    wave.userData.life -= deltaTime;
+    if (wave.userData.life <= 0) return false; // Indicate removal
+
+    const progress = 1 - (wave.userData.life / 0.5);
+    const currentRadius = progress * wave.userData.maxRadius;
+    const innerRadius = Math.max(0.1, currentRadius - 2);
+
+    // Recreate geometry (less efficient, but simple)
+    wave.geometry.dispose(); // Dispose old geometry
+    wave.geometry = new THREE.RingGeometry(innerRadius, currentRadius, 64);
+    wave.material.opacity = Math.max(0, 1 - progress); // Fade out
+    return true; // Indicate still active
+}
+
+function disposeEffect(effect) {
+     if (effect.parent) {
+        effect.parent.remove(effect);
+     }
+     if (effect.geometry) effect.geometry.dispose();
+     if (effect.material) {
+         if (effect.material.map) effect.material.map.dispose(); // Dispose textures if any
+         effect.material.dispose();
+     }
+     console.log("Disposed effect");
+}
+
+
+export function updateEffect(effect, deltaTime) {
+    // Effects now have their own update methods stored in userData
+    if (effect.userData && typeof effect.userData.update === 'function') {
+        const isActive = effect.userData.update(deltaTime);
+        if (!isActive && typeof effect.userData.dispose === 'function') {
+             effect.userData.dispose(); // Call dispose method if update returns false
+        }
+        return isActive;
+    }
+    return false; // Cannot update if method doesn't exist
 }
 
 
