@@ -3,79 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty</title>
+    <title>Shawty - The Game</title>
     <link rel="stylesheet" href="style.css">
-    <script>console.log("HTML HEAD: Parsed.");</script> <!-- ADDED LOG -->
-    <!-- Optional: Favicon link -->
-    <!-- <link rel="icon" type="image/x-icon" href="/favicon.ico"> -->
+    <!-- Favicon (Optional but nice) -->
+    <!-- <link rel="icon" href="/assets/favicon.ico"> -->
 </head>
 <body>
-    <script>console.log("HTML BODY: Start.");</script> <!-- ADDED LOG -->
-
-    <!-- UI Divs -->
+    <!-- Loading Screen -->
     <div id="loading-screen">
-        <h1>Loading Shawty...</h1>
-        <p id="loading-progress">0%</p>
-        <!-- Add cool visuals here -->
-    </div>
-
-    <div id="menu-screen" style="display: none;">
         <h1>Shawty</h1>
-        <label for="playerName">Enter Your Name:</label>
-        <input type="text" id="playerName" value="ShawtyPlayer"><br><br>
-        <!-- Avatar Selector Placeholder -->
-        <p>Select Avatar:</p>
-        <div>(Only one available)</div> <br>
-        <button id="playButton">Play Game</button>
+        <p>Loading Assets...</p>
+        <div id="loading-progress">0%</div>
+        <!-- Add a loading bar or animation later -->
     </div>
 
-    <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
-        <!-- HUD elements -->
-         <div id="crosshair">+</div>
-         <div id="hud">Health: <span id="health-value">100</span></div>
+    <!-- Home Menu -->
+    <div id="home-menu" class="hidden">
+        <h2>Welcome to Shawty!</h2>
+        <label for="playerNameInput">Enter Your Name:</label>
+        <input type="text" id="playerNameInput" maxlength="16" placeholder="Your Awesome Name">
+        <br>
+        <label>Select Character:</label>
+        <div id="character-selection">
+            <!-- Character previews will be added here later -->
+            <button class="character-option" data-char="Shawty1" disabled>Default (Shawty1)</button>
+            <!-- Add more buttons as you add characters -->
+        </div>
+        <br>
+        <button id="playButton">Join Game</button>
+        <p id="connection-status">Connecting...</p>
     </div>
 
-     <div id="death-screen" style="display: none;">
-        <h1>YOU DIED</h1>
-        <p>Respawning soon...</p>
-    </div>
-    <!-- End UI Divs -->
+    <!-- In-Game UI -->
+    <div id="game-ui" class="hidden">
+        <!-- Crosshair -->
+        <div id="crosshair">+</div>
 
-    <script>console.log("HTML BODY: UI Divs Parsed.");</script> <!-- ADDED LOG -->
+        <!-- Chat -->
+        <div id="chat-container">
+            <ul id="chat-messages">
+                <!-- Join/Leave/Death messages go here -->
+            </ul>
+            <input type="text" id="chat-input" placeholder="Press T to chat..." maxlength="100" disabled>
+        </div>
+
+        <!-- Leaderboard -->
+        <div id="leaderboard" class="hidden">
+            <h3>Leaderboard (Round Ends In: <span id="timer">5:00</span>)</h3>
+            <ul id="leaderboard-list">
+                <!-- Player scores go here -->
+            </ul>
+            <small>Press L to toggle</small>
+        </div>
+
+         <!-- Death Message Overlay -->
+         <div id="death-message" class="hidden">
+            <h2>You Died!</h2>
+            <p>Respawning...</p>
+        </div>
+
+         <!-- Round Over Overlay -->
+         <div id="round-over-message" class="hidden">
+            <h2>Round Over!</h2>
+            <p><span id="round-winner">Winner</span> won!</p>
+            <h3>Vote for the next map:</h3>
+            <div id="map-vote-options">
+                 <!-- Map vote buttons go here -->
+                 <button class="map-vote-button" data-map="the first map!">The First Map</button>
+                 <!-- Add more buttons for more maps -->
+            </div>
+            <p>Next round starts in: <span id="next-round-timer">30</span>s</p>
+        </div>
+    </div>
+
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
 
     <!-- Libraries -->
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script>console.log("HTML BODY: Socket.IO Loaded.");</script> <!-- ADDED LOG -->
-    <!-- Three.js, GLTFLoader, PointerLockControls are loaded via ES6 modules below -->
+    <!-- Socket.IO Client -->
+    <script src="/socket.io/socket.io.js"></script> <!-- Served automatically by Socket.IO server -->
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- GLTFLoader -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- Cannon-es (Physics) - We'll use this later -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.min.js"></script> -->
 
-
-    <!-- Game Scripts -->
-    <script>console.log("HTML BODY: About to load main.js module...");</script> <!-- ADDED LOG -->
-
-    <!-- This line MUST have type="module" and the correct path -->
-    <script type="module" src="js/main.js"></script>
-
-    <script>console.log("HTML BODY: Tag after main.js module parsed.");</script> <!-- ADDED LOG -->
-
-     <!-- Add an error handler for the module script -->
-     <script nomodule>
-         // Fallback for browsers that don't support modules
-         console.log("Browser does not support modules or module script failed.");
-     </script>
-     <script type="module">
-         window.addEventListener('error', function (event) {
-             // Check if the error message is the specific module resolution error
-             if (event.message && event.message.toLowerCase().includes('failed to resolve module specifier')) {
-                 console.error('>>> Caught Module Resolution Error <<<:', event.message, event);
-             }
-             // Optionally catch errors originating from main.js itself
-             else if (event.filename && event.filename.includes('main.js')) {
-                  console.error('>>> Caught Error related to main.js module execution <<<:', event.message, event);
-             }
-         }, true); // Use capture phase to catch early errors
-         console.log("HTML BODY: Module error listener added.");
-     </script>
+    <!-- Your Game Scripts -->
+    <script type="module" src="js/client.js"></script> <!-- Use type="module" for ES6 imports -->
 
 </body>
 </html>
