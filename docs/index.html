@@ -2,140 +2,87 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty - Multiplayer Shooter</title>
-    <link rel="stylesheet" href="css/style.css">
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three/0.157.0/three.min.js"></script>
-    <!-- GLTFLoader for 3D models -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three/0.157.0/examples/js/loaders/GLTFLoader.min.js"></script>
-    <!-- Socket.io client -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
-    <!-- GSAP for animations -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-    <!-- Cannon.js for physics -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Shawty - Online Shooter</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="favicon.ico" type="image/x-icon"> <!-- Optional: Add a favicon -->
 </head>
 <body>
-    <!-- Loading Screen -->
     <div id="loading-screen">
-        <div class="loading-content">
-            <h1>SHAWTY</h1>
-            <div class="loading-bar-container">
-                <div class="loading-bar"></div>
-            </div>
-            <p class="loading-text">Loading game assets...</p>
+        <h1>SHAWTY</h1>
+        <p id="loading-message">Connecting to server...</p>
+        <div id="progress-bar-container">
+            <div id="progress-bar"></div>
         </div>
+        <p id="error-message" style="color: red; display: none;"></p>
     </div>
 
-    <!-- Main Menu -->
-    <div id="main-menu" class="hidden">
-        <div class="menu-container">
-            <h1 class="game-title">SHAWTY</h1>
-            
-            <div class="menu-section">
-                <input type="text" id="player-name" placeholder="Enter your name" maxlength="15">
-                
-                <div class="character-selection">
-                    <h2>Select Character</h2>
-                    <div class="character-carousel">
-                        <div class="character-option selected" data-character="Shawty">
-                            <div class="character-preview" id="character-preview"></div>
-                            <p class="character-name">Shawty</p>
-                        </div>
-                        <!-- More character options can be added here -->
-                    </div>
-                </div>
-                
-                <div class="server-info">
-                    <p>Players Online: <span id="online-players">0</span></p>
-                </div>
-                
-                <button id="play-button" class="primary-button">PLAY</button>
+    <div id="home-menu" style="display: none;">
+        <h2>SHAWTY</h2>
+        <p>Online: <span id="online-players-menu">0</span></p>
+        <input type="text" id="player-name-input" placeholder="Enter your name" maxlength="15">
+        <div id="character-selector">
+            <p>Select Character:</p>
+            <div class="character-option selected" data-character="Shawty">
+                <!-- <img src="assets/ui/shawty_icon.png" alt="Shawty"> -->
+                <span>Shawty</span>
             </div>
+            <!-- Add more character options here later -->
+            <!-- <div class="character-option" data-character="OtherCharacter">
+                <img src="assets/ui/other_icon.png" alt="OtherCharacter">
+                <span>Other Character</span>
+            </div> -->
         </div>
+        <button id="join-game-button">Join Game</button>
     </div>
 
-    <!-- Game HUD -->
-    <div id="game-hud" class="hidden">
-        <div id="health-bar-container">
-            <div id="health-bar"></div>
-            <span id="health-text">100</span>
-        </div>
-        
-        <div id="ammo-container">
-            <span id="ammo-count">∞</span>
-        </div>
-        
-        <div id="round-timer">
-            <span id="time-remaining">5:00</span>
-        </div>
-        
-        <div id="kill-feed"></div>
-        
+    <div id="game-ui" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
         <div id="crosshair">+</div>
-    </div>
+        
+        <div id="hud">
+            <p>Health: <span id="health-display">100</span></p>
+            <p>Round Time: <span id="round-time-display">05:00</span></p>
+            <p>Kills: <span id="kills-display">0</span> Deaths: <span id="deaths-display">0</span></p>
+        </div>
 
-    <!-- Chat Window -->
-    <div id="chat-window" class="hidden">
-        <div id="chat-messages"></div>
-        <div id="chat-input-container" class="hidden">
-            <input type="text" id="chat-input" placeholder="Type your message..." maxlength="100">
+        <div id="chat-container">
+            <div id="chat-output"></div>
+            <input type="text" id="chat-input" placeholder="Press T to chat..." style="display: none;">
+        </div>
+
+        <div id="leaderboard" style="display: none;">
+            <h3>Leaderboard (L)</h3>
+            <ul id="leaderboard-list"></ul>
+        </div>
+
+        <div id="round-over-screen" style="display: none;">
+            <h2>Round Over!</h2>
+            <p id="winner-announcement"></p>
+            <p>Next round starting soon...</p>
+        </div>
+
+        <div id="death-message" style="display:none;">
+            <h2>YOU DIED</h2>
+            <p id="killed-by-message"></p>
+            <p>Respawning...</p>
         </div>
     </div>
 
-    <!-- Leaderboard -->
-    <div id="leaderboard" class="hidden">
-        <h2>Leaderboard</h2>
-        <table id="leaderboard-table">
-            <thead>
-                <tr>
-                    <th>Rank</th>
-                    <th>Player</th>
-                    <th>Kills</th>
-                </tr>
-            </thead>
-            <tbody id="leaderboard-body">
-                <!-- Leaderboard entries will be populated here -->
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Map Voting Screen -->
-    <div id="map-voting" class="hidden">
-        <h2>Vote for next map</h2>
-        <div id="map-options">
-            <!-- Map options will be populated here -->
-        </div>
-        <div id="voting-timer">Next round starting in: <span id="voting-countdown">10</span></div>
-    </div>
-
-    <!-- Death Screen -->
-    <div id="death-screen" class="hidden">
-        <h2>You were eliminated!</h2>
-        <p>Respawning in <span id="respawn-countdown">3</span> seconds...</p>
-    </div>
-
-    <!-- Round End Screen -->
-    <div id="round-end-screen" class="hidden">
-        <h2 id="round-end-message"></h2>
-        <div id="round-end-stats">
-            <h3>Your Stats</h3>
-            <p>Kills: <span id="your-kills">0</span></p>
-            <p>Deaths: <span id="your-deaths">0</span></p>
-        </div>
-    </div>
-
-    <!-- Game Canvas -->
     <canvas id="game-canvas"></canvas>
 
+    <!-- Libraries -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script> <!-- Socket.IO from CDN -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./js/lib/three.module.js",
+                "cannon-es": "./js/lib/cannon-es.js",
+                "three/addons/": "./js/lib/"
+            }
+        }
+    </script>
+
     <!-- Game Scripts -->
-    <script src="js/utils.js"></script>
-    <script src="js/physics.js"></script>
-    <script src="js/player.js"></script>
-    <script src="js/weapons.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/networking.js"></script>
-    <script src="js/game.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
