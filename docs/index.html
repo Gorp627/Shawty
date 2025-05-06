@@ -2,68 +2,76 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shawty - Online Multiplayer Shooter</title>
     <link rel="stylesheet" href="style.css">
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.159.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.159.0/examples/jsm/"
-        }
-    }
-    </script>
 </head>
 <body>
-    <div id="loading-screen">
-        <h1>Shawty</h1>
-        <p id="loading-status">Loading...</p>
-        <div id="progress-bar-container">
-            <div id="progress-bar"></div>
+    <div id="loadingScreen">
+        <h1>SHAWTY</h1>
+        <p id="loadingStatus">Loading assets...</p>
+        <div id="progressBarContainer">
+            <div id="progressBar"></div>
         </div>
     </div>
 
-    <div id="home-menu" style="display: none;">
-        <h2>Shawty</h2>
-        <input type="text" id="playerNameInput" maxlength="15" placeholder="Enter Your Name">
-        <div id="character-selector">
-            <p>Select Character:</p>
-            <button class="char-select-btn selected" data-char="Shawty">Shawty</button>
-            <!-- Add more when you have more models -->
+    <div id="homeMenu" style="display:none;">
+        <h2>SHAWTY</h2>
+        <p>Online: <span id="playerCount">0</span></p>
+        <input type="text" id="playerNameInput" placeholder="Enter Your Name" maxlength="15">
+        <div id="characterSelector">
+            <label for="charSelect">Select Character:</label>
+            <select id="charSelect">
+                <!-- Options will be populated by JS -->
+            </select>
         </div>
-        <p>Players Online: <span id="playersOnlineHome">0</span></p>
-        <button id="playButton">Enter City Rooftops</button>
-        <p id="home-menu-message" class="system-message"></p>
+        <button id="playButton">Play</button>
     </div>
 
-    <div id="game-container" style="display: none;">
-        <canvas id="game-canvas"></canvas>
-        <div id="game-ui">
-            <div id="crosshair">+</div>
-            <div id="chat-display">
-                <ul id="chat-messages"></ul>
-            </div>
-            <input type="text" id="chat-input" placeholder="Press T to type, Enter to send" style="display: none;">
-            
-            <div id="game-info">
-                <p>Map: <span id="currentMapName">city rooftops</span></p>
-                <p>Time: <span id="timeLeft">5:00</span></p>
-                <p>Kills: <span id="playerKills">0</span></p>
-                <p>Online: <span id="playersOnlineGame">0</span></p>
-            </div>
-
-            <div id="leaderboard" style="display: none;">
-                <h3>Leaderboard (L to toggle)</h3>
-                <ul id="leaderboard-list"></ul>
-            </div>
-            <div id="announcement-bar"></div> <!-- For death logs, join logs -->
+    <div id="gameContainer" style="display:none;">
+        <canvas id="gameCanvas"></canvas>
+        <div id="hud">
+            <div id="healthBar">HP: <span id="healthValue">100</span></div>
+            <div id="ammoInfo"></div> <!-- For future use -->
+            <div id="timerDisplay">Time: 05:00</div>
+            <div id="killFeed" class="feed-container"></div>
+        </div>
+        <div id="chatContainer">
+            <div id="chatOutput"></div>
+            <input type="text" id="chatInput" placeholder="Press T to chat..." style="display:none;">
+        </div>
+        <div id="leaderboard" style="display:none;">
+            <h3>Leaderboard (Press L)</h3>
+            <ul id="leaderboardList"></ul>
+        </div>
+        <div id="roundEndScreen" style="display:none;">
+            <h2>Round Over!</h2>
+            <ul id="roundEndLeaderboard"></ul>
+            <p id="nextRoundMessage">Next round starting soon...</p>
         </div>
     </div>
     
-    <!-- Make sure this path is correct based on your server setup for Socket.IO client -->
-    <!-- If Render serves this, it will work. If GitHub pages, connect to your Render URL. -->
-    <script src="https://gametest-psxl.onrender.com/socket.io/socket.io.js"></script>
-    <!-- For local dev: <script src="/socket.io/socket.io.js"></script> -->
+    <div id="crosshair">+</div>
+
+    <!-- Libraries: Use local copies or a bundler for production -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- Rapier: Make sure to get the WASM file as well if using the JS directly -->
+    <script type="module">
+        // This is a common way to initialize Rapier from CDN or local files.
+        // You might need to adjust paths if you host Rapier files locally.
+        // For GitHub pages, you might need to put rapier_wasm.wasm in the root of `docs` or adjust path.
+        // Using a direct CDN link that bundles WASM might be easier for initial setup.
+        // Let's use a UMD bundle for simplicity if available, or guide user to host WASM.
+        // For now, assuming Rapier is globally available after script tag.
+        // Example for Rapier: <script src="https://cdn.jsdelivr.net/npm/@dimforge/rapier3d@0.11.2/rapier.umd.js"></script>
+        // The WASM file is usually loaded by rapier.js itself from a relative path.
+        // Easiest for GH pages: download rapier.js and rapier_wasm.wasm, put them in js/lib/ and load rapier.js
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.1.0-alpha.4/dist/rapier.min.js"></script> <!-- Simpler Rapier bundle -->
+
+
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
