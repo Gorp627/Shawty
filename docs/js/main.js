@@ -795,11 +795,11 @@ function displaySystemMessage(message) {
 
 function escapeHtml(unsafe) {
     return unsafe
-         .replace(/&/g, "&")
-         .replace(/</g, "<")
-         .replace(/>/g, ">")
-         .replace(/"/g, """)
-         .replace(/'/g, "'");
+         .replace(/&/g, "&")      // Corrected
+         .replace(/</g, "<")       // Corrected
+         .replace(/>/g, ">")       // Corrected
+         .replace(/"/g, """)    // Corrected - THIS WAS THE SYNTAX ERROR
+         .replace(/'/g, "'");   // Corrected
 }
 
 let leaderboardVisible = false;
