@@ -1,82 +1,295 @@
+/* /docs/style.css */
 body {
     margin: 0;
     overflow: hidden; /* Prevent scrollbars */
     font-family: sans-serif;
     background-color: #222;
-    color: white;
-    display: flex; /* Use flexbox for centering */
+    color: #eee;
+    display: flex; /* Use flexbox for centering menu initially */
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
+    min-height: 100vh; /* Ensure body takes full height */
 }
 
-#loading-screen, #menu-screen, #death-screen {
-    position: fixed; /* Use fixed to overlay */
+canvas#gameCanvas {
+    display: block; /* Remove extra space below canvas */
+    position: fixed; /* Take up full screen behind UI */
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.9); /* Semi-transparent black */
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
+    z-index: -1; /* Put canvas behind UI elements */
+}
+
+/* --- Utility Classes --- */
+.hidden {
+    display: none !important; /* Use !important to override other display properties */
+}
+
+/* --- Loading Screen --- */
+#loading-screen {
     text-align: center;
-    z-index: 100; /* Ensure it's on top */
+    background-color: rgba(0, 0, 0, 0.8);
+    padding: 30px;
+    border-radius: 10px;
 }
 
-#menu-screen {
-    /* Initially hidden */
-    /* display: none; */ /* Controlled by JS */
+#loading-progress {
+    font-size: 1.5em;
+    margin-top: 10px;
+    color: #4CAF50;
 }
 
-#game-container {
-    position: relative; /* Needed for absolute positioning of HUD */
-    width: 100%;
-    height: 100vh;
-    display: none; /* Initially hidden */
+/* --- Home Menu --- */
+#home-menu {
+    text-align: center;
+    background-color: rgba(30, 30, 50, 0.85);
+    padding: 40px;
+    border-radius: 15px;
+    border: 1px solid #aaa;
+    min-width: 300px;
 }
 
-#gameCanvas {
-    display: block; /* Remove extra space below canvas */
+#home-menu label {
+    display: block;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+#home-menu input[type="text"] {
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    width: calc(100% - 22px); /* Account for padding and border */
+    background-color: #333;
+    color: #eee;
+}
+
+#home-menu button {
+    padding: 12px 25px;
+    margin-top: 20px;
+    font-size: 1.1em;
+    cursor: pointer;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+}
+
+#home-menu button:hover:not(:disabled) {
+    background-color: #45a049;
+}
+
+#home-menu button:disabled {
+    background-color: #555;
+    cursor: not-allowed;
+}
+
+#character-selection {
+    margin-top: 10px;
+    display: flex;
+    justify-content: center;
+    gap: 10px; /* Space between buttons */
+}
+
+.character-option {
+    padding: 10px 15px;
+    font-size: 1em;
+    /* Add styling for selected state later */
+}
+
+#connection-status {
+    margin-top: 15px;
+    font-style: italic;
+    color: #ccc;
+}
+
+
+/* --- In-Game UI --- */
+#game-ui {
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
+    pointer-events: none; /* Allow clicks to go through to the canvas */
+    color: white;
+    z-index: 10; /* Ensure UI is above the canvas */
 }
 
+/* Make specific UI elements interactive */
+#chat-container, #chat-input, #leaderboard, #round-over-message {
+    pointer-events: auto; /* Allow interaction with these elements */
+}
+
+/* Crosshair */
 #crosshair {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     font-size: 24px;
-    color: white;
-    pointer-events: none; /* Allow clicks to pass through */
-    z-index: 10; /* Above canvas, below menu */
+    color: rgba(255, 255, 255, 0.7);
+    text-shadow: 1px 1px 2px black;
 }
 
-#hud {
+/* Chat */
+#chat-container {
     position: absolute;
     bottom: 10px;
     left: 10px;
-    background-color: rgba(0,0,0,0.5);
-    padding: 5px 10px;
+    width: 350px;
+    max-height: 200px; /* Limit height */
+    background-color: rgba(0, 0, 0, 0.5);
     border-radius: 5px;
-    z-index: 10;
+    padding: 5px;
+    display: flex;
+    flex-direction: column; /* Stack messages above input */
 }
 
-#death-screen {
-    /* display: none; */ /* Controlled by JS */
-     color: red;
+#chat-messages {
+    list-style: none;
+    padding: 0 5px;
+    margin: 0;
+    overflow-y: auto; /* Enable scrolling for messages */
+    flex-grow: 1; /* Allow message list to fill space */
+    font-size: 0.9em;
+    word-wrap: break-word; /* Prevent long messages from overflowing */
+}
+#chat-messages li {
+    margin-bottom: 4px;
+}
+#chat-messages .system-message { color: #aaa; font-style: italic;}
+#chat-messages .player-message strong { color: #6fa8dc; } /* Example player name color */
+#chat-messages .death-message { color: #ff6b6b; font-style: italic;}
+
+#chat-input {
+    border: 1px solid #555;
+    background-color: rgba(50, 50, 50, 0.8);
+    color: white;
+    padding: 5px;
+    width: calc(100% - 12px); /* Account for padding/border */
+    margin-top: 5px;
+    border-radius: 3px;
+    box-sizing: border-box; /* Include padding/border in width */
 }
 
-/* Basic button styling */
-button {
-    padding: 10px 20px;
-    font-size: 16px;
-    cursor: pointer;
+#chat-input:focus {
+    outline: none;
+    border-color: #888;
 }
 
-input[type="text"] {
-    padding: 8px;
-    font-size: 16px;
+#chat-input:disabled {
+    background-color: rgba(0, 0, 0, 0.3);
+    cursor: default;
+}
+
+
+/* Leaderboard */
+#leaderboard {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 250px;
+    background-color: rgba(0, 0, 0, 0.6);
+    border-radius: 5px;
+    padding: 10px 15px;
+    font-size: 0.9em;
+}
+#leaderboard h3 {
+    margin: 0 0 10px 0;
+    text-align: center;
+    color: #eee;
+}
+#leaderboard ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+#leaderboard li {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    border-bottom: 1px solid #444;
+}
+#leaderboard li:last-child {
+    border-bottom: none;
+}
+#leaderboard .leaderboard-name {
+    /* Style for player name */
+}
+#leaderboard .leaderboard-score {
+    font-weight: bold;
+}
+#leaderboard small {
+    display: block;
+    text-align: center;
+    margin-top: 10px;
+    color: #aaa;
+}
+
+/* Death Message Overlay */
+#death-message {
+    position: absolute;
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(150, 0, 0, 0.7);
+    color: white;
+    padding: 30px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 1.2em;
+    z-index: 20; /* Ensure it's above other UI */
+}
+
+/* Round Over Overlay */
+#round-over-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 50, 100, 0.85);
+    color: white;
+    padding: 30px 40px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 1.1em;
+    z-index: 20;
+    min-width: 350px;
+}
+
+#round-over-message h2 {
+    color: #ffcc00; /* Gold color */
+}
+
+#map-vote-options {
+    margin: 20px 0;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+.map-vote-button {
+     padding: 10px 20px;
+     font-size: 1em;
+     cursor: pointer;
+     background-color: #2a7aaf;
+     color: white;
+     border: none;
+     border-radius: 5px;
+     transition: background-color 0.3s ease;
+}
+
+.map-vote-button:hover {
+    background-color: #3a8bc0;
+}
+
+/* Ensure body background is dark when menu is hidden */
+body.game-active {
+    justify-content: initial; /* Reset flexbox centering */
+    align-items: initial;
+    background-color: #000; /* Or a dark skybox color */
 }
