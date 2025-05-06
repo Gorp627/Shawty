@@ -150,14 +150,13 @@ export class UIManager {
             this.chatOutput.scrollTop = this.chatOutput.scrollHeight;
         }
     }
-
     escapeHTML(str) {
         return str.replace(/[&<>"']/g, function (match) {
             return {
-                '&': '&',
-                '<': '<',
-                '>': '>',
-                '"': '"',
+                '&': '&',  // Added comma
+                '<': '<',   // Added comma
+                '>': '>',   // Added comma
+                '"': '"', // Added comma
                 "'": '''
             }[match];
         });
