@@ -800,7 +800,7 @@ function escapeHtml(unsafe) {
          .replace(/>/g, ">")
          .replace(/"/g, """)
          .replace(/'/g, "'");
- }
+}
 
 let leaderboardVisible = false;
 function toggleLeaderboard(forceShow = null) {
