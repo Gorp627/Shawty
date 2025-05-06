@@ -1,409 +1,74 @@
-/* /docs/style.css */
-html, body {
-    margin: 0;
-    padding: 0; /* Ensure no padding */
-    overflow: hidden; /* Prevent scrollbars */
-    width: 100%;
-    height: 100%;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Nicer font stack */
-    background-color: #1a1a1a; /* Darker background */
-    color: #e0e0e0; /* Lighter default text */
-}
+/* General Styles */
+body, html { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1a1a1a; color: #e0e0e0; width: 100%; height: 100%; user-select: none; }
+button { cursor: pointer; background-color: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-size: 1em; transition: background-color 0.2s ease; }
+button:hover { background-color: #0056b3; }
+input[type="text"] { padding: 10px; border-radius: 5px; border: 1px solid #555; background-color: #333; color: #e0e0e0; font-size: 1em; }
 
-body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
+/* Loading Screen */
+#loading-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #121212; z-index: 1000; text-align: center; }
+#loading-screen h1 { font-size: 4em; color: #007bff; margin-bottom: 20px; text-shadow: 2px 2px 4px #000; }
+#loading-status { font-size: 1.2em; margin-bottom: 20px; }
+#progress-bar-container { width: 60%; max-width: 500px; height: 25px; background-color: #333; border-radius: 15px; overflow: hidden; border: 1px solid #555; }
+#progress-bar { width: 0%; height: 100%; background-color: #007bff; transition: width 0.3s ease-in-out; }
 
-/* Style specifically when game is not active (showing menu/loading) */
-body:not(.game-active) {
-     background: linear-gradient(to bottom, #2c3e50, #1a2833); /* Gradient background for menu */
-}
+/* Home Menu */
+#home-menu { display: none; flex-direction: column; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); z-index: 900; text-align: center; padding: 20px; box-sizing: border-box;}
+#home-menu h2 { font-size: 3em; color: #007bff; margin-bottom: 25px; }
+#home-menu input[type="text"] { width: 80%; max-width: 300px; margin-bottom: 20px; }
+#character-selector { margin-bottom: 20px; }
+#character-selector p { margin-bottom: 10px; font-size: 1.1em; }
+.char-select-btn { margin: 0 5px; background-color: #555; border: 2px solid transparent; }
+.char-select-btn.selected { background-color: #007bff; border-color: #fff; }
+#home-menu #playButton { font-size: 1.2em; padding: 12px 25px; width: 80%; max-width: 300px; }
+#home-menu-message { margin-top: 15px; color: #ffc107; font-style: italic; }
 
-canvas#gameCanvas {
-    display: block;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: -1; /* Behind UI */
-}
+/* Game Container & Canvas */
+#game-container { width: 100%; height: 100%; position: relative; }
+#game-canvas { display: block; width: 100%; height: 100%; }
 
-/* --- Utility Classes --- */
-.hidden {
-    display: none !important;
-}
-
-/* --- Loading Screen --- */
-#loading-screen {
-    text-align: center;
-    background-color: rgba(0, 0, 0, 0.7);
-    padding: 40px 50px;
-    border-radius: 12px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
-}
-#loading-screen h1 {
-    margin-bottom: 15px;
-    color: #6fa8dc; /* Accent color */
-}
-#loading-message {
-    font-size: 1.1em;
-    margin-bottom: 20px;
-    color: #ccc;
-}
-#loading-progress {
-    font-size: 1.3em;
-    color: #5cb85c; /* Green for progress/success */
-}
-
-/* --- Home Menu --- */
-#home-menu {
-    text-align: center;
-    background-color: rgba(40, 40, 60, 0.9); /* Slightly transparent dark blue/purple */
-    padding: 35px 45px;
-    border-radius: 15px;
-    border: 1px solid #555;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
-    min-width: 320px;
-    max-width: 90%;
-}
-#home-menu h2 {
-    color: #ffcc66; /* Gold accent */
-    margin-bottom: 25px;
-}
-#home-menu label {
-    display: block;
-    margin-top: 15px;
-    margin-bottom: 5px;
-    font-weight: bold;
-    color: #bbb;
-}
-#home-menu input[type="text"] {
-    padding: 12px;
-    border-radius: 5px;
-    border: 1px solid #666;
-    width: calc(100% - 26px); /* Account for padding and border */
-    background-color: #2a2a3a; /* Darker input background */
-    color: #eee;
-    font-size: 1em;
-}
-#home-menu input[type="text"]:focus {
-    outline: none;
-    border-color: #88aaff;
-    box-shadow: 0 0 5px rgba(136, 170, 255, 0.5);
-}
-#home-menu button#playButton {
-    padding: 12px 30px;
-    margin-top: 25px;
-    font-size: 1.15em;
-    font-weight: bold;
-    cursor: pointer;
-    background-color: #5cb85c; /* Green */
-    color: white;
-    border: none;
-    border-radius: 5px;
-    transition: background-color 0.2s ease, transform 0.1s ease;
-}
-#home-menu button#playButton:hover:not(:disabled) {
-    background-color: #4cae4c;
-    transform: translateY(-1px); /* Slight lift effect */
-}
-#home-menu button#playButton:active:not(:disabled) {
-    transform: translateY(0px); /* Push down effect */
-}
-#home-menu button#playButton:disabled {
-    background-color: #555;
-    color: #999;
-    cursor: not-allowed;
-}
-
-#character-selection {
-    margin-top: 15px;
-    display: flex;
-    justify-content: center;
-    gap: 15px; /* Space between buttons */
-}
-.character-option {
-    padding: 10px 15px;
-    font-size: 0.95em;
-    cursor: pointer;
-    background-color: #4a4a6a;
-    color: #ddd;
-    border: 2px solid transparent; /* For selected state */
-    border-radius: 5px;
-    transition: background-color 0.2s ease, border-color 0.2s ease;
-}
-.character-option:hover:not(:disabled) {
-    background-color: #5a5a7a;
-}
-.character-option.selected {
-    border-color: #88aaff; /* Highlight selected */
-    background-color: #5a5a8a;
-    font-weight: bold;
-    color: white;
-}
-.character-option:disabled, .character-option.disabled { /* Style explicitly disabled buttons */
-    background-color: #333;
-    color: #777;
-    cursor: not-allowed;
-    border-color: #444;
-}
-
-#connection-status {
-    margin-top: 20px;
-    font-style: italic;
-    font-size: 0.9em;
-    color: #aaa;
-    min-height: 1.2em; /* Prevent layout shift */
-}
-#connection-status.connected { color: #5cb85c; }
-#connection-status.error { color: #d9534f; }
-
-
-/* --- In-Game UI --- */
-#game-ui {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none; /* Allow clicks to go through to canvas by default */
-    color: white;
-    z-index: 10;
-}
-
-/* Make specific UI elements interactive */
-#chat-container, #chat-input, #leaderboard, #round-over-message, #death-message, .map-vote-button {
-    pointer-events: auto;
-}
-
-/* Crosshair */
-#crosshair {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 10px; /* Size of crosshair lines */
-    height: 10px;
-    font-size: 20px; /* Adjust size if using text like '+' */
-    /* For a simple dot crosshair: */
-    /* background-color: rgba(255, 255, 255, 0.8);
-    border-radius: 50%;
-    width: 4px;
-    height: 4px; */
-    /* For a plus crosshair: */
-    color: rgba(255, 255, 255, 0.8);
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
-    font-weight: bold;
-}
+/* Game UI Elements */
+#game-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; /* Allows clicks to pass to canvas */ }
+#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 28px; color: rgba(255, 255, 255, 0.8); text-shadow: 1px 1px 2px rgba(0,0,0,0.7); }
 
 /* Chat */
-#chat-container {
-    position: absolute;
-    bottom: 10px;
-    left: 10px;
-    width: clamp(300px, 30%, 450px); /* Responsive width */
-    max-height: 250px;
-    background-color: rgba(0, 0, 0, 0.6);
-    border-radius: 5px;
-    padding: 8px;
-    display: flex;
-    flex-direction: column;
-    border-top: 1px solid rgba(255, 255, 255, 0.1); /* Subtle top border */
-}
-#chat-messages {
-    list-style: none;
-    padding: 0 5px;
-    margin: 0;
-    overflow-y: auto; /* Enable scrolling */
-    flex-grow: 1; /* Take available space */
-    font-size: 0.9em;
-    word-wrap: break-word;
-    scrollbar-width: thin; /* Firefox */
-    scrollbar-color: #555 #222; /* Firefox */
-}
-/* Webkit scrollbar styles */
-#chat-messages::-webkit-scrollbar { width: 8px; }
-#chat-messages::-webkit-scrollbar-track { background: #222; border-radius: 4px;}
-#chat-messages::-webkit-scrollbar-thumb { background-color: #555; border-radius: 4px; border: 2px solid #222; }
+#chat-display { position: absolute; bottom: 50px; left: 10px; width: 30%; max-width: 350px; height: 150px; background: rgba(0,0,0,0.4); border-radius: 5px; padding: 8px; overflow-y: scroll; pointer-events: auto; }
+#chat-messages { list-style: none; padding: 0; margin: 0; }
+#chat-messages li { padding: 3px 0; font-size: 0.9em; word-break: break-word; }
+#chat-messages .system { color: #ffc107; font-style: italic; } /* System messages */
+#chat-messages .player-message b { color: #6cb2eb; } /* Player names */
+#chat-input { position: absolute; bottom: 10px; left: 10px; width: 30%; max-width: 350px; padding: 8px; background: rgba(0,0,0,0.6); border: 1px solid #444; color: #fff; border-radius: 5px; pointer-events: auto; box-sizing: border-box; display: none; }
 
-#chat-messages li {
-    margin-bottom: 5px;
-    line-height: 1.3;
-}
-#chat-messages .system-message { color: #aaa; font-style: italic; }
-#chat-messages .player-message strong { color: #6fa8dc; margin-right: 5px;} /* Player name color */
-#chat-messages .my-message strong { color: #88d
-#chat-messages .my-message strong { color: #88dd88; } /* Different color for own name? Optional */
-#chat-messages .death-message { color: #ff8080; font-style: italic;} /* More visible red */
-#chat-messages .join-leave-message { color: #aaaaaa; font-style: italic; } /* Can reuse system style */
+/* Game Info (Top Right) */
+#game-info { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; text-align: right; font-size: 0.9em; }
+#game-info p { margin: 4px 0; }
 
-#chat-input {
-    border: 1px solid #555;
-    background-color: rgba(40, 40, 40, 0.9);
-    color: white;
-    padding: 8px 10px;
-    width: calc(100% - 22px); /* Account for padding/border */
-    margin-top: 8px;
-    border-radius: 4px;
-    box-sizing: border-box;
-    font-size: 0.9em;
-}
-#chat-input:focus {
-    outline: none;
-    border-color: #777;
-    background-color: rgba(50, 50, 50, 0.95);
-}
-#chat-input:disabled {
-    background-color: transparent; /* Make less obtrusive when disabled */
-    border-color: transparent;
-    cursor: default;
-    color: #777; /* Indicate disabled state */
-}
-#chat-input::placeholder {
-    color: #888;
-    font-style: italic;
+/* Leaderboard (L key) */
+#leaderboard { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px; border-radius: 8px; width: 80%; max-width: 400px; box-shadow: 0 0 15px rgba(0,0,0,0.5); pointer-events: auto; }
+#leaderboard h3 { text-align: center; margin-top: 0; margin-bottom: 15px; color: #007bff; }
+#leaderboard-list { list-style: none; padding: 0; margin: 0; }
+#leaderboard-list li { padding: 8px 5px; border-bottom: 1px solid #444; display: flex; justify-content: space-between; }
+#leaderboard-list li:last-child { border-bottom: none; }
+#leaderboard-list .player-name { color: #eee; }
+#leaderboard-list .player-score { color: #ffc107; font-weight: bold; }
+
+/* Announcement Bar (Join/Leave/Death Logs) */
+#announcement-bar { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); width: auto; max-width: 70%; text-align: center; }
+.announcement-message { background-color: rgba(0, 0, 0, 0.7); color: white; padding: 8px 15px; margin-bottom: 5px; border-radius: 4px; font-size: 0.9em; display: inline-block; opacity: 0; animation: fadeInOut 5s ease-in-out; }
+.announcement-message.death { color: #ff6b6b; }
+.announcement-message.join { color: #63e6be; }
+.announcement-message.system { color: #ffc107; }
+
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: translateY(20px); }
+    10% { opacity: 1; transform: translateY(0); }
+    90% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-20px); }
 }
 
-
-/* Leaderboard */
-#leaderboard {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: clamp(200px, 20%, 300px); /* Responsive width */
-    background-color: rgba(0, 0, 0, 0.65);
-    border-radius: 5px;
-    padding: 12px 18px;
-    font-size: 0.9em;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-#leaderboard h3 {
-    margin: 0 0 12px 0;
-    text-align: center;
-    color: #eee;
-    font-size: 1.1em;
-    border-bottom: 1px solid #444;
-    padding-bottom: 8px;
-}
-#leaderboard ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    max-height: 400px; /* Limit height if too many players */
-    overflow-y: auto;
-}
-#leaderboard li {
-    display: flex;
-    justify-content: space-between;
-    padding: 5px 2px;
-    border-bottom: 1px solid #3a3a3a;
-    line-height: 1.4;
-}
-#leaderboard li:last-child {
-    border-bottom: none;
-}
-#leaderboard .leaderboard-name {
-    color: #ccc;
-    overflow: hidden; /* Prevent long names breaking layout */
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    padding-right: 10px; /* Space before score */
-}
-#leaderboard .leaderboard-score {
-    font-weight: bold;
-    color: #ffcc66; /* Gold score */
-    min-width: 30px; /* Ensure alignment */
-    text-align: right;
-}
-#leaderboard .is-local-player .leaderboard-name { /* Highlight local player */
-     font-weight: bold;
-     color: #88dd88; /* Light green */
-}
-#leaderboard small {
-    display: block;
-    text-align: center;
-    margin-top: 10px;
-    color: #aaa;
-    font-size: 0.85em;
-}
-
-/* Death Message Overlay */
-#death-message {
-    position: absolute;
-    top: 40%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: rgba(180, 40, 40, 0.8); /* Stronger red */
-    color: white;
-    padding: 30px 40px;
-    border-radius: 10px;
-    text-align: center;
-    font-size: 1.3em;
-    z-index: 20;
-    border: 1px solid rgba(255, 100, 100, 0.5);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-}
-#death-message h2 {
-    margin-bottom: 10px;
-}
-
-/* Round Over Overlay */
-#round-over-message {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: rgba(30, 60, 90, 0.9);
-    color: white;
-    padding: 30px 40px;
-    border-radius: 10px;
-    text-align: center;
-    font-size: 1.1em;
-    z-index: 20;
-    min-width: 350px;
-    border: 1px solid rgba(100, 150, 200, 0.5);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-#round-over-message h2 {
-    color: #ffdd44; /* Brighter gold */
-    margin-bottom: 10px;
-}
-#round-over-message p {
-    margin: 15px 0;
-    font-size: 1.1em;
-}
-#round-over-message h3 {
-    margin-top: 25px;
-    margin-bottom: 15px;
-    color: #ccc;
-}
-#map-vote-options {
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-}
-.map-vote-button {
-     padding: 10px 20px;
-     font-size: 1em;
-     cursor: pointer;
-     background-color: #3a7aaf;
-     color: white;
-     border: none;
-     border-radius: 5px;
-     transition: background-color 0.2s ease, transform 0.1s ease;
-}
-.map-vote-button:hover {
-    background-color: #4a8bc0;
-    transform: translateY(-1px);
-}
-.map-vote-button:active {
-    transform: translateY(0px);
-}
-#next-round-timer {
-    font-weight: bold;
-    color: #ffcc66;
+/* Mobile specific adjustments if needed */
+@media (max-width: 768px) {
+    #chat-display, #chat-input { width: 80%; max-width: none; }
+    #game-info { font-size: 0.8em; }
+    #loading-screen h1 { font-size: 3em; }
+    #home-menu h2 { font-size: 2.5em; }
 }
