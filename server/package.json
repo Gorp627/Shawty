@@ -1,7 +1,7 @@
 {
-  "name": "shawty-server",
+  "name": "shawty-game-server",
   "version": "1.0.0",
-  "description": "Server for Shawty game",
+  "description": "Multiplayer shooter game server for Shawty",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,9 +9,10 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "socket.io": "^4.7.2"
+    "socket.io": "^4.7.2",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1" 
+    "nodemon": "^3.0.1"
   }
 }
