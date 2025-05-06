@@ -6,7 +6,8 @@
     <title>Shawty - The Game</title>
     <link rel="stylesheet" href="style.css">
     <!-- Favicon (Optional but nice) -->
-    <!-- <link rel="icon" href="/assets/favicon.ico"> -->
+    <!-- <link rel="icon" href="/assets/favicon.ico"> --> <!-- You might want to add a favicon.ico file here -->
+    <!-- <link rel="icon" href="favicon.ico"> --> <!-- Or reference directly if in docs/ -->
 </head>
 <body>
     <!-- Loading Screen -->
@@ -82,8 +83,9 @@
     <canvas id="gameCanvas"></canvas>
 
     <!-- Libraries -->
-    <!-- Socket.IO Client (served by the server) -->
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- Socket.IO Client (served by the Render server - USE ABSOLUTE URL) -->
+    <script src="https://gametest-psxl.onrender.com/socket.io/socket.io.js"></script> <!-- <--- THIS LINE WAS CHANGED -->
+
     <!-- Three.js (using module for imports in client.js) -->
     <!-- The actual import happens in client.js -->
     <!-- Cannon-es (Physics) - We'll use this later -->
