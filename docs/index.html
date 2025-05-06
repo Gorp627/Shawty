@@ -2,98 +2,68 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"> <!-- Added user-scalable=no -->
-    <title>Shawty - The Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Shawty - Online Multiplayer Shooter</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Favicon (Optional but nice) -->
-    <!-- <link rel="icon" href="/assets/favicon.ico"> --> <!-- You might want to add a favicon.ico file here -->
-    <!-- <link rel="icon" href="favicon.ico"> --> <!-- Or reference directly if in docs/ -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.159.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.159.0/examples/jsm/"
+        }
+    }
+    </script>
 </head>
 <body>
-    <!-- Loading Screen -->
     <div id="loading-screen">
         <h1>Shawty</h1>
-        <p id="loading-message">Connecting to server...</p> <!-- Changed to ID -->
-        <div id="loading-progress"></div> <!-- Removed %, will be updated by JS -->
-        <!-- Add a loading bar or animation later -->
+        <p id="loading-status">Loading...</p>
+        <div id="progress-bar-container">
+            <div id="progress-bar"></div>
+        </div>
     </div>
 
-    <!-- Home Menu -->
-    <div id="home-menu" class="hidden">
-        <h2>Welcome to Shawty!</h2>
-        <label for="playerNameInput">Enter Your Name:</label>
-        <input type="text" id="playerNameInput" maxlength="16" placeholder="Your Awesome Name" autocomplete="off"> <!-- Added autocomplete off -->
-        <br>
-        <label>Select Character:</label>
-        <div id="character-selection">
-            <!-- Character previews will be added here later -->
-            <button class="character-option" data-char="Shawty1">Default (Shawty1)</button>
-            <!-- Add more buttons as you add characters -->
-            <button class="character-option disabled" data-char="ComingSoon1" disabled title="Coming Soon!">More Soon</button> <!-- Example disabled -->
+    <div id="home-menu" style="display: none;">
+        <h2>Shawty</h2>
+        <input type="text" id="playerNameInput" maxlength="15" placeholder="Enter Your Name">
+        <div id="character-selector">
+            <p>Select Character:</p>
+            <button class="char-select-btn selected" data-char="Shawty">Shawty</button>
+            <!-- Add more when you have more models -->
         </div>
-        <br>
-        <button id="playButton" disabled>Join Game</button> <!-- Start disabled -->
-        <p id="connection-status">Connecting...</p>
+        <p>Players Online: <span id="playersOnlineHome">0</span></p>
+        <button id="playButton">Enter City Rooftops</button>
+        <p id="home-menu-message" class="system-message"></p>
     </div>
 
-    <!-- In-Game UI -->
-    <div id="game-ui" class="hidden">
-        <!-- Crosshair -->
-        <div id="crosshair">+</div>
-
-        <!-- Chat -->
-        <div id="chat-container">
-            <ul id="chat-messages">
-                <!-- Join/Leave/Death/Chat messages go here -->
-            </ul>
-            <input type="text" id="chat-input" placeholder="Press T to chat..." maxlength="100" disabled autocomplete="off"> <!-- Added autocomplete off -->
-        </div>
-
-        <!-- Leaderboard -->
-        <div id="leaderboard" class="hidden">
-            <h3>Leaderboard (Press L)</h3> <!-- Removed timer placeholder for now -->
-            <!-- <h3>Leaderboard (Round Ends In: <span id="timer">5:00</span>)</h3> -->
-            <ul id="leaderboard-list">
-                <!-- Player scores go here: <li><span class="name">Player</span><span class="score">0</span></li> -->
-            </ul>
-            <small>Press L to toggle</small>
-        </div>
-
-         <!-- Death Message Overlay -->
-         <div id="death-message" class="hidden">
-            <h2>You Died!</h2>
-            <p>Respawning...</p> <!-- Add timer later -->
-        </div>
-
-         <!-- Round Over Overlay -->
-         <div id="round-over-message" class="hidden">
-            <h2>Round Over!</h2>
-            <p><span id="round-winner">Winner</span> won!</p>
-            <h3>Vote for the next map:</h3>
-            <div id="map-vote-options">
-                 <!-- Map vote buttons go here -->
-                 <button class="map-vote-button" data-map="the_first_map">The First Map</button> <!-- Use valid ID/attribute value -->
-                 <!-- Add more buttons for more maps -->
+    <div id="game-container" style="display: none;">
+        <canvas id="game-canvas"></canvas>
+        <div id="game-ui">
+            <div id="crosshair">+</div>
+            <div id="chat-display">
+                <ul id="chat-messages"></ul>
             </div>
-            <p>Next round starts in: <span id="next-round-timer">30</span>s</p>
+            <input type="text" id="chat-input" placeholder="Press T to type, Enter to send" style="display: none;">
+            
+            <div id="game-info">
+                <p>Map: <span id="currentMapName">city rooftops</span></p>
+                <p>Time: <span id="timeLeft">5:00</span></p>
+                <p>Kills: <span id="playerKills">0</span></p>
+                <p>Online: <span id="playersOnlineGame">0</span></p>
+            </div>
+
+            <div id="leaderboard" style="display: none;">
+                <h3>Leaderboard (L to toggle)</h3>
+                <ul id="leaderboard-list"></ul>
+            </div>
+            <div id="announcement-bar"></div> <!-- For death logs, join logs -->
         </div>
     </div>
-
-    <!-- Game Canvas (where Three.js renders) -->
-    <canvas id="gameCanvas"></canvas>
-
-    <!-- Libraries -->
-    <!-- Socket.IO Client (served by the Render server - USE ABSOLUTE URL) -->
-    <script src="https://gametest-psxl.onrender.com/socket.io/socket.io.js"></script> <!-- <--- THIS LINE WAS CHANGED -->
-
-    <!-- Three.js (using module for imports in client.js) -->
-    <!-- The actual import happens in client.js -->
-    <!-- Cannon-es (Physics) - We'll use this later -->
-    <!-- <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.min.js"></script> -->
-
-    <!-- Your Game Scripts -->
-    <!-- Use type="module" to enable ES6 import/export -->
-    <script type="module" src="js/client.js"></script>
-
+    
+    <!-- Make sure this path is correct based on your server setup for Socket.IO client -->
+    <!-- If Render serves this, it will work. If GitHub pages, connect to your Render URL. -->
+    <script src="https://gametest-psxl.onrender.com/socket.io/socket.io.js"></script>
+    <!-- For local dev: <script src="/socket.io/socket.io.js"></script> -->
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
