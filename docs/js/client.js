@@ -70,8 +70,9 @@ function init() {
 function initThree() {
     console.log("Initializing Three.js...");
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x7092be);
-    scene.fog = new THREE.Fog(0x7092be, 50, 150);
+    // Let's try a classic sky blue like 87CEEB
+    scene.background = new THREE.Color(0x87CEEB); // Classic Sky Blue
+    scene.fog = new THREE.Fog(0x87CEEB, 50, 150); // Fog matches background
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -84,28 +85,30 @@ function initThree() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    // --- Lighting Adjustments ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); // Increased ambient intensity
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
-    directionalLight.position.set(15, 30, 20);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5); // Increased directional intensity
+    directionalLight.position.set(20, 35, 25); // Adjusted position slightly
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
     directionalLight.shadow.mapSize.height = 2048;
     directionalLight.shadow.camera.near = 0.5;
     directionalLight.shadow.camera.far = 100;
-    const shadowCamSize = 30;
+    const shadowCamSize = 35; // Slightly larger shadow area if needed
     directionalLight.shadow.camera.left = -shadowCamSize;
     directionalLight.shadow.camera.right = shadowCamSize;
     directionalLight.shadow.camera.top = shadowCamSize;
     directionalLight.shadow.camera.bottom = -shadowCamSize;
     directionalLight.shadow.bias = -0.0005;
     scene.add(directionalLight);
-    scene.add(directionalLight.target);
+    scene.add(directionalLight.target); // Important for light direction control
+
 
     const floorGeometry = new THREE.PlaneGeometry(200, 200);
     const floorMaterial = new THREE.MeshStandardMaterial({
-        color: 0x888888,
+        color: 0x778899, // Slate grey floor, less reflective than pure grey maybe
         metalness: 0.1,
         roughness: 0.8,
         side: THREE.DoubleSide
@@ -186,7 +189,7 @@ function setupSocketListeners() {
             addPlayer(playerData);
         } catch (error) {
              console.error("Error adding local player:", error);
-             addChatMessage('System',"Error loading player model. Cannot join game.", 'system'); // Use addChatMessage
+             addChatMessage('System',"Error loading player model. Cannot join game.", 'system');
              showHomeScreen();
              cleanupGameState();
              return;
@@ -195,7 +198,7 @@ function setupSocketListeners() {
         if (players[localPlayerId] && players[localPlayerId].object) {
              const playerObj = players[localPlayerId].object;
              playerObj.add(camera);
-             camera.position.set(0, 1.6 - 0.9, 0.2); // Adjust Y based on BoxGeometry center
+             camera.position.set(0, 1.6 - 0.9, 0.2);
              camera.rotation.set(0, 0, 0);
         } else {
              console.error("Local player object not found immediately after addPlayer in initializeGame");
@@ -205,11 +208,8 @@ function setupSocketListeners() {
 
         Object.values(currentPlayers).forEach(playerInfo => {
             if (playerInfo.id !== localPlayerId && !players[playerInfo.id]) {
-                 try {
-                    addPlayer(playerInfo);
-                 } catch (error) {
-                     console.error(`Error adding other player ${playerInfo.id}:`, error);
-                 }
+                 try { addPlayer(playerInfo); }
+                 catch (error) { console.error(`Error adding other player ${playerInfo.id}:`, error); }
             }
         });
 
@@ -218,28 +218,17 @@ function setupSocketListeners() {
         showGameUI();
         document.body.classList.add('game-active');
 
-        if (!animationFrameId) {
-             animate();
-        }
-
-        setTimeout(() => {
-            requestPointerLock();
-        }, 100);
-
+        if (!animationFrameId) { animate(); }
+        setTimeout(() => { requestPointerLock(); }, 100);
         updateLeaderboard();
     });
 
     socket.on('playerJoined', (playerData) => {
         if (!localPlayerId || !scene || !players[localPlayerId] || playerData.id === localPlayerId) return;
-
         if (!players[playerData.id]) {
             console.log(`Player joined: ${playerData.name} (${playerData.id})`);
-             try {
-                addPlayer(playerData);
-                updateLeaderboard();
-             } catch (error) {
-                 console.error(`Error adding joining player ${playerData.id}:`, error);
-             }
+             try { addPlayer(playerData); updateLeaderboard(); }
+             catch (error) { console.error(`Error adding joining player ${playerData.id}:`, error); }
         } else {
             console.warn(`Received playerJoined for existing player: ${playerData.id}. Updating data.`);
              const existingPlayer = players[playerData.id];
@@ -247,10 +236,8 @@ function setupSocketListeners() {
              existingPlayer.character = playerData.character;
              existingPlayer.score = playerData.score;
              if (existingPlayer.object) {
-                 existingPlayer.object.position.set(playerData.x, playerData.y + 0.9, playerData.z); // Adjust Y for box center
-                 if (playerData.id !== localPlayerId) {
-                    existingPlayer.object.rotation.y = playerData.rotationY;
-                 }
+                 existingPlayer.object.position.set(playerData.x, playerData.y + 0.9, playerData.z);
+                 if (playerData.id !== localPlayerId) { existingPlayer.object.rotation.y = playerData.rotationY; }
              }
             updateLeaderboard();
         }
@@ -299,12 +286,8 @@ function setupUIListeners() {
             console.log("Selected character:", selectedCharacter);
             validatePlayButtonState();
         });
-         if(button.getAttribute('data-char') === selectedCharacter) {
-            button.classList.add('selected');
-         }
-         if (button.classList.contains('disabled')) {
-             button.disabled = true;
-         }
+         if(button.getAttribute('data-char') === selectedCharacter) { button.classList.add('selected'); }
+         if (button.classList.contains('disabled')) { button.disabled = true; }
     });
 
     window.addEventListener('keydown', (event) => {
@@ -316,7 +299,7 @@ function setupUIListeners() {
         } else if (isChatting) {
             if (event.key === 'Enter') { event.preventDefault(); sendChat(); }
             else if (event.key === 'Escape') { event.preventDefault(); cancelChat(); }
-            return; // Block game keys while chatting
+            return;
         } else if (event.key === 'l' || event.key === 'L') {
              event.preventDefault(); toggleLeaderboard();
         } else { handleGameKeyDown(event.key); }
@@ -327,9 +310,19 @@ function setupUIListeners() {
          handleGameKeyUp(event.key);
     });
 
+    // --- Canvas Click Listener (with logging for pointer lock) ---
     ui.gameCanvas.addEventListener('click', () => {
-        if (isPointerLocked && !isChatting) { handleShoot(); }
-        else if (!isChatting) { requestPointerLock(); }
+        if (isPointerLocked && !isChatting) {
+            // Already locked, handle shooting
+            handleShoot();
+        } else if (!isChatting) {
+            // Not locked and not chatting, try to lock pointer
+            console.log("Canvas clicked, not locked, not chatting. Attempting lock..."); // <-- ADDED LOGGING
+            requestPointerLock();
+        } else {
+             // Clicking canvas while chatting, maybe focus input? (optional)
+             ui.chatInput.focus();
+        }
     });
 
     document.addEventListener('pointerlockchange', handlePointerLockChange, false);
@@ -341,26 +334,15 @@ function setupUIListeners() {
 // --- Game Key Handlers ---
 function handleGameKeyDown(key) {
     switch (key.toLowerCase()) {
-        case 'w': /* Start forward */ break;
-        case 'a': /* Start left */ break;
-        case 's': /* Start backward */ break;
-        case 'd': /* Start right */ break;
-        case ' ': /* Jump press */ break;
-        case 'shift': /* Dash press */ break;
-        case 'e': /* E held down */ break;
+        case 'w': /* Start forward */ break; case 'a': /* Start left */ break; case 's': /* Start backward */ break; case 'd': /* Start right */ break;
+        case ' ': /* Jump press */ break; case 'shift': /* Dash press */ break; case 'e': /* E held down */ break;
     }
     // sendInputState();
 }
-
 function handleGameKeyUp(key) {
     switch (key.toLowerCase()) {
-        case 'w': /* Stop forward */ break;
-        case 'a': /* Stop left */ break;
-        case 's': /* Stop backward */ break;
-        case 'd': /* Stop right */ break;
-        case ' ': /* Jump release */ break;
-        case 'shift': /* Dash release */ break;
-        case 'e': /* E released */ break;
+        case 'w': /* Stop forward */ break; case 'a': /* Stop left */ break; case 's': /* Stop backward */ break; case 'd': /* Stop right */ break;
+        case ' ': /* Jump release */ break; case 'shift': /* Dash release */ break; case 'e': /* E released */ break;
     }
     // sendInputState();
 }
@@ -378,76 +360,47 @@ function handleMouseMove(event) {
     const playerObject = players[localPlayerId].object;
     const sensitivity = 0.002;
     playerObject.rotation.y -= movementX * sensitivity; // Yaw
-    const maxPitch = Math.PI / 2 - 0.1;
-    const minPitch = -Math.PI / 2 + 0.1;
+    const maxPitch = Math.PI / 2 - 0.1; const minPitch = -Math.PI / 2 + 0.1;
     camera.rotation.x -= movementY * sensitivity; // Pitch
     camera.rotation.x = Math.max(minPitch, Math.min(maxPitch, camera.rotation.x));
-    playerObject.rotation.order = 'YXZ';
-    camera.rotation.order = 'YXZ';
+    playerObject.rotation.order = 'YXZ'; camera.rotation.order = 'YXZ';
     // throttleSendRotationUpdate(playerObject.rotation.y, camera.rotation.x);
 }
 
-
 // --- Player Management ---
 function addPlayer(playerData) {
-    if (!scene) {
-        throw new Error("Scene not initialized, cannot add player.");
-    }
+    if (!scene) { throw new Error("Scene not initialized, cannot add player."); }
      if (players[playerData.id]) {
         console.warn(`Player ${playerData.id} already exists. Updating data.`);
         const existingPlayer = players[playerData.id];
-        existingPlayer.name = playerData.name;
-        existingPlayer.character = playerData.character;
-        existingPlayer.score = playerData.score;
-        existingPlayer.x = playerData.x;
-        existingPlayer.y = playerData.y; // Store raw Y
-        existingPlayer.z = playerData.z;
-        existingPlayer.rotationY = playerData.rotationY;
+        existingPlayer.name = playerData.name; existingPlayer.character = playerData.character; existingPlayer.score = playerData.score;
+        existingPlayer.x = playerData.x; existingPlayer.y = playerData.y; existingPlayer.z = playerData.z; existingPlayer.rotationY = playerData.rotationY;
         if (existingPlayer.object) {
-             existingPlayer.object.position.set(playerData.x, playerData.y + 0.9, playerData.z); // Update position with Y offset for box
-             if (playerData.id !== localPlayerId) {
-                existingPlayer.object.rotation.y = playerData.rotationY;
-             }
+             existingPlayer.object.position.set(playerData.x, playerData.y + 0.9, playerData.z);
+             if (playerData.id !== localPlayerId) { existingPlayer.object.rotation.y = playerData.rotationY; }
         }
         if(showLeaderboard) updateLeaderboard();
         return;
     }
-
     console.log(`Creating visual for player: ${playerData.name} (${playerData.id}) at ${playerData.x.toFixed(2)}, ${playerData.y.toFixed(2)}, ${playerData.z.toFixed(2)}`);
     const isLocal = playerData.id === localPlayerId;
-    const geometry = new THREE.BoxGeometry(0.8, 1.8, 0.8); // Using BoxGeometry
-    const material = new THREE.MeshStandardMaterial({
-        color: isLocal ? 0x5599ff : 0xff8855,
-        roughness: 0.7,
-        metalness: 0.1
-    });
+    const geometry = new THREE.BoxGeometry(0.8, 1.8, 0.8);
+    const material = new THREE.MeshStandardMaterial({ color: isLocal ? 0x5599ff : 0xff8855, roughness: 0.7, metalness: 0.1 });
     const playerMesh = new THREE.Mesh(geometry, material);
-    // Adjust Y position when setting because BoxGeometry origin is at its center
-    playerMesh.position.set(playerData.x, playerData.y + 0.9, playerData.z); // Add half height to Y
+    playerMesh.position.set(playerData.x, playerData.y + 0.9, playerData.z);
     playerMesh.rotation.y = playerData.rotationY;
-    playerMesh.castShadow = true;
-    playerMesh.receiveShadow = true;
+    playerMesh.castShadow = true; playerMesh.receiveShadow = true;
     scene.add(playerMesh);
 
     players[playerData.id] = {
-        id: playerData.id,
-        name: playerData.name || 'Unknown',
-        character: playerData.character || 'Shawty1',
-        object: playerMesh,
-        score: playerData.score || 0,
-        x: playerData.x,
-        y: playerData.y, // Store the actual Y position from server
-        z: playerData.z,
-        rotationY: playerData.rotationY,
+        id: playerData.id, name: playerData.name || 'Unknown', character: playerData.character || 'Shawty1', object: playerMesh, score: playerData.score || 0,
+        x: playerData.x, y: playerData.y, z: playerData.z, rotationY: playerData.rotationY,
     };
-
     if (isLocal && playerMesh) {
          playerMesh.add(camera);
-         // Camera position relative to box center
-         camera.position.set(0, 1.6 - 0.9, 0.2); // eyeHeight - halfBoxHeight
+         camera.position.set(0, 1.6 - 0.9, 0.2);
          camera.rotation.set(0, 0, 0);
      }
-
     console.log("Client players count:", Object.keys(players).length);
 }
 
@@ -456,73 +409,42 @@ function removePlayer(playerId) {
     if (player) {
         if (player.object) {
             if (player.object === camera.parent) {
-                 player.object.getWorldPosition(camera.position);
-                 player.object.getWorldQuaternion(camera.quaternion);
-                 scene.add(camera);
-                 console.log("Camera detached from local player object.");
+                 player.object.getWorldPosition(camera.position); player.object.getWorldQuaternion(camera.quaternion); scene.add(camera); console.log("Camera detached.");
             }
             scene.remove(player.object);
             if (player.object.geometry) player.object.geometry.dispose();
             if (player.object.material) {
-                 if (Array.isArray(player.object.material)) {
-                     player.object.material.forEach(mat => mat.dispose());
-                 } else {
-                     player.object.material.dispose();
-                 }
+                 if (Array.isArray(player.object.material)) { player.object.material.forEach(mat => mat.dispose()); } else { player.object.material.dispose(); }
             }
         }
         const playerName = player.name || 'Someone';
         delete players[playerId];
         console.log(`Removed player ${playerName} (${playerId}). Remaining:`, Object.keys(players).length);
-    } else {
-         console.warn(`Tried to remove non-existent player: ${playerId}`);
-    }
+    } else { console.warn(`Tried to remove non-existent player: ${playerId}`); }
 }
 
 function clearScene() {
     console.log("Clearing existing player objects from scene...");
     const idsToRemove = Object.keys(players);
-    idsToRemove.forEach(id => {
-         removePlayer(id);
-    });
+    idsToRemove.forEach(id => { removePlayer(id); });
     console.log("Scene cleared of players.");
 }
 
 function cleanupGameState() {
      console.log("Cleaning up game state...");
      clearScene();
-
-     if (animationFrameId) {
-         cancelAnimationFrame(animationFrameId);
-         animationFrameId = null;
-         console.log("Animation loop stopped.");
-     }
-
+     if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; console.log("Animation loop stopped."); }
      if (renderer) {
          console.log("Disposing Three.js renderer and scene...");
          window.removeEventListener('resize', onWindowResize);
-         document.removeEventListener('pointerlockchange', handlePointerLockChange);
-         document.removeEventListener('mozpointerlockchange', handlePointerLockChange);
-         document.removeEventListener('webkitpointerlockchange', handlePointerLockChange);
+         document.removeEventListener('pointerlockchange', handlePointerLockChange); document.removeEventListener('mozpointerlockchange', handlePointerLockChange); document.removeEventListener('webkitpointerlockchange', handlePointerLockChange);
          document.removeEventListener('mousemove', handleMouseMove);
-         scene = null;
-         camera = null;
-         renderer.dispose();
-         renderer.forceContextLoss();
-         renderer = null;
+         scene = null; camera = null;
+         renderer.dispose(); renderer.forceContextLoss(); renderer = null;
          console.log("Three.js cleanup attempted.");
      }
-
-     isChatting = false;
-     showLeaderboard = false;
-     isPointerLocked = false;
-     localPlayerId = null;
-     ui.chatInput.value = '';
-     ui.chatInput.disabled = true;
-     ui.chatMessages.innerHTML = '';
-     ui.leaderboardList.innerHTML = '';
-     ui.leaderboard.classList.add('hidden');
-     ui.gameUi.classList.add('hidden');
+     isChatting = false; showLeaderboard = false; isPointerLocked = false; localPlayerId = null;
+     ui.chatInput.value = ''; ui.chatInput.disabled = true; ui.chatMessages.innerHTML = ''; ui.leaderboardList.innerHTML = ''; ui.leaderboard.classList.add('hidden'); ui.gameUi.classList.add('hidden');
      document.body.classList.remove('game-active');
      if (document.pointerLockElement) { document.exitPointerLock(); }
      validatePlayButtonState();
@@ -534,10 +456,7 @@ function joinGame() {
     const playerName = ui.playerNameInput.value.trim();
     if (!playerName || !selectedCharacter || !localPlayerId || !socket || !socket.connected) {
         console.error("Join validation failed:", { playerName, selectedCharacter, localPlayerId, connected: socket?.connected });
-        if (!playerName) alert("Please enter a name!");
-        else if (!selectedCharacter) alert("Character selection error!");
-        else if (!localPlayerId) alert("Connecting to server... please wait for ID.");
-        else if (!socket?.connected) alert("Not connected to server. Please wait or refresh.");
+        if (!playerName) alert("Please enter a name!"); else if (!selectedCharacter) alert("Character selection error!"); else if (!localPlayerId) alert("Connecting to server... please wait for ID."); else if (!socket?.connected) alert("Not connected to server. Please wait or refresh.");
         setTimeout(() => { ui.playButton.disabled = false; validatePlayButtonState(); }, 500);
         return;
     }
@@ -550,55 +469,31 @@ function animate() {
     animationFrameId = requestAnimationFrame(animate);
     if (renderer && scene && camera) {
         renderer.render(scene, camera);
-    } else {
-         if (!animate.warned) { console.warn("Skipping frame render: Renderer, Scene or Camera not ready."); animate.warned = true; }
-    }
+    } else { if (!animate.warned) { console.warn("Skipping frame render: Renderer, Scene or Camera not ready."); animate.warned = true; } }
 }
 animate.warned = false;
 
 // --- UI Management Functions ---
 function showLoadingScreen(message = "Loading...", showPermanently = false) {
-    ui.loadingMessage.textContent = message;
-    ui.loadingScreen.classList.remove('hidden');
-    if (!showPermanently) {
-        ui.homeMenu.classList.add('hidden');
-        ui.gameUi.classList.add('hidden');
-    }
+    ui.loadingMessage.textContent = message; ui.loadingScreen.classList.remove('hidden');
+    if (!showPermanently) { ui.homeMenu.classList.add('hidden'); ui.gameUi.classList.add('hidden'); }
 }
 function hideLoadingScreen() { ui.loadingScreen.classList.add('hidden'); }
 function showHomeScreen() {
-    ui.homeMenu.classList.remove('hidden');
-    hideLoadingScreen();
-    hideGameUI();
-    document.body.classList.remove('game-active');
-    validatePlayButtonState();
-    ui.playButton.textContent = 'Join Game';
-    if (isPointerLocked) { document.exitPointerLock(); }
+    ui.homeMenu.classList.remove('hidden'); hideLoadingScreen(); hideGameUI(); document.body.classList.remove('game-active');
+    validatePlayButtonState(); ui.playButton.textContent = 'Join Game'; if (isPointerLocked) { document.exitPointerLock(); }
 }
 function hideHomeScreen() { ui.homeMenu.classList.add('hidden'); }
 function showGameUI() {
-    ui.gameUi.classList.remove('hidden');
-    ui.chatInput.disabled = true;
-    isChatting = false;
-    ui.leaderboard.classList.add('hidden');
-    showLeaderboard = false;
-    ui.crosshair.style.display = 'none';
+    ui.gameUi.classList.remove('hidden'); ui.chatInput.disabled = true; isChatting = false; ui.leaderboard.classList.add('hidden'); showLeaderboard = false; ui.crosshair.style.display = 'none';
 }
-function hideGameUI() {
-    ui.gameUi.classList.add('hidden');
-    ui.crosshair.style.display = 'none';
-}
+function hideGameUI() { ui.gameUi.classList.add('hidden'); ui.crosshair.style.display = 'none'; }
 function validatePlayButtonState() {
-    const nameEntered = ui.playerNameInput.value.trim().length > 0;
-    const characterSelected = selectedCharacter !== null;
-    const isConnectedAndHasId = socket && socket.connected && localPlayerId;
+    const nameEntered = ui.playerNameInput.value.trim().length > 0; const characterSelected = selectedCharacter !== null; const isConnectedAndHasId = socket && socket.connected && localPlayerId;
     ui.playButton.disabled = !(nameEntered && characterSelected && isConnectedAndHasId);
     if (!ui.playButton.disabled) { ui.playButton.textContent = 'Join Game'; }
-    else if (!isConnectedAndHasId) {
-        if (socket && socket.connected) { ui.playButton.textContent = 'Getting ID...'; }
-        else { ui.playButton.textContent = 'Connecting...'; }
-    } else if (!nameEntered) { ui.playButton.textContent = 'Enter Name'; }
-    else if (!characterSelected) { ui.playButton.textContent = 'Select Character'; }
+    else if (!isConnectedAndHasId) { if (socket && socket.connected) { ui.playButton.textContent = 'Getting ID...'; } else { ui.playButton.textContent = 'Connecting...'; } }
+    else if (!nameEntered) { ui.playButton.textContent = 'Enter Name'; } else if (!characterSelected) { ui.playButton.textContent = 'Select Character'; }
     else { ui.playButton.textContent = 'Join Game'; }
 }
 
@@ -606,77 +501,41 @@ function validatePlayButtonState() {
 function addChatMessage(senderName, message, type = 'player') {
     const item = document.createElement('li');
     switch (type) {
-        case 'system': item.classList.add('system-message'); break;
-        case 'death': item.classList.add('death-message'); break;
-        case 'join-leave': item.classList.add('join-leave-message'); break;
-        case 'player': default:
-            item.classList.add('player-message');
-            if (senderName) {
-                 const nameStrong = document.createElement('strong');
-                 nameStrong.textContent = `${senderName}: `;
-                 item.appendChild(nameStrong);
-            } break;
+        case 'system': item.classList.add('system-message'); break; case 'death': item.classList.add('death-message'); break; case 'join-leave': item.classList.add('join-leave-message'); break;
+        case 'player': default: item.classList.add('player-message'); if (senderName) { const nameStrong = document.createElement('strong'); nameStrong.textContent = `${senderName}: `; item.appendChild(nameStrong); } break;
     }
     item.appendChild(document.createTextNode(message));
     const shouldScroll = ui.chatMessages.scrollTop + ui.chatMessages.clientHeight >= ui.chatMessages.scrollHeight - 30;
-    ui.chatMessages.appendChild(item);
-    if (shouldScroll) { ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight; }
+    ui.chatMessages.appendChild(item); if (shouldScroll) { ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight; }
 }
-function addSystemMessage(message) { console.info("System Message (Client Only):", message); } // Primarily for client-side warnings now
+function addSystemMessage(message) { console.info("System Message (Client Only):", message); }
 function handleChatMessage(senderId, senderName, message) {
-     console.log(`Chat received: ${senderName} (${senderId}): ${message}`);
-     let type = 'player', displayName = senderName;
-     if (senderId === 'server') {
-         if (message.includes('joined') || message.includes('left')) type = 'join-leave';
-         else if (message.includes('eliminated') || message.includes('died')) type = 'death';
-         else type = 'system';
-         displayName = '';
-     } else if (senderId === localPlayerId) { displayName = 'You'; }
+     console.log(`Chat received: ${senderName} (${senderId}): ${message}`); let type = 'player', displayName = senderName;
+     if (senderId === 'server') { if (message.includes('joined') || message.includes('left')) type = 'join-leave'; else if (message.includes('eliminated') || message.includes('died')) type = 'death'; else type = 'system'; displayName = ''; }
+     else if (senderId === localPlayerId) { displayName = 'You'; }
      addChatMessage(displayName, message, type);
 }
 function startChat() {
-    if (!localPlayerId || !players[localPlayerId]) return;
-    isChatting = true;
-    ui.chatInput.disabled = false;
-    ui.chatInput.focus();
-    ui.chatContainer.style.opacity = '1';
-    if (isPointerLocked) { document.exitPointerLock(); }
+    if (!localPlayerId || !players[localPlayerId]) return; isChatting = true; ui.chatInput.disabled = false; ui.chatInput.focus(); ui.chatContainer.style.opacity = '1'; if (isPointerLocked) { document.exitPointerLock(); }
 }
 function cancelChat() {
-    isChatting = false;
-    ui.chatInput.disabled = true;
-    ui.chatInput.value = '';
-    ui.chatInput.blur();
-    ui.chatContainer.style.opacity = '';
-    requestPointerLock();
+    isChatting = false; ui.chatInput.disabled = true; ui.chatInput.value = ''; ui.chatInput.blur(); ui.chatContainer.style.opacity = ''; requestPointerLock();
 }
 function sendChat() {
-    const message = ui.chatInput.value.trim();
-    if (message && socket?.connected && localPlayerId) {
-        console.log("Sending chat:", message);
-        socket.emit('chatMessage', message);
-        cancelChat();
-    } else { cancelChat(); }
+    const message = ui.chatInput.value.trim(); if (message && socket?.connected && localPlayerId) { console.log("Sending chat:", message); socket.emit('chatMessage', message); cancelChat(); } else { cancelChat(); }
 }
 
 // --- Leaderboard Functions ---
 function toggleLeaderboard() {
-    showLeaderboard = !showLeaderboard;
-    if (showLeaderboard) { updateLeaderboard(); ui.leaderboard.classList.remove('hidden'); }
-    else { ui.leaderboard.classList.add('hidden'); }
+    showLeaderboard = !showLeaderboard; if (showLeaderboard) { updateLeaderboard(); ui.leaderboard.classList.remove('hidden'); } else { ui.leaderboard.classList.add('hidden'); }
 }
 function updateLeaderboard() {
-     if (!showLeaderboard || !ui.leaderboard || ui.leaderboard.classList.contains('hidden')) return;
-     ui.leaderboardList.innerHTML = '';
-     const sortedPlayers = Object.values(players)
-        .sort((a, b) => (b.score || 0) - (a.score || 0) || (a.name || '').localeCompare(b.name || ''));
+     if (!showLeaderboard || !ui.leaderboard || ui.leaderboard.classList.contains('hidden')) return; ui.leaderboardList.innerHTML = '';
+     const sortedPlayers = Object.values(players).sort((a, b) => (b.score || 0) - (a.score || 0) || (a.name || '').localeCompare(b.name || ''));
      sortedPlayers.forEach(player => {
-         const item = document.createElement('li');
-         if (player.id === localPlayerId) item.classList.add('is-local-player');
-         const nameSpan = document.createElement('span');
-         nameSpan.className = 'leaderboard-name'; nameSpan.textContent = player.name || 'Unnamed'; nameSpan.title = player.name || 'Unnamed';
-         const scoreSpan = document.createElement('span');
-         scoreSpan.className = 'leaderboard-score'; scoreSpan.textContent = player.score || 0;
+         const item = document.createElement('li'); if (player.id === localPlayerId) item.classList.add('is-local-player');
+         const nameSpan = document.createElement('span'); nameSpan.className = 'leaderboard-name'; nameSpan.textContent = player.name || 'Unnamed'; nameSpan.title = player.name || 'Unnamed';
+         const scoreSpan = document.createElement('span'); scoreSpan.className = 'leaderboard-score'; scoreSpan.textContent = player.score || 0;
          item.appendChild(nameSpan); item.appendChild(scoreSpan); ui.leaderboardList.appendChild(item);
      });
 }
@@ -684,25 +543,18 @@ function updateLeaderboard() {
 // --- Pointer Lock ---
 function requestPointerLock() {
     if (socket?.connected && localPlayerId && players[localPlayerId] && !document.pointerLockElement && ui.gameCanvas.requestPointerLock) {
-         console.log("Requesting pointer lock...");
-         ui.gameCanvas.requestPointerLock().catch(err => console.error("Cannot request pointer lock:", err));
+         console.log("Requesting pointer lock..."); ui.gameCanvas.requestPointerLock().catch(err => console.error("Cannot request pointer lock:", err));
     }
 }
 function handlePointerLockChange() {
-     if (document.pointerLockElement === ui.gameCanvas) {
-        console.log('Pointer Locked'); isPointerLocked = true; ui.crosshair.style.display = 'block';
-    } else {
-        console.log('Pointer Unlocked'); isPointerLocked = false; ui.crosshair.style.display = 'none';
-        if (!isChatting && players[localPlayerId]) { console.log("Pointer unlocked unexpectedly (e.g. Esc key)."); /* showPauseMenu(); */ }
-    }
+     if (document.pointerLockElement === ui.gameCanvas) { console.log('Pointer Locked'); isPointerLocked = true; ui.crosshair.style.display = 'block'; }
+     else { console.log('Pointer Unlocked'); isPointerLocked = false; ui.crosshair.style.display = 'none'; if (!isChatting && players[localPlayerId]) { console.log("Pointer unlocked unexpectedly (e.g. Esc key)."); /* showPauseMenu(); */ } }
 }
 
 // --- Utility Functions ---
 function onWindowResize() {
-    if (!camera || !renderer) return;
-    const width = window.innerWidth; const height = window.innerHeight;
-    camera.aspect = width / height; camera.updateProjectionMatrix();
-    renderer.setSize(width, height); console.log("Window resized.");
+    if (!camera || !renderer) return; const width = window.innerWidth; const height = window.innerHeight;
+    camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height); console.log("Window resized.");
 }
 
 // --- Start the application ---
