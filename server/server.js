@@ -1,117 +1,80 @@
-// server/server.js
+// /server/server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
 const path = require('path');
-const Game = require('./game');
 
 const app = express();
 const server = http.createServer(app);
+// Configure Socket.IO with CORS settings to allow connections from your Render frontend URL
+// and potentially localhost for development.
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow connections from anywhere (adjust for production)
+        origin: ["https://gametest-psxl.onrender.com", "http://localhost:8080"], // Allow your Render URL and localhost
         methods: ["GET", "POST"]
     }
 });
 
-const PORT = process.env.PORT || 3000; // Use Render's port or 3000 locally
-const game = new Game();
+// Define the port the server will listen on. Use the environment variable Render provides,
+// or default to 3000 for local development.
+const PORT = process.env.PORT || 3000;
 
-// Serve static files from the 'docs' directory
-// This assumes your Render service is set up to serve static files from 'docs'
-// or you point your web service root to 'docs'
-app.use(express.static(path.join(__dirname, '../docs')));
+// Serve static files from the 'docs' directory (where your client-side code lives)
+// This makes it so accessing the server URL serves index.html
+const clientPath = path.join(__dirname, '../docs');
+console.log(`Serving static files from: ${clientPath}`);
+app.use(express.static(clientPath));
 
-// Serve index.html for the root path
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../docs/index.html'));
-});
+// Basic connection tracking
+let players = {}; // Store player data
 
-
+// Handle new connections
 io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
+    console.log(`User connected: ${socket.id}`);
 
-    // Handle player joining
-    socket.on('joinGame', (data) => {
-        const playerName = data.name || `Shawty_${socket.id.substring(0, 4)}`;
-        const player = game.addPlayer(socket.id, playerName);
-
-        // Send the new player their ID and the current game state
-        socket.emit('assignId', socket.id);
-        socket.emit('currentState', game.getGameState());
-
-        // Notify other players about the new player
-        socket.broadcast.emit('playerJoined', game.getPlayer(socket.id)); // Send new player's full initial data
-    });
-
-    // Handle player state updates
-    socket.on('playerUpdate', (data) => {
-        // Basic validation could happen here
-        game.updatePlayerState(socket.id, data);
-        // Broadcast the updated state of this player to others
-        // Optimization: Send updates less frequently or only if changed significantly
-        socket.broadcast.emit('playerMoved', { id: socket.id, position: data.position, rotation: data.rotation });
-    });
-
-    // Handle shooting
-    socket.on('shoot', (data) => { // data might include direction if needed for server-side hit detection
-        const result = game.handleShoot(socket.id);
-        if (result) {
-            // Broadcast to all clients that a shot occurred
-            io.emit('playerShot', { shooterId: result.shooterId /*, optional hit data */ });
-             // Handle propulsion shot (E key pressed)
-            if (data.propulsion) {
-                 const player = game.getPlayer(socket.id);
-                 if (player) {
-                     // Send a specific event for propulsion
-                     socket.emit('applyPropulsion', { direction: data.direction }); // Client calculates opposite locally
-                 }
-            }
-
-            // TODO: Server-side hit detection would go here
-            // If hit detected: game.handleHit(shooterId, targetId);
-            // io.emit('playerHit', { targetId: '...', damage: '...' });
-        }
-    });
-
-     // Handle player falling off map / dying
-    socket.on('playerDied', (data) => {
-        const deathInfo = game.handleDeath(socket.id, data.position);
-        if (deathInfo) {
-            // Broadcast death and shockwave info
-            io.emit('playerDied', deathInfo);
-
-            // Handle respawn after a delay
-            setTimeout(() => {
-                const player = game.getPlayer(socket.id);
-                if (player) { // Check if player still connected
-                    const spawnPoint = game.getSpawnPoint();
-                    player.respawn(spawnPoint);
-                    // Notify the player they have respawned
-                    socket.emit('respawn', { position: spawnPoint });
-                    // Notify others the player has respawned (optional, or handled via state update)
-                    io.emit('playerRespawned', { id: socket.id, position: spawnPoint, health: player.health });
-                }
-            }, 3000); // 3 second respawn delay
-        }
-    });
+    // Store basic player info (we'll add more later)
+    players[socket.id] = {
+        id: socket.id,
+        // Add position, rotation, character, name, etc. later
+    };
+    console.log("Current players:", Object.keys(players));
 
 
-    // Handle disconnection
+    // --- Join Log ---
+    // Tell the new player their ID and the current list of players
+    socket.emit('yourId', socket.id);
+    socket.emit('currentPlayers', players); // Send existing players to the new player
+
+    // Tell everyone else that a new player has joined (except the new player)
+    socket.broadcast.emit('playerJoined', players[socket.id]); // Send only the new player's data
+
+
+    // Handle disconnections
     socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
-        game.removePlayer(socket.id);
-        // Notify other players
-        io.emit('playerLeft', socket.id);
+        console.log(`User disconnected: ${socket.id}`);
+        const disconnectedPlayer = players[socket.id]; // Get data before deleting
+        delete players[socket.id];
+        console.log("Current players:", Object.keys(players));
+        // --- Leave Log ---
+        // Tell everyone else that a player has left
+        io.emit('playerLeft', socket.id, disconnectedPlayer?.name || 'Someone'); // Send ID and name if available
     });
+
+    // --- Placeholder for future game logic ---
+    // socket.on('playerMovement', (movementData) => { /* Handle movement */ });
+    // socket.on('playerShoot', () => { /* Handle shooting */ });
+    // socket.on('chatMessage', (msg) => { /* Handle chat */ });
+    // socket.on('playerJoinRequest', (data) => { /* Handle name/character selection */ });
+
 });
 
-// Update loop for server-side logic (e.g., physics, game rules)
-// Simple example: broadcast state periodically (can be inefficient)
-// setInterval(() => {
-//     io.emit('updateState', game.getGameState());
-// }, 1000 / 20); // Send updates 20 times per second
-
+// Start the server
 server.listen(PORT, () => {
-    console.log(`Server listening on *:${PORT}`);
+    console.log(`Server listening on port ${PORT}`);
 });
+
+// Basic Game Loop (Example - will be refined)
+// setInterval(() => {
+//     // Send game state updates to all clients
+//     io.emit('gameState', { players /*, other game state */ });
+// }, 1000 / 60); // ~60 times per second
