@@ -41,14 +41,16 @@ let isPointerLocked = false;
 function init() {
     console.log("Initializing client...");
 
-    // Connect to Socket.IO Server (Handles Render/Localhost automatically)
-    const serverURL = window.location.origin.includes('onrender')
-        ? 'https://gametest-psxl.onrender.com' // Your Render backend URL
-        : `http://${window.location.hostname}:3000`; // Local backend URL (uses current hostname)
-    console.log(`Connecting to server at: ${serverURL}`);
+    // Connect to Socket.IO Server
+    // Detect if running on Render or GitHub Pages (production) vs localhost (development)
+    const isProduction = window.location.origin.includes('onrender.com') || window.location.origin.includes('github.io'); // <--- THIS LINE WAS CHANGED
+    const serverURL = isProduction
+        ? 'https://gametest-psxl.onrender.com' // Production backend (Render)          <--- THIS LINE WAS CHANGED
+        : 'http://localhost:3000';             // Local development backend             <--- THIS LINE WAS CHANGED
+    console.log(`Connecting to server at: ${serverURL}`); // <--- THIS LINE WAS CHANGED (logic adjusted)
 
     // Configure Socket.IO
-    socket = io(serverURL, {
+    socket = io(serverURL, { // Use the determined serverURL
         reconnectionAttempts: 5, // Try to reconnect a few times
         reconnectionDelay: 2000, // Wait 2 seconds between attempts
         transports: ['websocket'], // Prefer websockets
@@ -213,10 +215,13 @@ function setupSocketListeners() {
              const playerObj = players[localPlayerId].object;
              // Place camera slightly behind and above the player model's head
              const camOffset = new THREE.Vector3(0, 1.6, 5); // x, y (height), z (distance)
-             const worldOffset = camOffset.applyMatrix4(playerObj.matrixWorld); // Use world matrix if player is nested
-             camera.position.copy(worldOffset);
-             // Look slightly below the camera position towards the player model
-             camera.lookAt(playerObj.position.x, playerObj.position.y + 1.0, playerObj.position.z);
+             // Assuming camera is a CHILD of playerObj now (see addPlayer), set local position:
+             camera.position.set(0, 1.6, 0.2); // x, y (eye height), z (slightly forward from center)
+             camera.rotation.set(0, 0, 0); // Reset camera's local rotation relative to player initially
+             // Camera's world position/rotation is now controlled by the playerMesh's transform.
+             // We set the initial lookAt direction implicitly by parenting/positioning.
+             // Vertical rotation (pitch) is handled by mousemove affecting camera.rotation.x.
+             // Horizontal rotation (yaw) is handled by mousemove affecting playerObj.rotation.y.
         } else {
              // Fallback camera position if player object isn't ready (shouldn't happen ideally)
              console.error("Local player object not found immediately after addPlayer in initializeGame");
@@ -274,7 +279,10 @@ function setupSocketListeners() {
              players[playerData.id].score = playerData.score;
              if (players[playerData.id].object) {
                  players[playerData.id].object.position.set(playerData.x, playerData.y, playerData.z);
-                 players[playerData.id].object.rotation.y = playerData.rotationY;
+                 // Only update visual rotation for OTHERS, local player rotation driven by mouse
+                 if (playerData.id !== localPlayerId) {
+                    players[playerData.id].object.rotation.y = playerData.rotationY;
+                 }
              }
             updateLeaderboard(); // Update display name/score if needed
         }
@@ -475,24 +483,25 @@ function handleMouseMove(event) {
     const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
 
     const playerObject = players[localPlayerId].object;
-
-    // Horizontal rotation (around the Y axis) - applied to the player object itself
     const sensitivity = 0.002;
+
+    // YAW (Horizontal - Rotate the whole player object)
     playerObject.rotation.y -= movementX * sensitivity;
 
-    // Vertical rotation (around the X axis) - applied to the camera object relative to the player
+    // PITCH (Vertical - Rotate the camera object relative to the player)
     // Clamp vertical rotation to prevent looking straight up/down or flipping over
     const maxPitch = Math.PI / 2 - 0.1; // Slightly less than 90 degrees
     const minPitch = -Math.PI / 2 + 0.1;
     camera.rotation.x -= movementY * sensitivity;
     camera.rotation.x = Math.max(minPitch, Math.min(maxPitch, camera.rotation.x));
 
-    // Ensure camera rotation order is correct if needed (usually YXZ for FPS)
-    camera.rotation.order = 'YXZ'; // Might need playerObject.rotation.order too? Test this.
-    playerObject.rotation.order = 'YXZ';
+    // Ensure rotation order is applied correctly for FPS controls (Yaw first, then Pitch)
+    // Player rotates around Y (Yaw), Camera rotates around X (Pitch) relative to player
+    playerObject.rotation.order = 'YXZ'; // Player primarily rotates in Y
+    camera.rotation.order = 'YXZ'; // Camera rotation should also follow YXZ or just X is fine if only pitch changes
 
-     // We need to send rotation updates to the server
-     // throttleSendRotationUpdate(playerObject.rotation.y, camera.rotation.x);
+    // We need to send rotation updates to the server (throttled)
+    // throttleSendRotationUpdate(playerObject.rotation.y, camera.rotation.x);
 }
 
 
@@ -586,7 +595,12 @@ function removePlayer(playerId) {
         if (player.object) {
             // If camera was attached (local player), detach it first
             if (player.object === camera.parent) {
-                 scene.attach(camera); // Re-attach camera to the main scene before removing player
+                // Before removing the player object, attach the camera back to the main scene
+                // This preserves camera's world position and rotation
+                 player.object.getWorldPosition(camera.position); // Get world position
+                 player.object.getWorldQuaternion(camera.quaternion); // Get world rotation
+                 scene.add(camera); // Add to scene directly (removes from parent)
+                 console.log("Camera detached from local player object.");
             }
             scene.remove(player.object);
             // Proper disposal of resources
@@ -614,21 +628,19 @@ function clearScene() {
     console.log("Clearing existing player objects from scene...");
     const idsToRemove = Object.keys(players);
     idsToRemove.forEach(id => {
-         // Use the existing removePlayer logic, but don't show chat message
+         // Use the existing removePlayer logic
          removePlayer(id);
     });
     // Ensure local player reference is also cleared if somehow missed
-    if (localPlayerId && players[localPlayerId]) {
-        delete players[localPlayerId];
-    }
-    localPlayerId = null; // Reset local player ID reference as well during full clear
+    // Note: removePlayer handles the local player case including camera detachment
+    // We don't need to explicitly delete players[localPlayerId] again here if removePlayer works correctly.
     console.log("Scene cleared of players.");
 }
 
 // Cleanup game state on disconnect or error
 function cleanupGameState() {
      console.log("Cleaning up game state...");
-     clearScene(); // Remove player objects
+     clearScene(); // Remove player objects and detach camera
 
      // Stop animation loop
      if (animationFrameId) {
@@ -640,23 +652,25 @@ function cleanupGameState() {
      // Clean up Three.js resources if renderer exists
      if (renderer) {
          console.log("Disposing Three.js renderer and scene...");
-         // Remove event listeners? (Resize is main one)
+         // Remove event listeners attached in initThree or setupUIListeners
          window.removeEventListener('resize', onWindowResize);
          document.removeEventListener('pointerlockchange', handlePointerLockChange);
-         document.removeEventListener('mozpointerlockchange', handlePointerLockChange);
-         document.removeEventListener('webkitpointerlockchange', handlePointerLockChange);
+         document.removeEventListener('mozpointerlockchange', handlePointerLockChange); // Firefox
+         document.removeEventListener('webkitpointerlockchange', handlePointerLockChange); // Chrome/Safari/Opera
          document.removeEventListener('mousemove', handleMouseMove);
+         // Remove canvas click listener? Depends if it was added conditionally
+         // ui.gameCanvas.removeEventListener('click', specificClickHandler);
+
 
          // Dispose of scene resources (geometries, materials, textures)
-         // This is complex; a simple approach is just letting go of references
+         // A more thorough cleanup might involve traversing the scene graph
          scene = null;
-         camera = null; // Camera is part of scene graph, should be handled by scene disposal if done right
+         camera = null; // References should be cleared
 
-         renderer.dispose(); // Release WebGL context and resources
-         renderer.forceContextLoss(); // Force context loss
-         // Remove canvas from DOM or clear it? Optional.
-         // ui.gameCanvas.parentNode.removeChild(ui.gameCanvas); // If dynamically added
-         renderer = null; // Let garbage collector claim it
+         // Dispose renderer
+         renderer.dispose(); // Release WebGL context and related resources
+         renderer.forceContextLoss(); // Good practice to ensure context is released
+         renderer = null; // Allow garbage collection
 
          console.log("Three.js cleanup attempted.");
      }
@@ -668,7 +682,7 @@ function cleanupGameState() {
      isPointerLocked = false;
      localPlayerId = null; // Ensure ID is cleared
 
-     // Reset UI elements
+     // Reset UI elements to their initial state
      ui.chatInput.value = '';
      ui.chatInput.disabled = true;
      ui.chatMessages.innerHTML = '';
@@ -794,7 +808,7 @@ function showGameUI() {
     isChatting = false;
     ui.leaderboard.classList.add('hidden'); // Leaderboard starts hidden
     showLeaderboard = false;
-    ui.crosshair.style.display = 'block'; // Show crosshair
+    ui.crosshair.style.display = 'none'; // Hide crosshair initially (show only when pointer locked)
 }
 
 function hideGameUI() {
@@ -815,11 +829,16 @@ function validatePlayButtonState() {
         ui.playButton.disabled = true;
         // Optionally provide feedback why it's disabled
         if (!isConnected && ui.homeMenu && !ui.homeMenu.classList.contains('hidden')) {
-             ui.playButton.textContent = 'Connecting...';
+             // Check if socket exists before accessing connected property
+             if (socket && socket.connected) {
+                 ui.playButton.textContent = 'Getting ID...'; // Connected but no ID yet
+             } else {
+                 ui.playButton.textContent = 'Connecting...'; // Not connected yet
+             }
         } else if (!nameEntered) {
              ui.playButton.textContent = 'Enter Name';
         } else {
-             ui.playButton.textContent = 'Select Character';
+             ui.playButton.textContent = 'Select Character'; // Default if name is entered but char/conn missing
         }
     }
 }
@@ -872,18 +891,21 @@ function addChatMessage(senderName, message, type = 'player') { // type: 'player
 }
 
 function addSystemMessage(message) {
-    // Use the server's broadcast for system messages now
+    // This function is now mainly for CLIENT-SIDE system messages if ever needed.
+    // Most system messages (join/leave/etc.) should come from the server via 'chatMessage' event.
+    console.info("System Message (Client Only):", message); // Log locally for debugging
+    // If you want to display client-only messages in chat:
     // addChatMessage('System', message, 'system');
-    // Client-side only messages if needed:
-    console.info("System Message (Client):", message); // Log locally
 }
 
 // Handles messages received from the server broadcast
 function handleChatMessage(senderId, senderName, message) {
      console.log(`Chat received: ${senderName} (${senderId}): ${message}`);
      let type = 'player';
+     let displayName = senderName;
+
      if (senderId === 'server') { // Identify system messages from server
-         // Determine subtype based on content?
+         // Determine subtype based on content? (Simple examples)
          if (message.includes('joined') || message.includes('left')) {
              type = 'join-leave';
          } else if (message.includes('eliminated') || message.includes('died')) { // Example keywords for death
@@ -891,12 +913,12 @@ function handleChatMessage(senderId, senderName, message) {
          } else {
             type = 'system'; // Generic system message
          }
-         senderName = ''; // Don't show sender name for system messages
+         displayName = ''; // Don't show sender name for system messages from 'server' ID
      } else if (senderId === localPlayerId) {
          // Optional: Style own messages differently? Could use 'my-message' class here
-         // senderName = 'You'; // Or keep own name
+         displayName = 'You'; // Display 'You' for own messages
      }
-     addChatMessage(senderName, message, type);
+     addChatMessage(displayName, message, type);
 }
 
 
@@ -949,7 +971,8 @@ function toggleLeaderboard() {
 
 function updateLeaderboard() {
      // Don't update DOM if the leaderboard isn't visible
-     if (!showLeaderboard) return;
+     if (!showLeaderboard || !ui.leaderboard || ui.leaderboard.classList.contains('hidden')) return;
+
 
      ui.leaderboardList.innerHTML = ''; // Clear existing list
 
@@ -990,7 +1013,8 @@ function updateLeaderboard() {
 
 // --- Pointer Lock ---
 function requestPointerLock() {
-    if (!document.pointerLockElement && ui.gameCanvas.requestPointerLock) {
+    // Request pointer lock only if connected, in game, and not already locked
+    if (socket?.connected && localPlayerId && players[localPlayerId] && !document.pointerLockElement && ui.gameCanvas.requestPointerLock) {
          console.log("Requesting pointer lock...");
          ui.gameCanvas.requestPointerLock()
             .catch(err => console.error("Cannot request pointer lock:", err)); // Catch potential errors
@@ -1010,7 +1034,8 @@ function handlePointerLockChange() {
         ui.crosshair.style.display = 'none'; // Hide crosshair when unlocked
         // document.body.classList.remove('pointer-locked');
         // If we unlocked and were not intending to chat, maybe bring up a pause menu?
-        if (!isChatting && players[localPlayerId]) { // Check if in game
+        // Check if the player object still exists (i.e., we are still supposed to be in-game)
+        if (!isChatting && players[localPlayerId]) {
             console.log("Pointer unlocked unexpectedly (e.g. Esc key).");
             // showPauseMenu(); // Implement pause menu later
         }
