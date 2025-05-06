@@ -6,18 +6,17 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "dev": "nodemon server/server.js" // Optional: for easier development (install nodemon globally or locally)
+    "dev": "nodemon server/server.js"
   },
   "dependencies": {
-    "express": "^4.18.2", // Web server framework
-    "socket.io": "^4.7.2", // Real-time communication
-    "cannon-es": "^0.20.0" // Physics engine (will use later)
-    // We'll add more dependencies as needed
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "cannon-es": "^0.20.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1" // Optional: automatically restarts server on file changes
+    "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": ">=18.0.0" // Specify a compatible Node.js version for Render
+    "node": ">=18.0.0"
   }
 }
