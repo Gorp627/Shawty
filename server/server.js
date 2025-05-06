@@ -6,65 +6,124 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-// Configure Socket.IO with CORS settings to allow connections from your Render frontend URL
-// and potentially localhost for development.
 const io = new Server(server, {
     cors: {
-        origin: ["https://gametest-psxl.onrender.com", "http://localhost:8080"], // Allow your Render URL and localhost
+        origin: ["https://gametest-psxl.onrender.com", "http://localhost:8080", "http://localhost:3000"], // Added localhost:3000 if serving client locally
         methods: ["GET", "POST"]
     }
 });
 
-// Define the port the server will listen on. Use the environment variable Render provides,
-// or default to 3000 for local development.
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from the 'docs' directory (where your client-side code lives)
-// This makes it so accessing the server URL serves index.html
 const clientPath = path.join(__dirname, '../docs');
 console.log(`Serving static files from: ${clientPath}`);
 app.use(express.static(clientPath));
 
-// Basic connection tracking
-let players = {}; // Store player data
+// --- Game State ---
+let players = {}; // Store richer player data: { id: { id, name, character, position, rotation, score, etc. } }
+// Define initial spawn points (Example - replace with actual coordinates later)
+const spawnPoints = [
+    { x: 0, y: 2, z: 0 },
+    { x: 5, y: 2, z: 5 },
+    { x: -5, y: 2, z: -5 },
+    { x: 5, y: 2, z: -5 },
+    { x: -5, y: 2, z: 5 },
+];
+let nextSpawnPointIndex = 0;
+
+// Function to get the next spawn point
+function getSpawnPoint() {
+    const spawnPoint = spawnPoints[nextSpawnPointIndex];
+    nextSpawnPointIndex = (nextSpawnPointIndex + 1) % spawnPoints.length; // Cycle through spawn points
+    return spawnPoint;
+}
+
 
 // Handle new connections
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
+    console.log(`User connecting: ${socket.id}`);
 
-    // Store basic player info (we'll add more later)
-    players[socket.id] = {
-        id: socket.id,
-        // Add position, rotation, character, name, etc. later
-    };
-    console.log("Current players:", Object.keys(players));
+    // Don't add to players object immediately. Wait for join request.
 
-
-    // --- Join Log ---
-    // Tell the new player their ID and the current list of players
+    // 1. Tell the connecting client their ID
     socket.emit('yourId', socket.id);
-    socket.emit('currentPlayers', players); // Send existing players to the new player
 
-    // Tell everyone else that a new player has joined (except the new player)
-    socket.broadcast.emit('playerJoined', players[socket.id]); // Send only the new player's data
+    // --- Player Join Request ---
+    socket.on('playerJoinRequest', (data) => {
+        // Basic validation
+        const name = data.name ? data.name.trim().slice(0, 16) : `Player_${socket.id.substring(0, 4)}`; // Max 16 chars, default name
+        const character = data.character || 'Shawty1'; // Default character
+
+        console.log(`Player join request: ${socket.id}, Name: ${name}, Character: ${character}`);
+
+        // Check if player already exists (e.g., reconnect attempt - basic handling for now)
+        if (players[socket.id]) {
+            console.warn(`Player ${socket.id} trying to join again? Updating info.`);
+            // Update existing data? Or force disconnect old? For now, just update.
+            players[socket.id].name = name;
+            players[socket.id].character = character;
+        } else {
+             // Determine spawn point
+             const spawnPoint = getSpawnPoint();
+
+            // 2. Store player data ON THE SERVER
+            players[socket.id] = {
+                id: socket.id,
+                name: name,
+                character: character,
+                x: spawnPoint.x, // Add position
+                y: spawnPoint.y,
+                z: spawnPoint.z,
+                rotationY: 0,   // Add rotation (example)
+                score: 0,       // Add score
+                // Add velocity, health, etc. later
+            };
+        }
+
+        const newPlayerData = players[socket.id];
+        console.log("Current players:", players);
+
+        // 3. Send Initialization Data to the NEW Player
+        // This includes their own data AND data of all *other* fully joined players
+        const otherPlayers = { ...players };
+        delete otherPlayers[socket.id]; // Don't send the new player their own data in this list
+
+        socket.emit('initializeGame', {
+            playerData: newPlayerData,    // Send the new player their own complete data
+            currentPlayers: otherPlayers // Send data of players already in the game
+        });
+
+        // 4. Broadcast to ALL OTHER players that a new player has joined
+        socket.broadcast.emit('playerJoined', newPlayerData); // Send the complete data of the new player
+
+         // --- Join Log (Server Console) ---
+         console.log(`${newPlayerData.name} (ID: ${socket.id}) joined the game.`);
+         // We'll send chat messages from the server later for global logs
+
+    });
 
 
     // Handle disconnections
-    socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
+    socket.on('disconnect', (reason) => {
+        console.log(`User disconnected: ${socket.id}. Reason: ${reason}`);
         const disconnectedPlayer = players[socket.id]; // Get data before deleting
-        delete players[socket.id];
-        console.log("Current players:", Object.keys(players));
-        // --- Leave Log ---
-        // Tell everyone else that a player has left
-        io.emit('playerLeft', socket.id, disconnectedPlayer?.name || 'Someone'); // Send ID and name if available
+
+        if (disconnectedPlayer) {
+            delete players[socket.id];
+            console.log("Current players:", players);
+            // --- Leave Log ---
+            // Tell everyone else that a player has left
+            io.emit('playerLeft', socket.id, disconnectedPlayer.name || 'Someone'); // Send ID and name
+             console.log(`${disconnectedPlayer.name || 'Someone'} (ID: ${socket.id}) left the game.`);
+        } else {
+            console.log(`Player ${socket.id} disconnected but wasn't fully registered in 'players'.`);
+        }
     });
 
     // --- Placeholder for future game logic ---
     // socket.on('playerMovement', (movementData) => { /* Handle movement */ });
     // socket.on('playerShoot', () => { /* Handle shooting */ });
     // socket.on('chatMessage', (msg) => { /* Handle chat */ });
-    // socket.on('playerJoinRequest', (data) => { /* Handle name/character selection */ });
 
 });
 
@@ -73,8 +132,10 @@ server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
 
-// Basic Game Loop (Example - will be refined)
+// Basic Game Loop (Example - will be refined for physics later)
+// We might send updates less frequently or based on changes
 // setInterval(() => {
-//     // Send game state updates to all clients
-//     io.emit('gameState', { players /*, other game state */ });
-// }, 1000 / 60); // ~60 times per second
+//     // Send game state updates (e.g., positions of all players)
+//     // This needs optimization - only send necessary data
+//     io.emit('gameState', players);
+// }, 1000 / 30); // Example: 30 times per second
