@@ -3,75 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shawty - Online Multiplayer Shooter</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Shawty - Multiplayer Shooter</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three/0.157.0/three.min.js"></script>
+    <!-- GLTFLoader for 3D models -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three/0.157.0/examples/js/loaders/GLTFLoader.min.js"></script>
+    <!-- Socket.io client -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- GSAP for animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <!-- Cannon.js for physics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
 </head>
 <body>
-    <div id="loadingScreen">
-        <h1>SHAWTY</h1>
-        <p id="loadingStatus">Loading assets...</p>
-        <div id="progressBarContainer">
-            <div id="progressBar"></div>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loading-content">
+            <h1>SHAWTY</h1>
+            <div class="loading-bar-container">
+                <div class="loading-bar"></div>
+            </div>
+            <p class="loading-text">Loading game assets...</p>
         </div>
     </div>
 
-    <div id="homeMenu" style="display:none;">
-        <h2>SHAWTY</h2>
-        <p>Online: <span id="playerCount">0</span></p>
-        <input type="text" id="playerNameInput" placeholder="Enter Your Name" maxlength="15">
-        <div id="characterSelector">
-            <label for="charSelect">Select Character:</label>
-            <select id="charSelect">
-                <!-- Options will be populated by JS -->
-            </select>
-        </div>
-        <button id="playButton">Play</button>
-    </div>
-
-    <div id="gameContainer" style="display:none;">
-        <canvas id="gameCanvas"></canvas>
-        <div id="hud">
-            <div id="healthBar">HP: <span id="healthValue">100</span></div>
-            <div id="ammoInfo"></div> <!-- For future use -->
-            <div id="timerDisplay">Time: 05:00</div>
-            <div id="killFeed" class="feed-container"></div>
-        </div>
-        <div id="chatContainer">
-            <div id="chatOutput"></div>
-            <input type="text" id="chatInput" placeholder="Press T to chat..." style="display:none;">
-        </div>
-        <div id="leaderboard" style="display:none;">
-            <h3>Leaderboard (Press L)</h3>
-            <ul id="leaderboardList"></ul>
-        </div>
-        <div id="roundEndScreen" style="display:none;">
-            <h2>Round Over!</h2>
-            <ul id="roundEndLeaderboard"></ul>
-            <p id="nextRoundMessage">Next round starting soon...</p>
+    <!-- Main Menu -->
+    <div id="main-menu" class="hidden">
+        <div class="menu-container">
+            <h1 class="game-title">SHAWTY</h1>
+            
+            <div class="menu-section">
+                <input type="text" id="player-name" placeholder="Enter your name" maxlength="15">
+                
+                <div class="character-selection">
+                    <h2>Select Character</h2>
+                    <div class="character-carousel">
+                        <div class="character-option selected" data-character="Shawty">
+                            <div class="character-preview" id="character-preview"></div>
+                            <p class="character-name">Shawty</p>
+                        </div>
+                        <!-- More character options can be added here -->
+                    </div>
+                </div>
+                
+                <div class="server-info">
+                    <p>Players Online: <span id="online-players">0</span></p>
+                </div>
+                
+                <button id="play-button" class="primary-button">PLAY</button>
+            </div>
         </div>
     </div>
-    
-    <div id="crosshair">+</div>
 
-    <!-- Libraries: Use local copies or a bundler for production -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <!-- Rapier: Make sure to get the WASM file as well if using the JS directly -->
-    <script type="module">
-        // This is a common way to initialize Rapier from CDN or local files.
-        // You might need to adjust paths if you host Rapier files locally.
-        // For GitHub pages, you might need to put rapier_wasm.wasm in the root of `docs` or adjust path.
-        // Using a direct CDN link that bundles WASM might be easier for initial setup.
-        // Let's use a UMD bundle for simplicity if available, or guide user to host WASM.
-        // For now, assuming Rapier is globally available after script tag.
-        // Example for Rapier: <script src="https://cdn.jsdelivr.net/npm/@dimforge/rapier3d@0.11.2/rapier.umd.js"></script>
-        // The WASM file is usually loaded by rapier.js itself from a relative path.
-        // Easiest for GH pages: download rapier.js and rapier_wasm.wasm, put them in js/lib/ and load rapier.js
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.1.0-alpha.4/dist/rapier.min.js"></script> <!-- Simpler Rapier bundle -->
+    <!-- Game HUD -->
+    <div id="game-hud" class="hidden">
+        <div id="health-bar-container">
+            <div id="health-bar"></div>
+            <span id="health-text">100</span>
+        </div>
+        
+        <div id="ammo-container">
+            <span id="ammo-count">∞</span>
+        </div>
+        
+        <div id="round-timer">
+            <span id="time-remaining">5:00</span>
+        </div>
+        
+        <div id="kill-feed"></div>
+        
+        <div id="crosshair">+</div>
+    </div>
 
+    <!-- Chat Window -->
+    <div id="chat-window" class="hidden">
+        <div id="chat-messages"></div>
+        <div id="chat-input-container" class="hidden">
+            <input type="text" id="chat-input" placeholder="Type your message..." maxlength="100">
+        </div>
+    </div>
 
-    <script type="module" src="js/main.js"></script>
+    <!-- Leaderboard -->
+    <div id="leaderboard" class="hidden">
+        <h2>Leaderboard</h2>
+        <table id="leaderboard-table">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Player</th>
+                    <th>Kills</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+                <!-- Leaderboard entries will be populated here -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Map Voting Screen -->
+    <div id="map-voting" class="hidden">
+        <h2>Vote for next map</h2>
+        <div id="map-options">
+            <!-- Map options will be populated here -->
+        </div>
+        <div id="voting-timer">Next round starting in: <span id="voting-countdown">10</span></div>
+    </div>
+
+    <!-- Death Screen -->
+    <div id="death-screen" class="hidden">
+        <h2>You were eliminated!</h2>
+        <p>Respawning in <span id="respawn-countdown">3</span> seconds...</p>
+    </div>
+
+    <!-- Round End Screen -->
+    <div id="round-end-screen" class="hidden">
+        <h2 id="round-end-message"></h2>
+        <div id="round-end-stats">
+            <h3>Your Stats</h3>
+            <p>Kills: <span id="your-kills">0</span></p>
+            <p>Deaths: <span id="your-deaths">0</span></p>
+        </div>
+    </div>
+
+    <!-- Game Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Game Scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/physics.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/weapons.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/networking.js"></script>
+    <script src="js/game.js"></script>
 </body>
 </html>
