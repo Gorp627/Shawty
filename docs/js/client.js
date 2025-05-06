@@ -1,5 +1,5 @@
 // /docs/js/client.js
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js'; // Use CDN for module
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js'; // Use CDN for module (r128)
 // We'll need GLTFLoader later
 // import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js';
 
@@ -43,17 +43,23 @@ function init() {
 
     // Connect to Socket.IO Server
     // Detect if running on Render or GitHub Pages (production) vs localhost (development)
-    const isProduction = window.location.origin.includes('onrender.com') || window.location.origin.includes('github.io'); // <--- THIS LINE WAS CHANGED
+    const isProduction = window.location.origin.includes('onrender.com') || window.location.origin.includes('github.io');
     const serverURL = isProduction
-        ? 'https://gametest-psxl.onrender.com' // Production backend (Render)          <--- THIS LINE WAS CHANGED
-        : 'http://localhost:3000';             // Local development backend             <--- THIS LINE WAS CHANGED
-    console.log(`Connecting to server at: ${serverURL}`); // <--- THIS LINE WAS CHANGED (logic adjusted)
+        ? 'https://gametest-psxl.onrender.com' // Production backend (Render)
+        : 'http://localhost:3000';             // Local development backend
+    console.log(`Connecting to server at: ${serverURL}`);
 
     // Configure Socket.IO
-    socket = io(serverURL, { // Use the determined serverURL
-        reconnectionAttempts: 5, // Try to reconnect a few times
-        reconnectionDelay: 2000, // Wait 2 seconds between attempts
-        transports: ['websocket'], // Prefer websockets
+    // Ensure io function is available globally from the script loaded in index.html
+    if (typeof io === 'undefined') {
+        console.error("Socket.IO client library (io) not loaded. Check script tag in index.html.");
+        showLoadingScreen("Error: Cannot load network library. Please refresh.", true);
+        return; // Stop initialization if io is missing
+    }
+    socket = io(serverURL, {
+        reconnectionAttempts: 5,
+        reconnectionDelay: 2000,
+        transports: ['websocket'],
     });
 
     setupSocketListeners();
@@ -61,8 +67,8 @@ function init() {
 
     // Initial UI state
     showLoadingScreen("Connecting to server...");
-    ui.playButton.disabled = true; // Ensure play button is disabled initially
-    validatePlayButtonState(); // Check if name/character allows enabling play button
+    ui.playButton.disabled = true;
+    validatePlayButtonState();
 }
 
 function initThree() {
@@ -147,7 +153,8 @@ function setupSocketListeners() {
 
     socket.on('disconnect', (reason) => {
         console.warn(`Disconnected from server. Reason: ${reason}`);
-        addSystemMessage(`Disconnected from server (${reason}). Attempting to reconnect...`);
+        // Use a more user-friendly message, perhaps without the technical reason initially
+        addChatMessage('System', 'You have been disconnected.', 'system');
         showHomeScreen(); // Go back to home screen
         ui.connectionStatus.textContent = 'Disconnected. Retrying...';
         ui.connectionStatus.className = 'error'; // Use class for styling
@@ -163,7 +170,7 @@ function setupSocketListeners() {
 
     socket.on('reconnect_failed', () => {
         console.error('Failed to reconnect to the server.');
-        addSystemMessage('Could not reconnect to the server. Please refresh the page.');
+        addChatMessage('System', 'Could not reconnect to the server. Please refresh the page.', 'system');
         ui.connectionStatus.textContent = 'Connection failed. Refresh?';
         ui.connectionStatus.className = 'error';
          cleanupGameState(); // Ensure cleanup if reconnect fails permanently
@@ -174,7 +181,8 @@ function setupSocketListeners() {
         console.error('Connection Error:', err.message);
         ui.connectionStatus.textContent = 'Connection Error!';
         ui.connectionStatus.className = 'error';
-        showLoadingScreen(`Connection failed: ${err.message}. Server might be down or check CORS settings.`, true);
+        // Provide specific advice based on common errors if possible
+        showLoadingScreen(`Connection failed: ${err.message}. Server might be down or check CORS.`, true);
         cleanupGameState();
     });
 
@@ -194,8 +202,6 @@ function setupSocketListeners() {
         // Crucial check: Ensure we have our ID before processing
         if (!localPlayerId || localPlayerId !== playerData.id) {
             console.error("Received initialization data for wrong ID or before own ID known.", localPlayerId, playerData.id);
-            // Request ID again? Or reload?
-            // socket.emit('requestMyId'); // Example - server would need to handle this
             return;
         }
 
@@ -203,38 +209,49 @@ function setupSocketListeners() {
         if (!scene) {
             initThree();
         } else {
-            // If scene exists (e.g., from previous game), clear old players/objects
-            clearScene();
+             // If scene exists (e.g., from previous game), clear old players/objects
+             clearScene(); // Clear previous game elements
         }
 
+
         // --- Add the LOCAL player ---
-        addPlayer(playerData); // Add self using server-provided data
+        try {
+            addPlayer(playerData); // Add self using server-provided data
+        } catch (error) {
+             console.error("Error adding local player:", error);
+             // Handle error gracefully - maybe show error message, return to menu?
+             addSystemMessage("Error loading player model. Cannot join game.");
+             showHomeScreen();
+             cleanupGameState(); // Clean up partially initialized state
+             return; // Stop further processing
+        }
+
 
         // Position the camera relative to the player AFTER the player object exists
         if (players[localPlayerId] && players[localPlayerId].object) {
              const playerObj = players[localPlayerId].object;
-             // Place camera slightly behind and above the player model's head
-             const camOffset = new THREE.Vector3(0, 1.6, 5); // x, y (height), z (distance)
-             // Assuming camera is a CHILD of playerObj now (see addPlayer), set local position:
+             // Make camera child of player object for FPS view
+             playerObj.add(camera);
              camera.position.set(0, 1.6, 0.2); // x, y (eye height), z (slightly forward from center)
-             camera.rotation.set(0, 0, 0); // Reset camera's local rotation relative to player initially
-             // Camera's world position/rotation is now controlled by the playerMesh's transform.
-             // We set the initial lookAt direction implicitly by parenting/positioning.
-             // Vertical rotation (pitch) is handled by mousemove affecting camera.rotation.x.
-             // Horizontal rotation (yaw) is handled by mousemove affecting playerObj.rotation.y.
+             camera.rotation.set(0, 0, 0); // Reset camera's local rotation
         } else {
-             // Fallback camera position if player object isn't ready (shouldn't happen ideally)
              console.error("Local player object not found immediately after addPlayer in initializeGame");
-             camera.position.set(playerData.x, playerData.y + 5, playerData.z + 5); // Default offset
+             // Fallback camera position if player object isn't ready
+             camera.position.set(playerData.x, playerData.y + 5, playerData.z + 5);
              camera.lookAt(new THREE.Vector3(playerData.x, playerData.y, playerData.z));
         }
 
 
         // --- Add all OTHER players already in the game ---
         Object.values(currentPlayers).forEach(playerInfo => {
-            // Ensure not self and not already added (paranoid check)
             if (playerInfo.id !== localPlayerId && !players[playerInfo.id]) {
-                addPlayer(playerInfo);
+                 try {
+                    addPlayer(playerInfo);
+                 } catch (error) {
+                     console.error(`Error adding other player ${playerInfo.id}:`, error);
+                     // Decide how to handle - skip this player, show placeholder?
+                     // For now, just log the error and continue.
+                 }
             }
         });
 
@@ -242,59 +259,58 @@ function setupSocketListeners() {
         hideHomeScreen();
         hideLoadingScreen();
         showGameUI();
-        document.body.classList.add('game-active'); // Apply game styles (like background)
+        document.body.classList.add('game-active'); // Apply game styles
 
         // Start the animation loop if not already running
         if (!animationFrameId) {
              animate();
         }
 
-        // Request pointer lock after a short delay to ensure UI transition is complete
+        // Request pointer lock after a short delay
         setTimeout(() => {
             requestPointerLock();
-        }, 100); // 100ms delay, adjust if needed
+        }, 100);
 
-        addSystemMessage(`Welcome, ${playerData.name}! Joined the game.`);
+        // Use server-sent join message via chat instead
+        // addSystemMessage(`Welcome, ${playerData.name}! Joined the game.`);
         updateLeaderboard(); // Show initial leaderboard state
     });
 
 
     // Handles players joining *after* you are already in
     socket.on('playerJoined', (playerData) => {
-        // Only process if we are initialized, in game, and it's not us
         if (!localPlayerId || !scene || !players[localPlayerId] || playerData.id === localPlayerId) return;
 
-        if (!players[playerData.id]) { // Only add if truly new to us
+        if (!players[playerData.id]) {
             console.log(`Player joined: ${playerData.name} (${playerData.id})`);
-            addPlayer(playerData);
-            // Don't add system message here, server sends it via chatMessage now
-            // addSystemMessage(`${playerData.name || 'Someone'} joined the game.`);
-            updateLeaderboard();
+             try {
+                addPlayer(playerData);
+                updateLeaderboard();
+             } catch (error) {
+                 console.error(`Error adding joining player ${playerData.id}:`, error);
+             }
         } else {
-            // This might happen if the server rebroadcasts for consistency or on player reconnect/update
             console.warn(`Received playerJoined for existing player: ${playerData.id}. Updating data.`);
-            // Update existing player data just in case (name, character, position etc.)
-             players[playerData.id].name = playerData.name;
-             players[playerData.id].character = playerData.character;
-             players[playerData.id].score = playerData.score;
-             if (players[playerData.id].object) {
-                 players[playerData.id].object.position.set(playerData.x, playerData.y, playerData.z);
-                 // Only update visual rotation for OTHERS, local player rotation driven by mouse
-                 if (playerData.id !== localPlayerId) {
-                    players[playerData.id].object.rotation.y = playerData.rotationY;
+             // Update existing player data
+             const existingPlayer = players[playerData.id];
+             existingPlayer.name = playerData.name;
+             existingPlayer.character = playerData.character;
+             existingPlayer.score = playerData.score;
+             if (existingPlayer.object) {
+                 existingPlayer.object.position.set(playerData.x, playerData.y, playerData.z);
+                 if (playerData.id !== localPlayerId) { // Only update rotation for others
+                    existingPlayer.object.rotation.y = playerData.rotationY;
                  }
              }
-            updateLeaderboard(); // Update display name/score if needed
+            updateLeaderboard();
         }
     });
 
     // Handles player leaving
     socket.on('playerLeft', (playerId, playerName) => {
-        if (players[playerId]) { // Check if the player exists locally
+        if (players[playerId]) {
             console.log(`Player left event: ${playerName} (${playerId})`);
             removePlayer(playerId); // removePlayer handles scene removal and cleanup
-            // Server now sends leave message via chat
-            // addSystemMessage(`${playerName || 'Someone'} left the game.`);
             updateLeaderboard(); // Update leaderboard after removal
         } else {
             console.warn(`Received playerLeft for unknown or already removed player ID: ${playerId}`);
@@ -310,25 +326,16 @@ function setupSocketListeners() {
     // socket.on('gameStateUpdate', (stateUpdates) => {
     //      handleGameStateUpdate(stateUpdates); // Process position/rotation updates etc.
     // });
-
-    // --- Placeholder Death/Respawn Listeners ---
-    // socket.on('playerDied', (victimId, killerId, victimName, killerName) => { /* ... */ });
-    // socket.on('playerRespawn', (playerId, position) => { /* ... */ });
-
-    // --- Placeholder Round/Map Listeners ---
-    // socket.on('roundStart', (roundData) => { /* ... */ });
-    // socket.on('roundOver', (roundResult) => { /* ... */ });
-    // socket.on('mapVoteStart', (mapOptions) => { /* ... */ });
 }
 
 // --- UI Event Handlers ---
 function setupUIListeners() {
     // Join Game Button
     ui.playButton.addEventListener('click', () => {
-        if (ui.playButton.disabled) return; // Prevent action if disabled
-        ui.playButton.disabled = true; // Disable immediately
+        if (ui.playButton.disabled) return;
+        ui.playButton.disabled = true;
         ui.playButton.textContent = 'Joining...';
-        joinGame(); // Attempt to join
+        joinGame();
     });
 
     // Enable/Disable Play button based on Name Input
@@ -337,31 +344,26 @@ function setupUIListeners() {
     // Allow joining by pressing Enter in the name input
     ui.playerNameInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !ui.playButton.disabled) {
-            ui.playButton.click(); // Trigger the button click handler
+            ui.playButton.click();
         }
     });
 
     // Character Selection Buttons
     ui.characterButtons.forEach(button => {
         button.addEventListener('click', () => {
-            if (button.disabled || button.classList.contains('disabled')) return; // Ignore clicks on disabled buttons
+            if (button.disabled || button.classList.contains('disabled')) return;
 
-            ui.characterButtons.forEach(btn => btn.classList.remove('selected')); // Deselect others
-            button.classList.add('selected'); // Select clicked button
+            ui.characterButtons.forEach(btn => btn.classList.remove('selected'));
+            button.classList.add('selected');
             selectedCharacter = button.getAttribute('data-char');
             console.log("Selected character:", selectedCharacter);
-            validatePlayButtonState(); // Re-check if play is possible
+            validatePlayButtonState();
         });
 
-         // Initialize button states (select default, disable others for now)
+         // Initialize button states
          if(button.getAttribute('data-char') === selectedCharacter) {
             button.classList.add('selected');
-            // button.disabled = false; // Default is enabled unless marked disabled in HTML
-         } else {
-             // Keep disabled state from HTML, don't override here unless logic dictates
-             // button.disabled = true;
          }
-         // Add this check to prevent enabling explicitly disabled buttons
          if (button.classList.contains('disabled')) {
              button.disabled = true;
          }
@@ -370,23 +372,31 @@ function setupUIListeners() {
 
     // --- In-Game Input Listeners ---
     window.addEventListener('keydown', (event) => {
-        // Ignore input if not connected, not in game, or if certain UI is active (e.g., future menus)
         if (!localPlayerId || !players[localPlayerId] || !socket?.connected) return;
 
-        // Toggle Chat with 'T'
+        // Chat toggle/send/cancel
+        if (event.key === 't' || event.key === 'T') { /* ... as before ... */ }
+        else if (isChatting) { /* ... as before ... */ return; } // Important: return prevents game keys while chatting
+        // Leaderboard toggle
+        else if (event.key === 'l' || event.key === 'L') { /* ... as before ... */ }
+        // Game keys
+        else { handleGameKeyDown(event.key); }
+    });
+
+     // Add the missing keydown logic back for T/Enter/Escape in chat
+    window.addEventListener('keydown', (event) => {
+        if (!localPlayerId || !players[localPlayerId] || !socket?.connected) return;
+
         if (event.key === 't' || event.key === 'T') {
-            event.preventDefault(); // Prevent typing 't' into input
+            event.preventDefault();
             if (!isChatting) {
                 startChat();
             } else {
-                // If input is empty when T is pressed again, cancel chat. Otherwise, do nothing (Enter sends).
                 if (!ui.chatInput.value.trim()) {
                     cancelChat();
                 }
             }
-        }
-        // Send Chat with Enter or Cancel with Escape (only when chatting)
-        else if (isChatting) {
+        } else if (isChatting) {
             if (event.key === 'Enter') {
                 event.preventDefault();
                 sendChat();
@@ -394,49 +404,41 @@ function setupUIListeners() {
                 event.preventDefault();
                 cancelChat();
             }
-            // Don't process other game keys while chatting
-            return;
-        }
-        // Toggle Leaderboard with 'L' (only when not chatting)
-        else if (event.key === 'l' || event.key === 'L') {
+            return; // Prevent game keys while chatting
+        } else if (event.key === 'l' || event.key === 'L') {
              event.preventDefault();
              toggleLeaderboard();
-        }
-        // --- Movement / Action Keys (only when not chatting) ---
-        else {
-             handleGameKeyDown(event.key); // Pass key to separate handler
+        } else {
+             handleGameKeyDown(event.key);
         }
     });
+
 
     window.addEventListener('keyup', (event) => {
-         // Ignore if not in game or currently chatting
          if (!localPlayerId || !players[localPlayerId] || !socket?.connected || isChatting) return;
-         handleGameKeyUp(event.key); // Pass key to separate handler
+         handleGameKeyUp(event.key);
     });
 
-     // Handle mouse clicks for shooting / interaction (only when pointer locked)
     ui.gameCanvas.addEventListener('click', () => {
         if (isPointerLocked && !isChatting) {
-            // Handle shooting logic
             handleShoot();
         } else if (!isChatting) {
-            // If not locked and not chatting, try to lock pointer
              requestPointerLock();
         }
     });
 
-    // Handle pointer lock changes (browser events)
+    // Pointer Lock Listeners
     document.addEventListener('pointerlockchange', handlePointerLockChange, false);
-    document.addEventListener('mozpointerlockchange', handlePointerLockChange, false); // Firefox
-    document.addEventListener('webkitpointerlockchange', handlePointerLockChange, false); // Chrome/Safari/Opera
+    document.addEventListener('mozpointerlockchange', handlePointerLockChange, false);
+    document.addEventListener('webkitpointerlockchange', handlePointerLockChange, false);
 
-    // Handle mouse movement for camera control (when pointer locked)
+    // Mouse Movement Listener
     document.addEventListener('mousemove', handleMouseMove, false);
 }
 
 // Separate handlers for game-specific key presses
 function handleGameKeyDown(key) {
-    // console.log("Game Key Down:", key); // Debugging
+    // console.log("Game Key Down:", key);
     switch (key.toLowerCase()) {
         case 'w': /* Start moving forward */ break;
         case 'a': /* Start moving left */ break;
@@ -445,14 +447,12 @@ function handleGameKeyDown(key) {
         case ' ': /* Handle jump press */ break;
         case 'shift': /* Handle dash press/start */ break;
         case 'e': /* Mark E as held down for boost shot */ break;
-        // Add more keys as needed (reload 'r', interact 'f', etc.)
     }
-    // Send input state to server (will implement later)
     // sendInputState();
 }
 
 function handleGameKeyUp(key) {
-     // console.log("Game Key Up:", key); // Debugging
+     // console.log("Game Key Up:", key);
     switch (key.toLowerCase()) {
         case 'w': /* Stop moving forward */ break;
         case 'a': /* Stop moving left */ break;
@@ -462,16 +462,12 @@ function handleGameKeyUp(key) {
         case 'shift': /* Handle dash release/end */ break;
         case 'e': /* Mark E as released */ break;
     }
-    // Send input state to server (will implement later)
     // sendInputState();
 }
 
 function handleShoot() {
      if (!isPointerLocked || !localPlayerId || !socket?.connected) return;
      console.log("Shoot Action Triggered!");
-     // Check if 'E' is currently held (needs state tracking from keydown/keyup)
-     // let isBoosting = keyState['e']; // Example state variable
-     // socket.emit('playerShoot', { boost: isBoosting });
      socket.emit('playerShoot', { boost: false }); // Placeholder
 }
 
@@ -489,18 +485,15 @@ function handleMouseMove(event) {
     playerObject.rotation.y -= movementX * sensitivity;
 
     // PITCH (Vertical - Rotate the camera object relative to the player)
-    // Clamp vertical rotation to prevent looking straight up/down or flipping over
-    const maxPitch = Math.PI / 2 - 0.1; // Slightly less than 90 degrees
+    const maxPitch = Math.PI / 2 - 0.1;
     const minPitch = -Math.PI / 2 + 0.1;
     camera.rotation.x -= movementY * sensitivity;
     camera.rotation.x = Math.max(minPitch, Math.min(maxPitch, camera.rotation.x));
 
-    // Ensure rotation order is applied correctly for FPS controls (Yaw first, then Pitch)
-    // Player rotates around Y (Yaw), Camera rotates around X (Pitch) relative to player
+    // Ensure rotation order is applied correctly
     playerObject.rotation.order = 'YXZ'; // Player primarily rotates in Y
-    camera.rotation.order = 'YXZ'; // Camera rotation should also follow YXZ or just X is fine if only pitch changes
+    camera.rotation.order = 'YXZ'; // Camera primarily rotates in X relative to player's Y
 
-    // We need to send rotation updates to the server (throttled)
     // throttleSendRotationUpdate(playerObject.rotation.y, camera.rotation.x);
 }
 
@@ -508,8 +501,7 @@ function handleMouseMove(event) {
 // --- Player Management ---
 function addPlayer(playerData) {
     if (!scene) {
-        console.error("Scene not initialized, cannot add player:", playerData.id);
-        return;
+        throw new Error("Scene not initialized, cannot add player."); // Throw error if scene invalid
     }
     // If player already exists, update data instead of recreating
      if (players[playerData.id]) {
@@ -521,41 +513,36 @@ function addPlayer(playerData) {
         existingPlayer.x = playerData.x;
         existingPlayer.y = playerData.y;
         existingPlayer.z = playerData.z;
-        existingPlayer.rotationY = playerData.rotationY; // Server dictates rotation mainly
+        existingPlayer.rotationY = playerData.rotationY;
 
         if (existingPlayer.object) {
              existingPlayer.object.position.set(playerData.x, playerData.y, playerData.z);
-             // Only update visual rotation for OTHERS, local player rotation driven by mouse
              if (playerData.id !== localPlayerId) {
                 existingPlayer.object.rotation.y = playerData.rotationY;
              }
         }
-        // Update leaderboard if needed (e.g., name change)
         if(showLeaderboard) updateLeaderboard();
-        return; // Stop here, don't recreate mesh
+        return;
     }
 
     console.log(`Creating visual for player: ${playerData.name} (${playerData.id}) at ${playerData.x.toFixed(2)}, ${playerData.y.toFixed(2)}, ${playerData.z.toFixed(2)}`);
 
-    // --- Character Model Loading Placeholder ---
-    // This is where you would load the GLB model based on playerData.character
-    // const loader = new GLTFLoader();
-    // loader.load(`assets/maps/${playerData.character}.glb`, (gltf) => { ... });
-    // For now, use a placeholder mesh:
-
+    // --- Placeholder Model ---
     const isLocal = playerData.id === localPlayerId;
-    const geometry = new THREE.CapsuleGeometry(0.5, 0.8, 4, 8); // Radius, Height (excluding caps)
-    geometry.translate(0, 0.4 + 0.5, 0); // Move pivot to base of capsule (half height + radius)
+    // Use BoxGeometry as CapsuleGeometry is not in r128 core
+    const geometry = new THREE.BoxGeometry(0.8, 1.8, 0.8); // Width, Height, Depth <<<< THIS LINE CHANGED
+    // No translation needed for BoxGeometry as it's centered by default
+
     const material = new THREE.MeshStandardMaterial({
-        color: isLocal ? 0x5599ff : 0xff8855, // Blueish for self, Orangeish for others
+        color: isLocal ? 0x5599ff : 0xff8855,
         roughness: 0.7,
         metalness: 0.1
     });
     const playerMesh = new THREE.Mesh(geometry, material);
-    playerMesh.position.set(playerData.x, playerData.y, playerData.z); // Set position from server
-    playerMesh.rotation.y = playerData.rotationY; // Set initial rotation from server
+    playerMesh.position.set(playerData.x, playerData.y + 0.9, playerData.z); // Adjust Y position since box origin is center (0.9 = half height)
+    playerMesh.rotation.y = playerData.rotationY;
     playerMesh.castShadow = true;
-    playerMesh.receiveShadow = true; // Capsules can receive shadows too
+    playerMesh.receiveShadow = true;
 
     scene.add(playerMesh);
     // --- End Placeholder ---
@@ -566,47 +553,41 @@ function addPlayer(playerData) {
         id: playerData.id,
         name: playerData.name || 'Unknown',
         character: playerData.character || 'Shawty1',
-        object: playerMesh, // Reference to the Three.js object
+        object: playerMesh,
         score: playerData.score || 0,
-        // Store position/rotation locally for reference / potential interpolation
         x: playerData.x,
         y: playerData.y,
         z: playerData.z,
         rotationY: playerData.rotationY,
     };
 
-     // If adding the local player, attach the camera to its object
-     if (isLocal && playerMesh) {
-         // Make the camera a child of the player mesh for easier relative positioning/rotation
+    if (isLocal && playerMesh) {
+         // Make the camera a child of the player mesh
          playerMesh.add(camera);
-         // Set camera's local position relative to the player model's origin (e.g., head height)
-         camera.position.set(0, 1.6, 0.2); // x, y (eye height), z (slightly forward from center)
-         // Camera's world position is now controlled by the playerMesh's position.
-         // We already set the initial lookAt in initializeGame, vertical rotation is handled by mousemove.
+         // Adjust camera position relative to the BOX center (Y needs adjustment)
+         camera.position.set(0, 1.6 - 0.9, 0.2); // Y pos = desired eye height - half box height
+         camera.rotation.set(0, 0, 0);
      }
-
 
     console.log("Client players count:", Object.keys(players).length);
 }
+
 
 function removePlayer(playerId) {
     const player = players[playerId];
     if (player) {
         if (player.object) {
-            // If camera was attached (local player), detach it first
             if (player.object === camera.parent) {
-                // Before removing the player object, attach the camera back to the main scene
-                // This preserves camera's world position and rotation
-                 player.object.getWorldPosition(camera.position); // Get world position
-                 player.object.getWorldQuaternion(camera.quaternion); // Get world rotation
-                 scene.add(camera); // Add to scene directly (removes from parent)
+                 // Detach camera properly before removing parent
+                 player.object.getWorldPosition(camera.position);
+                 player.object.getWorldQuaternion(camera.quaternion);
+                 scene.add(camera); // Re-attach to scene
                  console.log("Camera detached from local player object.");
             }
             scene.remove(player.object);
-            // Proper disposal of resources
+            // Dispose resources
             if (player.object.geometry) player.object.geometry.dispose();
             if (player.object.material) {
-                 // Handle array of materials if necessary
                  if (Array.isArray(player.object.material)) {
                      player.object.material.forEach(mat => mat.dispose());
                  } else {
@@ -615,66 +596,52 @@ function removePlayer(playerId) {
             }
         }
         const playerName = player.name || 'Someone';
-        delete players[playerId]; // Remove from local store
+        delete players[playerId];
         console.log(`Removed player ${playerName} (${playerId}). Remaining:`, Object.keys(players).length);
-        // Server sends leave message via chat now
     } else {
          console.warn(`Tried to remove non-existent player: ${playerId}`);
     }
 }
 
-// Clear all player objects from the scene
 function clearScene() {
     console.log("Clearing existing player objects from scene...");
     const idsToRemove = Object.keys(players);
     idsToRemove.forEach(id => {
-         // Use the existing removePlayer logic
-         removePlayer(id);
+         removePlayer(id); // Use existing logic including camera detach
     });
-    // Ensure local player reference is also cleared if somehow missed
-    // Note: removePlayer handles the local player case including camera detachment
-    // We don't need to explicitly delete players[localPlayerId] again here if removePlayer works correctly.
+    // Reset players object
+    // players = {}; // This might cause issues if called during disconnect cleanup? Test needed.
     console.log("Scene cleared of players.");
 }
 
-// Cleanup game state on disconnect or error
+
 function cleanupGameState() {
      console.log("Cleaning up game state...");
      clearScene(); // Remove player objects and detach camera
 
-     // Stop animation loop
      if (animationFrameId) {
          cancelAnimationFrame(animationFrameId);
          animationFrameId = null;
          console.log("Animation loop stopped.");
      }
 
-     // Clean up Three.js resources if renderer exists
      if (renderer) {
          console.log("Disposing Three.js renderer and scene...");
-         // Remove event listeners attached in initThree or setupUIListeners
          window.removeEventListener('resize', onWindowResize);
          document.removeEventListener('pointerlockchange', handlePointerLockChange);
-         document.removeEventListener('mozpointerlockchange', handlePointerLockChange); // Firefox
-         document.removeEventListener('webkitpointerlockchange', handlePointerLockChange); // Chrome/Safari/Opera
+         document.removeEventListener('mozpointerlockchange', handlePointerLockChange);
+         document.removeEventListener('webkitpointerlockchange', handlePointerLockChange);
          document.removeEventListener('mousemove', handleMouseMove);
-         // Remove canvas click listener? Depends if it was added conditionally
-         // ui.gameCanvas.removeEventListener('click', specificClickHandler);
 
-
-         // Dispose of scene resources (geometries, materials, textures)
-         // A more thorough cleanup might involve traversing the scene graph
          scene = null;
-         camera = null; // References should be cleared
+         camera = null;
 
-         // Dispose renderer
-         renderer.dispose(); // Release WebGL context and related resources
-         renderer.forceContextLoss(); // Good practice to ensure context is released
-         renderer = null; // Allow garbage collection
+         renderer.dispose();
+         renderer.forceContextLoss();
+         renderer = null;
 
          console.log("Three.js cleanup attempted.");
      }
-
 
      // Reset game state variables
      isChatting = false;
@@ -682,7 +649,7 @@ function cleanupGameState() {
      isPointerLocked = false;
      localPlayerId = null; // Ensure ID is cleared
 
-     // Reset UI elements to their initial state
+     // Reset UI elements
      ui.chatInput.value = '';
      ui.chatInput.disabled = true;
      ui.chatMessages.innerHTML = '';
@@ -691,9 +658,9 @@ function cleanupGameState() {
      ui.gameUi.classList.add('hidden');
      document.body.classList.remove('game-active');
      if (document.pointerLockElement) {
-         document.exitPointerLock(); // Ensure pointer lock is released
+         document.exitPointerLock();
      }
-     validatePlayButtonState(); // Update play button state for menu
+     validatePlayButtonState();
      console.log("Game state cleanup finished.");
 }
 
@@ -702,362 +669,255 @@ function cleanupGameState() {
 function joinGame() {
     const playerName = ui.playerNameInput.value.trim();
 
-    // Validate inputs before sending request
-    if (!playerName) {
-        console.error("Player name is empty.");
-        alert("Please enter a name!");
-        ui.playButton.disabled = false; // Re-enable button
-        ui.playButton.textContent = 'Join Game';
+    // Validate inputs
+    if (!playerName || !selectedCharacter || !localPlayerId || !socket || !socket.connected) {
+        console.error("Join validation failed:", { playerName, selectedCharacter, localPlayerId, connected: socket?.connected });
+        // Provide specific feedback
+        if (!playerName) alert("Please enter a name!");
+        else if (!selectedCharacter) alert("Character selection error!");
+        else if (!localPlayerId) alert("Connecting to server... please wait for ID.");
+        else if (!socket?.connected) alert("Not connected to server. Please wait or refresh.");
+        // Re-enable button after short delay to prevent spamming
+        setTimeout(() => {
+            ui.playButton.disabled = false;
+            validatePlayButtonState(); // Reset button text based on state
+        }, 500);
         return;
     }
-    if (!selectedCharacter) {
-        console.error("No character selected.");
-        alert("Character selection error!"); // Should not happen if UI logic is correct
-        ui.playButton.disabled = false;
-        ui.playButton.textContent = 'Join Game';
-        return;
-    }
-     if (!localPlayerId) {
-         console.error("Cannot join: No local player ID assigned by server yet.");
-        alert("Connecting to server... please wait.");
-        ui.playButton.disabled = false; // Re-enable button
-        ui.playButton.textContent = 'Join Game';
-        ui.connectionStatus.textContent = 'Waiting for server ID...';
-        ui.connectionStatus.className = '';
-        return;
-    }
-     if (!socket || !socket.connected) {
-         console.error("Cannot join: Socket not connected.");
-         alert("Not connected to server. Please wait or refresh.");
-         ui.playButton.disabled = false;
-         ui.playButton.textContent = 'Join Game';
-         ui.connectionStatus.textContent = 'Disconnected. Refresh?';
-         ui.connectionStatus.className = 'error';
-         return;
-     }
 
     console.log(`Sending join request as '${playerName}' (ID: ${localPlayerId}) with character '${selectedCharacter}'...`);
-
-    // --- Send join request to server ---
-    // Server will validate and respond with 'initializeGame' if successful
     socket.emit('playerJoinRequest', { name: playerName, character: selectedCharacter });
-
-    // Note: UI transition now happens inside the 'initializeGame' handler after server confirmation
 }
 
 // --- Animation Loop ---
 function animate() {
-    // Schedule next frame immediately
     animationFrameId = requestAnimationFrame(animate);
 
-    // --- Delta Time Calculation (for smooth/framerate independent movement/physics) ---
-    // const now = performance.now();
-    // const delta = (now - lastTimestamp) / 1000; // Time since last frame in seconds
-    // lastTimestamp = now;
-
-    // --- Game Logic Updates Per Frame ---
-    // updateMovement(delta); // Handle local player movement based on input state
-    // updateCamera(); // Update camera position/rotation smoothly?
-    // updatePlayerInterpolation(delta); // Smoothly move other players towards their latest known server position
-
-    // Render the scene if everything is ready
     if (renderer && scene && camera) {
+        // Update logic (movement, interpolation etc.) would go here
         renderer.render(scene, camera);
     } else {
-         console.warn("Skipping frame render: Renderer, Scene or Camera not ready.");
-         // Consider stopping the loop if essential components are missing after setup
-         // cancelAnimationFrame(animationFrameId);
-         // animationFrameId = null;
+         // Only log warning once to avoid spamming console
+         if (!animate.warned) {
+             console.warn("Skipping frame render: Renderer, Scene or Camera not ready.");
+             animate.warned = true;
+         }
     }
 }
+animate.warned = false; // Initialize warning flag
 
 // --- UI Management Functions ---
+function showLoadingScreen(message = "Loading...", showPermanently = false) { /* ... as before ... */ }
+function hideLoadingScreen() { /* ... as before ... */ }
+function showHomeScreen() { /* ... as before ... */ }
+function hideHomeScreen() { /* ... as before ... */ }
+function showGameUI() { /* ... as before ... */ }
+function hideGameUI() { /* ... as before ... */ }
+function validatePlayButtonState() { /* ... as before ... */ }
+// Re-add implementations for brevity
 function showLoadingScreen(message = "Loading...", showPermanently = false) {
-    ui.loadingMessage.textContent = message; // Update message
+    ui.loadingMessage.textContent = message;
     ui.loadingScreen.classList.remove('hidden');
     if (!showPermanently) {
         ui.homeMenu.classList.add('hidden');
         ui.gameUi.classList.add('hidden');
     }
 }
-
-function hideLoadingScreen() {
-    ui.loadingScreen.classList.add('hidden');
-}
-
+function hideLoadingScreen() { ui.loadingScreen.classList.add('hidden'); }
 function showHomeScreen() {
     ui.homeMenu.classList.remove('hidden');
     hideLoadingScreen();
     hideGameUI();
     document.body.classList.remove('game-active');
-    validatePlayButtonState(); // Re-evaluate button state
-    ui.playButton.textContent = 'Join Game'; // Reset button text
-    if (isPointerLocked) {
-        document.exitPointerLock(); // Ensure cursor is unlocked when returning to menu
-    }
+    validatePlayButtonState();
+    ui.playButton.textContent = 'Join Game'; // Reset button text potentially overridden by validatePlayButtonState
+    if (isPointerLocked) { document.exitPointerLock(); }
 }
-
-function hideHomeScreen() {
-    ui.homeMenu.classList.add('hidden');
-}
-
+function hideHomeScreen() { ui.homeMenu.classList.add('hidden'); }
 function showGameUI() {
     ui.gameUi.classList.remove('hidden');
-    // Reset UI states within the game UI if needed
-    ui.chatInput.disabled = true; // Chat starts disabled
+    ui.chatInput.disabled = true;
     isChatting = false;
-    ui.leaderboard.classList.add('hidden'); // Leaderboard starts hidden
+    ui.leaderboard.classList.add('hidden');
     showLeaderboard = false;
-    ui.crosshair.style.display = 'none'; // Hide crosshair initially (show only when pointer locked)
+    ui.crosshair.style.display = 'none'; // Hide initially, show on lock
 }
-
 function hideGameUI() {
     ui.gameUi.classList.add('hidden');
-     ui.crosshair.style.display = 'none'; // Hide crosshair when UI is hidden
+    ui.crosshair.style.display = 'none';
 }
-
-// Checks conditions and enables/disables the Play button
 function validatePlayButtonState() {
     const nameEntered = ui.playerNameInput.value.trim().length > 0;
-    const characterSelected = selectedCharacter !== null; // Assuming selectedCharacter holds the ID or null
-    const isConnected = socket && socket.connected && localPlayerId; // Ensure connected AND have received ID
+    const characterSelected = selectedCharacter !== null;
+    const isConnectedAndHasId = socket && socket.connected && localPlayerId;
 
-    if (nameEntered && characterSelected && isConnected) {
-        ui.playButton.disabled = false;
-         ui.playButton.textContent = 'Join Game'; // Ensure text is correct when enabled
+    ui.playButton.disabled = !(nameEntered && characterSelected && isConnectedAndHasId);
+
+    // Update button text based on why it's disabled
+    if (!ui.playButton.disabled) {
+        ui.playButton.textContent = 'Join Game';
+    } else if (!isConnectedAndHasId) {
+        if (socket && socket.connected) { ui.playButton.textContent = 'Getting ID...'; }
+        else { ui.playButton.textContent = 'Connecting...'; }
+    } else if (!nameEntered) {
+        ui.playButton.textContent = 'Enter Name';
+    } else if (!characterSelected) {
+        ui.playButton.textContent = 'Select Character';
     } else {
-        ui.playButton.disabled = true;
-        // Optionally provide feedback why it's disabled
-        if (!isConnected && ui.homeMenu && !ui.homeMenu.classList.contains('hidden')) {
-             // Check if socket exists before accessing connected property
-             if (socket && socket.connected) {
-                 ui.playButton.textContent = 'Getting ID...'; // Connected but no ID yet
-             } else {
-                 ui.playButton.textContent = 'Connecting...'; // Not connected yet
-             }
-        } else if (!nameEntered) {
-             ui.playButton.textContent = 'Enter Name';
-        } else {
-             ui.playButton.textContent = 'Select Character'; // Default if name is entered but char/conn missing
-        }
+        ui.playButton.textContent = 'Join Game'; // Should not happen if logic is correct
     }
 }
 
 
 // --- Chat Functions ---
-function addChatMessage(senderName, message, type = 'player') { // type: 'player', 'system', 'death', 'join-leave'
+function addChatMessage(senderName, message, type = 'player') { /* ... as before ... */ }
+function addSystemMessage(message) { /* ... as before ... */ }
+function handleChatMessage(senderId, senderName, message) { /* ... as before ... */ }
+function startChat() { /* ... as before ... */ }
+function cancelChat() { /* ... as before ... */ }
+function sendChat() { /* ... as before ... */ }
+// Re-add implementations for brevity
+function addChatMessage(senderName, message, type = 'player') {
     const item = document.createElement('li');
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); // HH:MM format
-
-    // Add timestamp span (optional)
-    // const timeSpan = document.createElement('span');
-    // timeSpan.className = 'chat-timestamp';
-    // timeSpan.textContent = `[${timestamp}] `;
-    // item.appendChild(timeSpan);
-
-    switch (type) {
-        case 'system':
-            item.classList.add('system-message');
-            item.textContent = message;
-            break;
-        case 'death':
-            item.classList.add('death-message');
-            item.textContent = message; // e.g., "PlayerA eliminated PlayerB"
-            break;
-        case 'join-leave':
-             item.classList.add('join-leave-message');
-             item.textContent = message; // e.g., "PlayerC joined the game."
-             break;
+    let prefix = '';
+     switch (type) {
+        case 'system': item.classList.add('system-message'); break;
+        case 'death': item.classList.add('death-message'); break;
+        case 'join-leave': item.classList.add('join-leave-message'); break;
         case 'player':
         default:
             item.classList.add('player-message');
-            const nameStrong = document.createElement('strong');
-            nameStrong.textContent = `${senderName}: `;
-            // Optional: Add class if it's the local player's message
-            // if (isMyMessage) { item.classList.add('my-message'); }
-            item.appendChild(nameStrong);
-            item.appendChild(document.createTextNode(message)); // Use text node for safety
+            if (senderName) { // Check if senderName is provided
+                 const nameStrong = document.createElement('strong');
+                 nameStrong.textContent = `${senderName}: `;
+                 item.appendChild(nameStrong);
+            }
             break;
     }
+    item.appendChild(document.createTextNode(message)); // Append message content
 
-    const shouldScroll = ui.chatMessages.scrollTop + ui.chatMessages.clientHeight >= ui.chatMessages.scrollHeight - 30; // Check if near bottom before adding
-
+    const shouldScroll = ui.chatMessages.scrollTop + ui.chatMessages.clientHeight >= ui.chatMessages.scrollHeight - 30;
     ui.chatMessages.appendChild(item);
-
-    // Auto-scroll to bottom only if user was already near the bottom
-    if (shouldScroll) {
-        ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
-    }
+    if (shouldScroll) { ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight; }
 }
-
-function addSystemMessage(message) {
-    // This function is now mainly for CLIENT-SIDE system messages if ever needed.
-    // Most system messages (join/leave/etc.) should come from the server via 'chatMessage' event.
-    console.info("System Message (Client Only):", message); // Log locally for debugging
-    // If you want to display client-only messages in chat:
-    // addChatMessage('System', message, 'system');
-}
-
-// Handles messages received from the server broadcast
+function addSystemMessage(message) { console.info("System Message (Client Only):", message); }
 function handleChatMessage(senderId, senderName, message) {
      console.log(`Chat received: ${senderName} (${senderId}): ${message}`);
      let type = 'player';
      let displayName = senderName;
-
-     if (senderId === 'server') { // Identify system messages from server
-         // Determine subtype based on content? (Simple examples)
-         if (message.includes('joined') || message.includes('left')) {
-             type = 'join-leave';
-         } else if (message.includes('eliminated') || message.includes('died')) { // Example keywords for death
-             type = 'death';
-         } else {
-            type = 'system'; // Generic system message
-         }
-         displayName = ''; // Don't show sender name for system messages from 'server' ID
+     if (senderId === 'server') {
+         if (message.includes('joined') || message.includes('left')) type = 'join-leave';
+         else if (message.includes('eliminated') || message.includes('died')) type = 'death';
+         else type = 'system';
+         displayName = ''; // No name for server messages
      } else if (senderId === localPlayerId) {
-         // Optional: Style own messages differently? Could use 'my-message' class here
-         displayName = 'You'; // Display 'You' for own messages
+         displayName = 'You'; // Use 'You' for self
      }
      addChatMessage(displayName, message, type);
 }
-
-
 function startChat() {
-    if (!localPlayerId || !players[localPlayerId]) return; // Only if in game
+    if (!localPlayerId || !players[localPlayerId]) return;
     isChatting = true;
     ui.chatInput.disabled = false;
     ui.chatInput.focus();
-    ui.chatContainer.style.opacity = '1'; // Make chat more prominent?
-    // Exit pointer lock if active
-    if (isPointerLocked) {
-        document.exitPointerLock();
-    }
+    ui.chatContainer.style.opacity = '1';
+    if (isPointerLocked) { document.exitPointerLock(); }
 }
-
 function cancelChat() {
     isChatting = false;
     ui.chatInput.disabled = true;
     ui.chatInput.value = '';
-    ui.chatInput.blur(); // Remove focus
-    ui.chatContainer.style.opacity = ''; // Reset opacity
-    // Attempt to re-lock pointer immediately after cancelling chat
-    // This might fail depending on browser, requiring another click
+    ui.chatInput.blur();
+    ui.chatContainer.style.opacity = '';
     requestPointerLock();
 }
-
 function sendChat() {
     const message = ui.chatInput.value.trim();
-    if (message && socket && localPlayerId && socket.connected) {
+    if (message && socket?.connected && localPlayerId) {
         console.log("Sending chat:", message);
-        // Send raw message to server, server handles formatting and broadcast
         socket.emit('chatMessage', message);
-        cancelChat(); // Clear input and exit chat mode (which re-requests pointer lock)
-    } else {
-        // If message is empty, just cancel chat mode
         cancelChat();
+    } else {
+        cancelChat(); // Cancel if message empty or not connected
     }
 }
 
+
 // --- Leaderboard Functions ---
+function toggleLeaderboard() { /* ... as before ... */ }
+function updateLeaderboard() { /* ... as before ... */ }
+// Re-add implementations for brevity
 function toggleLeaderboard() {
     showLeaderboard = !showLeaderboard;
     if (showLeaderboard) {
-        updateLeaderboard(); // Update content when showing
+        updateLeaderboard();
         ui.leaderboard.classList.remove('hidden');
     } else {
         ui.leaderboard.classList.add('hidden');
     }
 }
-
 function updateLeaderboard() {
-     // Don't update DOM if the leaderboard isn't visible
      if (!showLeaderboard || !ui.leaderboard || ui.leaderboard.classList.contains('hidden')) return;
-
-
-     ui.leaderboardList.innerHTML = ''; // Clear existing list
-
-     // Get player data from the local 'players' object
+     ui.leaderboardList.innerHTML = '';
      const sortedPlayers = Object.values(players)
-        .sort((a, b) => {
-            // Sort by score descending first
-            const scoreA = a.score || 0;
-            const scoreB = b.score || 0;
-            if (scoreB !== scoreA) {
-                return scoreB - scoreA;
-            }
-            // If scores are equal, sort by name ascending (case-insensitive)
-            return (a.name || '').localeCompare(b.name || '');
-        });
-
-    // Populate the list
-    sortedPlayers.forEach(player => {
+        .sort((a, b) => (b.score || 0) - (a.score || 0) || (a.name || '').localeCompare(b.name || ''));
+     sortedPlayers.forEach(player => {
          const item = document.createElement('li');
-         if (player.id === localPlayerId) {
-             item.classList.add('is-local-player'); // Add class to highlight local player
-         }
-
+         if (player.id === localPlayerId) item.classList.add('is-local-player');
          const nameSpan = document.createElement('span');
          nameSpan.className = 'leaderboard-name';
          nameSpan.textContent = player.name || 'Unnamed';
-         nameSpan.title = player.name || 'Unnamed'; // Tooltip for long names
-
+         nameSpan.title = player.name || 'Unnamed';
          const scoreSpan = document.createElement('span');
          scoreSpan.className = 'leaderboard-score';
          scoreSpan.textContent = player.score || 0;
-
          item.appendChild(nameSpan);
          item.appendChild(scoreSpan);
          ui.leaderboardList.appendChild(item);
      });
 }
 
+
 // --- Pointer Lock ---
+function requestPointerLock() { /* ... as before ... */ }
+function handlePointerLockChange() { /* ... as before ... */ }
+// Re-add implementations for brevity
 function requestPointerLock() {
-    // Request pointer lock only if connected, in game, and not already locked
     if (socket?.connected && localPlayerId && players[localPlayerId] && !document.pointerLockElement && ui.gameCanvas.requestPointerLock) {
          console.log("Requesting pointer lock...");
-         ui.gameCanvas.requestPointerLock()
-            .catch(err => console.error("Cannot request pointer lock:", err)); // Catch potential errors
+         ui.gameCanvas.requestPointerLock().catch(err => console.error("Cannot request pointer lock:", err));
     }
 }
-
 function handlePointerLockChange() {
      if (document.pointerLockElement === ui.gameCanvas) {
         console.log('Pointer Locked');
         isPointerLocked = true;
-        ui.crosshair.style.display = 'block'; // Show crosshair when locked
-        // Optional: Add a class to body for cursor hiding via CSS?
-        // document.body.classList.add('pointer-locked');
+        ui.crosshair.style.display = 'block';
     } else {
         console.log('Pointer Unlocked');
         isPointerLocked = false;
-        ui.crosshair.style.display = 'none'; // Hide crosshair when unlocked
-        // document.body.classList.remove('pointer-locked');
-        // If we unlocked and were not intending to chat, maybe bring up a pause menu?
-        // Check if the player object still exists (i.e., we are still supposed to be in-game)
+        ui.crosshair.style.display = 'none';
         if (!isChatting && players[localPlayerId]) {
             console.log("Pointer unlocked unexpectedly (e.g. Esc key).");
-            // showPauseMenu(); // Implement pause menu later
+            // showPauseMenu();
         }
     }
 }
 
 
 // --- Utility Functions ---
+function onWindowResize() { /* ... as before ... */ }
+// Re-add implementation for brevity
 function onWindowResize() {
-    // Only resize if renderer and camera are initialized
     if (!camera || !renderer) return;
-
     const width = window.innerWidth;
     const height = window.innerHeight;
-
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-
     renderer.setSize(width, height);
-    // No need to set pixel ratio again unless it changes
     console.log("Window resized.");
 }
+
 
 // --- Start the application ---
 init();
