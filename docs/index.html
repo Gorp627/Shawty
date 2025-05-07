@@ -3,86 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Shawty - Online Shooter</title>
+    <title>Shawty - Online Multiplayer Shooter</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" href="favicon.png" type="image/png"> <!-- Optional: Add a favicon -->
 </head>
 <body>
     <div id="loading-screen">
-        <h1>SHAWTY</h1>
-        <p id="loading-message">Connecting to server...</p>
-        <div id="progress-bar-container">
-            <div id="progress-bar"></div>
-        </div>
-        <p id="error-message" style="color: red; display: none;"></p>
+        <h1 class="title-font">SHAWTY</h1>
+        <div class="loader"></div>
+        <p id="loading-status">Initializing...</p>
     </div>
 
-    <div id="home-menu" style="display: none;">
-        <h2>SHAWTY</h2>
-        <p>Online: <span id="online-players-menu">0</span></p>
-        <input type="text" id="player-name-input" placeholder="Enter your name" maxlength="15">
-        <div id="character-selector">
-            <p>Select Character:</p>
-            <div class="character-option selected" data-character="Shawty">
-                <!-- <img src="assets/ui/shawty_icon.png" alt="Shawty"> -->
-                <span>Shawty</span>
+    <div id="home-menu" style="display:none;">
+        <h1 class="title-font">SHAWTY</h1>
+        <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
+        <div>
+            <label for="characterSelect">Select Character:</label>
+            <select id="characterSelect">
+                <option value="Shawty">Shawty</option>
+                <!-- <option value="Character2">Character 2</option> -->
+            </select>
+        </div>
+        <p>Players Online: <span id="playersOnline">0</span></p>
+        <button id="playButton">Play</button>
+        <p class="credits">A game by [Your Name/Studio]</p>
+    </div>
+
+    <div id="game-container" style="display:none;">
+        <canvas id="gameCanvas"></canvas>
+        <div id="in-game-ui">
+            <div id="crosshair">+</div>
+            <div id="game-info">
+                <p>Time: <span id="timeLeft">5:00</span></p>
+                <p>Kills: <span id="killCount">0</span> Deaths: <span id="deathCount">0</span></p>
+                <p id="currentWeapon">Gun</p> <!-- Placeholder -->
             </div>
-            <!-- Add more character options here later -->
-            <!-- <div class="character-option" data-character="OtherCharacter">
-                <img src="assets/ui/other_icon.png" alt="OtherCharacter">
-                <span>Other Character</span>
-            </div> -->
-        </div>
-        <button id="join-game-button">Join Game</button>
-    </div>
-
-    <div id="game-ui" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
-        <div id="crosshair">+</div>
-        
-        <div id="hud">
-            <p>Health: <span id="health-display">100</span></p>
-            <p>Round Time: <span id="round-time-display">05:00</span></p>
-            <p>Kills: <span id="kills-display">0</span> Deaths: <span id="deaths-display">0</span></p>
-        </div>
-
-        <div id="chat-container">
-            <div id="chat-output"></div>
-            <input type="text" id="chat-input" placeholder="Press T to chat..." style="display: none;">
-        </div>
-
-        <div id="leaderboard" style="display: none;">
-            <h3>Leaderboard (L)</h3>
-            <ul id="leaderboard-list"></ul>
-        </div>
-
-        <div id="round-over-screen" style="display: none;">
-            <h2>Round Over!</h2>
-            <p id="winner-announcement"></p>
-            <p>Next round starting soon...</p>
-        </div>
-
-        <div id="death-message" style="display:none;">
-            <h2>YOU DIED</h2>
-            <p id="killed-by-message"></p>
-            <p>Respawning...</p>
+            <div id="kill-feed">
+                <!-- Kill messages appear here -->
+            </div>
+            <div id="chat-area">
+                <ul id="chat-messages"></ul>
+                <input type="text" id="chat-input" placeholder="Press T to chat then Enter to send" style="display:none;" maxlength="100">
+            </div>
+            <div id="leaderboard" style="display:none;">
+                <h2>Leaderboard (Press L)</h2>
+                <table>
+                    <thead><tr><th>Rank</th><th>Name</th><th>Kills</th><th>Deaths</th></tr></thead>
+                    <tbody id="leaderboard-list"></tbody>
+                </table>
+            </div>
+            <div id="event-log-center" style="display:none;">
+                <!-- Center screen messages like "Round Start", "Winner" -->
+            </div>
         </div>
     </div>
 
-    <canvas id="game-canvas"></canvas>
+    <!-- Third-party Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js"></script>
+    <script src="https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"></script>
+    <!-- cannon-es-debugger is useful for development -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/cannon-es-debugger@1.0.0/dist/cannon-es-debugger.js"></script> -->
 
-    <!-- Libraries -->
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script> <!-- Socket.IO from CDN -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "./js/lib/three.module.js",
-                "cannon-es": "./js/lib/cannon-es.js",
-                "three/addons/": "./js/lib/"
-            }
-        }
-    </script>
 
     <!-- Game Scripts -->
-    <script type="module" src="js/main.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/network.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>
