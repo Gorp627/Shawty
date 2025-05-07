@@ -1,7 +1,21 @@
 // docs/js/main.js
-/* global ui, network, game, THREE */ // For linters
+import * as THREE from 'three'; // Import THREE to ensure it's available if other modules need it implicitly
+                               // Though game.js will import it directly.
 
-const main = {
+// For ui, network, game, we are currently relying on them attaching to the window object.
+// A full ESM conversion would involve importing them here.
+// import importedUI from './ui.js'; // Example if ui.js had a default export
+// import importedNetwork from './network.js';
+// import importedGame from './game.js';
+
+// Make ui, network, and game globally accessible for easier inter-script communication (as originally structured)
+// These files will assign themselves to window.ui, window.network, window.game
+import './ui.js';
+import './network.js';
+import './game.js';
+
+
+const mainController = {
     localPlayerInfo: {
         name: null,
         character: null
@@ -9,23 +23,28 @@ const main = {
 
     init: function() {
         console.log("Shawty Game Client Initializing...");
-        ui.init(this.onPlayPressed.bind(this), this.onChatMessageSend.bind(this));
-        network.connect(
+        if (!window.ui) { console.error("UI script not loaded!"); return; }
+        if (!window.network) { console.error("Network script not loaded!"); return; }
+        if (!window.game) { console.error("Game script not loaded!"); return; }
+
+
+        window.ui.init(this.onPlayPressed.bind(this), this.onChatMessageSend.bind(this));
+        window.network.connect(
             this.onServerConnected.bind(this),
             this.onServerMessage.bind(this),
             this.onServerDisconnected.bind(this)
         );
 
-        // Resume AudioContext on first user interaction (good practice for browsers)
         const resumeAudio = () => {
-            if (game.listener && game.listener.context.state === 'suspended') {
-                game.listener.context.resume();
+            // Check if game and listener are initialized
+            if (window.game && window.game.listener && window.game.listener.context && window.game.listener.context.state === 'suspended') {
+                window.game.listener.context.resume().catch(e => console.warn("AudioContext resume failed:", e));
             }
             document.body.removeEventListener('click', resumeAudio);
             document.body.removeEventListener('keydown', resumeAudio);
         };
-        document.body.addEventListener('click', resumeAudio);
-        document.body.addEventListener('keydown', resumeAudio);
+        document.body.addEventListener('click', resumeAudio, { once: true }); // Use once to auto-remove
+        document.body.addEventListener('keydown', resumeAudio, { once: true });
     },
 
     onPlayPressed: function(playerName, selectedCharacter) {
@@ -33,79 +52,96 @@ const main = {
         this.localPlayerInfo.name = playerName;
         this.localPlayerInfo.character = selectedCharacter;
 
-        // Initialize the game scene (Three.js, Cannon.js)
-        // This will also load assets. When assets are loaded, onGameInitialized will be called.
         const canvas = document.getElementById('gameCanvas');
-        game.init(canvas, playerName, selectedCharacter);
+        if (!canvas) {
+            console.error("gameCanvas not found!");
+            return;
+        }
+        window.game.init(canvas, playerName, selectedCharacter);
     },
     
-    // This will be called from game.js after assets are loaded and basic scene is up
-    onGameInitialized: function() {
+    onGameInitialized: function() { // This will be called by game.js
         console.log("Game scene initialized by game.js. Ready to send join request.");
-        if (network.isConnected) {
-            network.joinGame(this.localPlayerInfo.name, this.localPlayerInfo.character);
+        if (window.network.isConnected) {
+            window.network.joinGame(this.localPlayerInfo.name, this.localPlayerInfo.character);
         } else {
-            console.warn("Game initialized, but network not connected. Join request will be queued.");
-             // Join request is already queued by network.send if socket wasn't open.
+            console.warn("Game initialized, but network not connected. Join request will be queued if not already.");
+            // network.js's send function already queues 'join' if not connected
         }
     },
 
     onChatMessageSend: function(message) {
-        network.sendChatMessage(message);
-        // Optionally, add local message to UI immediately for responsiveness
-        // ui.addChatMessage(this.localPlayerInfo.name || "Me", message); // Server will echo it back anyway
+        window.network.sendChatMessage(message);
     },
 
     onServerConnected: function() {
         console.log("Main: Server connected.");
         // If game is already initialized (e.g. reconnect after game was running)
-        // and join request was queued, it should be sent now by network.js
-        // If game is NOT yet initialized (first connect), onGameInitialized will handle join.
+        // and join request was queued, it should be sent now by network.js processMessageQueue.
     },
 
     onServerMessage: function(data) {
-        // Most messages are handled by network.js which calls game.js methods directly
-        // This is a fallback or for messages specific to main.js/ui.js coordination
-        // console.log("Main received message from network layer:", data);
+        if (!window.ui || !window.game) return; // Ensure scripts are loaded
 
         switch (data.type) {
             case 'playerCount':
-                ui.updatePlayersOnline(data.count);
+                window.ui.updatePlayersOnline(data.count);
                 break;
-            case 'eventLog': // General server messages for UI
-                // ui.addEventLogMessage(data.entry.message); // Example, if UI needs it
+            case 'eventLog':
                 console.log("Server Event:", data.entry.message);
                 break;
-            case 'chat': // Already handled by network which calls ui.addChatMessage
-                // ui.addChatMessage(data.sender, data.message);
+            case 'chat': // Server echoes chat messages
+                window.ui.addChatMessage(data.sender, data.message);
                 break;
-             case 'roundStart':
-                ui.resetUIForNewRound();
-                ui.updateGameStats(data.timeLeft, game.localPlayer.kills, game.localPlayer.deaths); // Kills/deaths reset on server
-                if (game.isInitialized) game.resetLocalPlayerStats(); // Reset local counters if needed
+            case 'gameState': // Initial full state, primarily handled by game.js
+                window.game.initializeGameState(data);
+                break;
+            case 'gameStateUpdate': // Delta updates, primarily handled by game.js
+                window.game.updateGameState(data);
+                break;
+            case 'playerJoined':
+                if (data.player) window.game.addPlayer(data.player);
+                break;
+            case 'playerLeft':
+                window.game.removePlayer(data.id);
+                break;
+            case 'playerShot':
+                window.game.handlePlayerShotEffect(data);
+                break;
+            case 'playerDied':
+                window.game.handlePlayerDied(data);
+                break;
+            case 'playerRespawn':
+                window.game.handlePlayerRespawn(data);
+                break;
+            case 'healthUpdate':
+                 if(data.playerId && data.health !== undefined) window.game.updatePlayerHealth(data.playerId, data.health);
+                break;
+            case 'roundStart':
+                window.ui.resetUIForNewRound();
+                if(window.game.localPlayer) { // Check if localPlayer exists
+                    window.ui.updateGameStats(data.timeLeft, window.game.localPlayer.kills, window.game.localPlayer.deaths);
+                }
+                if (window.game.isInitialized) window.game.resetLocalPlayerStats();
                 break;
             case 'roundEnd':
-                ui.displayCenterEvent(`${data.winnerName} wins the round!`, 7000);
-                ui.showLeaderboard(data.scores);
-                // Don't hide leaderboard immediately, let player view it
+                window.ui.displayCenterEvent(`${data.winnerName} wins the round!`, 7000);
+                window.ui.showLeaderboard(data.scores);
                 break;
-            // Game-specific messages are passed to game.js by network.js
-            // e.g., gameState, gameStateUpdate, playerJoined, playerLeft, playerDied etc.
+            // Other specific messages can be added here or directly in game.js via network callbacks
         }
     },
 
     onServerDisconnected: function() {
         console.warn("Main: Server disconnected.");
-        ui.displayCenterEvent("Disconnected. Attempting to reconnect...", 0); // 0 duration = stays until changed
-        // Potentially show home screen or a "reconnecting" overlay
-        // ui.showHomeScreen(); // Or similar
+        if (window.ui) {
+            window.ui.displayCenterEvent("Disconnected. Attempting to reconnect...", 0);
+        }
     }
 };
 
-// Expose main to global if needed for callbacks from other files easily
-window.main = main;
+window.mainController = mainController; // Make mainController globally accessible
 
-// Initialize when the DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    main.init();
+    mainController.init();
 });
